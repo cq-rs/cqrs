@@ -1,5 +1,6 @@
 pub use super::*;
 
+#[derive(Clone,Debug,Hash,PartialEq,Copy)]
 struct TestEvent;
 
 #[test]

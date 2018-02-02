@@ -13,7 +13,10 @@ impl<Event> Default for MemoryEventStore<Event> {
     }
 }
 
-impl<Event> EventStore for MemoryEventStore<Event> {
+impl<Event> EventStore for MemoryEventStore<Event>
+where
+    Event: Clone,
+{
     type StreamId = usize;
     type EventStream = MemoryEventStream<Event>;
     fn open_stream(&self, stream_id: Self::StreamId) -> Self::EventStream {
