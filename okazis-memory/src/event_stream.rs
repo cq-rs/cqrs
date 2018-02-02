@@ -14,7 +14,12 @@ impl<Event> MemoryEventStream<Event> {
 
 impl<Event> EventStream for MemoryEventStream<Event> {
     type Event = Event;
+    type Offset = usize;
+    type ReadResult = Vec<Self::Event>;
     fn append_events(&self, events: Vec<Self::Event>) {
+    }
+    fn read(&self, offset: Self::Offset) -> Self::ReadResult {
+        Vec::default()
     }
 }
 

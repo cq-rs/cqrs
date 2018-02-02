@@ -21,7 +21,10 @@ pub trait EventStore {
 
 pub trait EventStream {
     type Event;
+    type Offset;
+    type ReadResult;
     fn append_events(&self, events: Vec<Self::Event>);
+    fn read(&self, offset: Self::Offset) -> Self::ReadResult;
 }
 
 pub trait StateStore {
