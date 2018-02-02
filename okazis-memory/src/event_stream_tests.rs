@@ -12,9 +12,9 @@ fn can_create_internally() {
 
 #[test]
 fn can_add_events_with_event_stream_trait() {
-    let es = MemoryEventStream::new();
+    let mut es = MemoryEventStream::new();
     let events = Vec::<TestEvent>::new();
-    EventStream::append_events(&es, events);
+    EventStream::append_events(&mut es, events);
 }
 
 #[test]
@@ -26,7 +26,7 @@ fn can_read_events_from_event_stream() {
 
 #[test]
 fn can_add_events_and_read_them_back_out() {
-    let es = MemoryEventStream::new();
+    let mut es = MemoryEventStream::new();
     let expected_events = vec![
         TestEvent { value: 143 },
         TestEvent { value: 554 },
@@ -38,7 +38,7 @@ fn can_add_events_and_read_them_back_out() {
 
 #[test]
 fn can_add_events_and_read_from_middle() {
-    let es = MemoryEventStream::new();
+    let mut es = MemoryEventStream::new();
     let all_events = vec![
         TestEvent { value: 143 },
         TestEvent { value: 554 },
@@ -53,7 +53,7 @@ fn can_add_events_and_read_from_middle() {
 
 #[test]
 fn reading_with_offset_one_past_end_gives_empty_set() {
-    let es = MemoryEventStream::new();
+    let mut es = MemoryEventStream::new();
     let all_events = vec![
         TestEvent { value: 143 },
         TestEvent { value: 554 },
@@ -66,7 +66,7 @@ fn reading_with_offset_one_past_end_gives_empty_set() {
 
 #[test]
 fn reading_with_offset_more_than_one_past_end_gives_error() {
-    let es = MemoryEventStream::new();
+    let mut es = MemoryEventStream::new();
     let all_events = vec![
         TestEvent { value: 143 },
         TestEvent { value: 554 },
