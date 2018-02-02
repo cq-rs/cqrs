@@ -26,7 +26,7 @@ impl<Event> EventStream for MemoryEventStream<Event>
     }
     fn read(&self, offset: Self::Offset) -> Self::ReadResult {
         let lock = self.events.read().unwrap();
-        lock.clone()
+        lock[offset..].into()
     }
 }
 

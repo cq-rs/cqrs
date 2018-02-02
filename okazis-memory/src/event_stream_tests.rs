@@ -35,3 +35,18 @@ fn can_add_events_and_read_them_back_out() {
     let actual_events = es.read(0);
     assert_eq!(expected_events, actual_events);
 }
+
+#[test]
+fn can_add_events_and_read_from_middle() {
+    let es = MemoryEventStream::new();
+    let all_events = vec![
+        TestEvent { value: 143 },
+        TestEvent { value: 554 },
+    ];
+    es.append_events(all_events.clone());
+    let expected_events = vec![
+        TestEvent { value: 554 },
+    ];
+    let actual_events = es.read(1);
+    assert_eq!(expected_events, actual_events);
+}
