@@ -3,14 +3,7 @@ use std::sync::{RwLock, PoisonError};
 
 #[derive(Clone, Copy, PartialEq, Hash, Debug)]
 pub enum ReadError {
-    PoisonedStream,
     ReadPastEndOfStream,
-}
-
-impl<T> From<PoisonError<T>> for ReadError {
-    fn from(_err: PoisonError<T>) -> Self {
-        ReadError::PoisonedStream
-    }
 }
 
 pub struct MemoryEventStream<Event> {
@@ -37,7 +30,7 @@ impl<Event> EventStream for MemoryEventStream<Event>
         lock.extend(events);
     }
     fn read(&self, offset: Self::Offset) -> Self::ReadResult {
-        let lock = self.events.read()?;
+        let lock = self.events.read().unwrap();
         if offset > lock.len() {
             Err(ReadError::ReadPastEndOfStream)
         } else {
