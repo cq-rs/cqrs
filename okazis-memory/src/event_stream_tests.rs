@@ -1,6 +1,6 @@
 pub use super::*;
 
-#[derive(PartialEq,Clone,Copy,Hash,Debug)]
+#[derive(PartialEq, Clone, Copy, Hash, Debug)]
 pub struct TestEvent {
     value: usize,
 }

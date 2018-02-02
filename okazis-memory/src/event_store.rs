@@ -14,8 +14,8 @@ impl<Event> Default for MemoryEventStore<Event> {
 }
 
 impl<Event> EventStore for MemoryEventStore<Event>
-where
-    Event: Clone,
+    where
+        Event: Clone,
 {
     type StreamId = usize;
     type EventStream = MemoryEventStream<Event>;

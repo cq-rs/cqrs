@@ -14,8 +14,8 @@ impl<Event> MemoryEventStream<Event> {
 }
 
 impl<Event> EventStream for MemoryEventStream<Event>
-where
-    Event: Clone,
+    where
+        Event: Clone,
 {
     type Event = Event;
     type Offset = usize;

@@ -27,5 +27,4 @@ pub trait EventStream {
     fn read(&self, offset: Self::Offset) -> Self::ReadResult;
 }
 
-pub trait StateStore {
-}
+pub trait StateStore {}
