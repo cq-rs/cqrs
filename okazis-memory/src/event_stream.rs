@@ -1,18 +1,20 @@
 use okazis::EventStream;
+use std::sync::{RwLock, Arc};
 
 #[derive(Clone, Copy, PartialEq, Hash, Debug)]
 pub enum ReadError {
     ReadPastEndOfStream,
 }
 
+#[derive(Debug, Clone)]
 pub struct MemoryEventStream<Event> {
-    events: Vec<Event>,
+    events: Arc<RwLock<Vec<Event>>>,
 }
 
 impl<Event> MemoryEventStream<Event> {
     pub(crate) fn new() -> Self {
         MemoryEventStream {
-            events: Vec::default(),
+            events: Arc::new(RwLock::default()),
         }
     }
 }
@@ -24,14 +26,15 @@ impl<Event> EventStream for MemoryEventStream<Event>
     type Event = Event;
     type Offset = usize;
     type ReadResult = Result<Vec<Self::Event>, ReadError>;
-    fn append_events(&mut self, events: Vec<Self::Event>) {
-        self.events.extend(events);
+    fn append_events(&self, events: Vec<Self::Event>) {
+        self.events.write().unwrap().extend(events);
     }
     fn read(&self, offset: Self::Offset) -> Self::ReadResult {
-        if offset > self.events.len() {
+        let events = self.events.read().unwrap();
+        if offset > events.len() {
             Err(ReadError::ReadPastEndOfStream)
         } else {
-            Ok(self.events[offset..].into())
+            Ok(events[offset..].into())
         }
     }
 }

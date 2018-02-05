@@ -114,7 +114,7 @@ fn main() {
     {
         let s0 = es.open_stream(0);
         let new_events = s0.read(1).unwrap();
-        let state = new_events.iter().fold(State::default(), |s, e| s.apply(e));
+        let state = new_events.iter().fold(State { value: 36 }, |s, e| s.apply(e));
 
         let result = state.execute(Command::Add(-1isize as usize));
         assert!(result.is_ok());
