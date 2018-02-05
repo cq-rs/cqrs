@@ -1,5 +1,10 @@
 extern crate futures;
 
+pub enum ReadOffset<Offset> {
+    BeginningOfStream,
+    Offset(Offset),
+}
+
 #[derive(Debug, Clone, Hash, PartialEq)]
 pub struct PersistedEvent<Offset, Event, Metadata> {
     pub offset: Offset,
@@ -24,7 +29,7 @@ pub trait EventStream {
     type Offset;
     type ReadResult;
     fn append_events(&self, events: Vec<Self::Event>);
-    fn read(&self, offset: Self::Offset) -> Self::ReadResult;
+    fn read(&self, offset: ReadOffset<Self::Offset>) -> Self::ReadResult;
 }
 
 pub trait StateStore {}

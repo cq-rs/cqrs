@@ -1,5 +1,6 @@
 pub use super::*;
 use okazis::EventStream;
+use okazis::ReadOffset::*;
 
 #[derive(Clone, Debug, Hash, PartialEq, Copy)]
 struct TestEvent;
@@ -25,8 +26,8 @@ fn can_get_an_event_stream_multiple_times_are_equal() {
     stream1.append_events(vec![
         TestEvent
     ]);
-    let events1 = stream1.read(0);
-    let events2 = stream2.read(0);
+    let events1 = stream1.read(BeginningOfStream);
+    let events2 = stream2.read(BeginningOfStream);
     assert_eq!(events1, events2);
 }
 
@@ -40,7 +41,7 @@ fn can_get_different_event_streams() {
     stream1.append_events(vec![
         TestEvent
     ]);
-    let events1 = stream1.read(0);
-    let events2 = stream2.read(0);
+    let events1 = stream1.read(BeginningOfStream);
+    let events2 = stream2.read(BeginningOfStream);
     assert_ne!(events1, events2);
 }

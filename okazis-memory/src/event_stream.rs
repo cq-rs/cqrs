@@ -1,4 +1,5 @@
-use okazis::EventStream;
+use okazis::{ReadOffset, EventStream};
+use okazis::ReadOffset::*;
 use std::sync::{RwLock, Arc};
 
 #[derive(Clone, Copy, PartialEq, Hash, Debug)]
@@ -29,12 +30,12 @@ impl<Event> EventStream for MemoryEventStream<Event>
     fn append_events(&self, events: Vec<Self::Event>) {
         self.events.write().unwrap().extend(events);
     }
-    fn read(&self, offset: Self::Offset) -> Self::ReadResult {
+    fn read(&self, offset: ReadOffset<Self::Offset>) -> Self::ReadResult {
         let events = self.events.read().unwrap();
-        if offset > events.len() {
-            Err(ReadError::ReadPastEndOfStream)
-        } else {
-            Ok(events[offset..].into())
+        match offset {
+            BeginningOfStream => Ok(events[..].into()),
+            Offset(o) if o < events.len() => Ok(events[(o + 1)..].into()),
+            Offset(_) => Err(ReadError::ReadPastEndOfStream),
         }
     }
 }

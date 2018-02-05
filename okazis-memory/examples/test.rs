@@ -2,6 +2,7 @@ extern crate okazis;
 extern crate okazis_memory;
 
 use okazis::*;
+use okazis::ReadOffset::*;
 use okazis_memory::{MemoryEventStore, MemoryEventStream, MemoryStateStore};
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
@@ -97,7 +98,7 @@ fn main() {
     }
     {
         let mut s0 = es.open_stream(0);
-        let past_events = s0.read(0).unwrap();
+        let past_events = s0.read(BeginningOfStream).unwrap();
         let state = past_events.iter().fold(State::default(), |s, e| s.apply(e));
 
         let result = state.execute(Command::Multiply(-1isize as usize));
@@ -113,10 +114,32 @@ fn main() {
     }
     {
         let s0 = es.open_stream(0);
-        let new_events = s0.read(1).unwrap();
+        let new_events = s0.read(Offset(0)).unwrap();
         let state = new_events.iter().fold(State { value: 36 }, |s, e| s.apply(e));
 
         let result = state.execute(Command::Add(-1isize as usize));
         assert!(result.is_ok());
     }
+    {
+//        let state_store = MemoryStateStore::default();
+//        let state0 = State { value:36 };
+//        let persist_state = PersistedState {
+//            offset: 0,
+//            state: state0,
+//        };
+//        state_store.store(0, persist_state);
+//
+//        let latest = state_store.get(0);
+//        let s0 = es.open_stream(0);
+//        let new_events = s0.read(Offset(latest.offset));
+//
+    }
 }
+
+// Things to think about:
+// - Specialized "Offset" type: Offset<T> (BeginningOfStream or T)
+//   - Then interpret "read" to be read things newer than the passed in value.
+// - When writing, have preconditions to appending events
+//   - Expected Last Offset: Offset
+//   - NoStream (for some backends these may be interpreted the same)
+//   - Always
