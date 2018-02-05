@@ -29,3 +29,18 @@ fn can_get_an_event_stream_multiple_times_are_equal() {
     let events2 = stream2.read(0);
     assert_eq!(events1, events2);
 }
+
+#[test]
+fn can_get_different_event_streams() {
+    let es: MemoryEventStore<TestEvent> = Default::default();
+
+    let stream1 = es.open_stream(0);
+    let stream2 = es.open_stream(1);
+
+    stream1.append_events(vec![
+        TestEvent
+    ]);
+    let events1 = stream1.read(0);
+    let events2 = stream2.read(0);
+    assert_ne!(events1, events2);
+}
