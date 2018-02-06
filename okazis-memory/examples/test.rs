@@ -39,16 +39,16 @@ impl Default for State {
 }
 
 impl State {
-    fn apply(&self, event: &Event) -> Self {
-        match *event {
-            Event::Added(ref x) => State { value: self.value + x },
-            Event::Subtracted(ref x) => State { value: self.value - x },
-            Event::Multiplied(ref x) => State { value: self.value * x },
-            Event::DividedBy(ref x) => State { value: self.value / x },
+    fn apply(&self, event: Event) -> Self {
+        match event {
+            Event::Added(x) => State { value: self.value + x },
+            Event::Subtracted(x) => State { value: self.value - x },
+            Event::Multiplied(x) => State { value: self.value * x },
+            Event::DividedBy(x) => State { value: self.value / x },
         }
     }
 
-    fn apply_mut(&mut self, event: &Event) {
+    fn apply_mut(&mut self, event: Event) {
         let new_state = self.apply(event);
         let _ = ::std::mem::replace(self, new_state);
     }
@@ -78,12 +78,12 @@ fn main() {
         Event::DividedBy(128),
     ];
 
-    let state = events.iter().fold(State::default(), |s, e| s.apply(e));
+    let state = events.iter().fold(State::default(), |s, e| s.apply(e.clone()));
     assert_eq!(state, State { value: 2 });
 
     let mut mut_state = State::default();
     for event in &events {
-        mut_state.apply_mut(event);
+        mut_state.apply_mut(event.clone());
     }
 
     assert_eq!(mut_state, State { value: 2 });
@@ -99,7 +99,7 @@ fn main() {
     {
         let mut s0 = es.open_stream(0);
         let past_events = s0.read(BeginningOfStream).unwrap();
-        let state = past_events.iter().fold(State::default(), |s, e| s.apply(e));
+        let state = past_events.iter().fold(State::default(), |s, e| s.apply(e.payload));
 
         let result = state.execute(Command::Multiply(-1isize as usize));
         assert_eq!(result, Err(CommandError::Overflow));
@@ -115,47 +115,39 @@ fn main() {
     {
         let s0 = es.open_stream(0);
         let new_events = s0.read(Offset(0)).unwrap();
-        let state = new_events.iter().fold(State { value: 36 }, |s, e| s.apply(e));
+        let state = new_events.iter().fold(State { value: 36 }, |s, e| s.apply(e.payload));
 
         let result = state.execute(Command::Add(-1isize as usize));
         assert!(result.is_ok());
     }
     {
-        /*        let state_store = MemoryStateStore::default();
-                {
-                    let persist_state = PersistedState {
-                        offset: 0,
-                        state: State { value: 100 },
-                    };
-                    state_store.store(0, persist_state);
-                }
+        let state_store = MemoryStateStore::<_, _, _>::default();
+        state_store.put_state(0, 0, State { value: 100 });
 
-                let snapshot = state_store.get(0);
+        let snapshot = state_store.get_state(0);
 
-                assert_eq!(snapshot, State { value: 100 });
+        assert_eq!(snapshot, Ok(Some(PersistedState { offset: 0, state: State { value: 100 } })));
+        let snapshot = snapshot.unwrap().unwrap();
 
-                let s0 = es.open_stream(0);
-                let new_events = s0.read(Offset(snapshot.offset));
-                let state = new_events.iter().fold((snapshot.offset, snapshot), |s, e| (e.offset, s.apply(e)));
+        let s0 = es.open_stream(0);
+        let new_events = s0.read(Offset(snapshot.offset)).unwrap();
+        let new_state = new_events.iter().fold(snapshot, |s, e| PersistedState { offset: e.offset, state: s.state.apply(e.payload) });
 
-                assert_eq!(state.1, State { value: 256 });
+        assert_eq!(new_state.state, State { value: 256 });
 
-                let result = state.1.execute(Command::DivideBy(25));
-                assert!(result.is_ok());
+        let result = new_state.state.execute(Command::DivideBy(25));
+        assert!(result.is_ok());
 
-                s0.append_events(vec![Event::Added(25)]);
-                assert!(result.is_ok());
+        s0.append_events(vec![Event::Added(25)]);
 
-                s0.append_events(/* Precondition::ExpectedOffset(Offset(state.0)), */result.unwrap());
-                assert_eq!(result.is_err());
-        */
+        s0.append_events(/* Precondition::LastOffset(new_state.offset), */result.unwrap());
+
+        state_store.put_state(0, new_state.offset, new_state.state);
     }
 }
 
 // Things to think about:
-// - Specialized "Offset" type: Offset<T> (BeginningOfStream or T)
-//   - Then interpret "read" to be read things newer than the passed in value.
 // - When writing, have preconditions to appending events
 //   - Expected Last Offset: Offset
-//   - NoStream (for some backends these may be interpreted the same)
+//   - EmptyStream / NoStream (for some backends these may be interpreted the same)
 //   - Always

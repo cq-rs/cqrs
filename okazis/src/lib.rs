@@ -6,7 +6,8 @@ pub enum ReadOffset<Offset> {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq)]
-pub struct PersistedEvent<Offset, Event, Metadata> {
+pub struct PersistedEvent<Offset, Event, Metadata>
+{
     pub offset: Offset,
     pub payload: Event,
     pub metadata: Metadata,
