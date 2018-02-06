@@ -121,18 +121,34 @@ fn main() {
         assert!(result.is_ok());
     }
     {
-//        let state_store = MemoryStateStore::default();
-//        let state0 = State { value:36 };
-//        let persist_state = PersistedState {
-//            offset: 0,
-//            state: state0,
-//        };
-//        state_store.store(0, persist_state);
-//
-//        let latest = state_store.get(0);
-//        let s0 = es.open_stream(0);
-//        let new_events = s0.read(Offset(latest.offset));
-//
+        /*        let state_store = MemoryStateStore::default();
+                {
+                    let persist_state = PersistedState {
+                        offset: 0,
+                        state: State { value: 100 },
+                    };
+                    state_store.store(0, persist_state);
+                }
+
+                let snapshot = state_store.get(0);
+
+                assert_eq!(snapshot, State { value: 100 });
+
+                let s0 = es.open_stream(0);
+                let new_events = s0.read(Offset(snapshot.offset));
+                let state = new_events.iter().fold((snapshot.offset, snapshot), |s, e| (e.offset, s.apply(e)));
+
+                assert_eq!(state.1, State { value: 256 });
+
+                let result = state.1.execute(Command::DivideBy(25));
+                assert!(result.is_ok());
+
+                s0.append_events(vec![Event::Added(25)]);
+                assert!(result.is_ok());
+
+                s0.append_events(/* Precondition::ExpectedOffset(Offset(state.0)), */result.unwrap());
+                assert_eq!(result.is_err());
+        */
     }
 }
 

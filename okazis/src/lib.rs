@@ -32,4 +32,19 @@ pub trait EventStream {
     fn read(&self, offset: ReadOffset<Self::Offset>) -> Self::ReadResult;
 }
 
-pub trait StateStore {}
+pub trait StateStore {
+    type StateId;
+    type State;
+    type Offset;
+    type StateResult;
+    fn get_state(&self, stream_id: Self::StateId) -> Self::StateResult;
+    fn put_state(&self, stream_id: Self::StateId, offset: Self::Offset, state: Self::State);
+}
+
+pub trait Aggregate {
+    type Event;
+    type Command;
+    type CommandError;
+    fn apply(&self, event: Self::Event) -> Self;
+    fn execute(&self, cmd: Self::Command) -> Result<Vec<Self::Event>, Self::CommandError>;
+}
