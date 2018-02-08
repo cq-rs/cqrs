@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hash};
-use okazis::{StateStore, PersistedState};
+use okazis::{StateStore, PersistedSnapshot};
 use std::sync::RwLock;
 
 #[derive(PartialEq, Debug, Clone, Copy, Hash)]
@@ -13,7 +13,7 @@ pub struct MemoryStateStore<StateId, Offset, State, Hasher = RandomState>
         StateId: Eq + Hash,
         Hasher: BuildHasher,
 {
-    data: RwLock<HashMap<StateId, PersistedState<Offset, State>, Hasher>>
+    data: RwLock<HashMap<StateId, PersistedSnapshot<Offset, State>, Hasher>>
 }
 
 impl<StateId, Offset, State, Hasher> StateStore for MemoryStateStore<StateId, Offset, State, Hasher>
@@ -26,7 +26,7 @@ impl<StateId, Offset, State, Hasher> StateStore for MemoryStateStore<StateId, Of
     type StateId = StateId;
     type State = State;
     type Offset = Offset;
-    type StateResult = Result<Option<PersistedState<Offset, State>>, Never>;
+    type StateResult = Result<Option<PersistedSnapshot<Offset, State>>, Never>;
 
     fn get_state(&self, state_id: Self::StateId) -> Self::StateResult {
         let lock = self.data.read().unwrap();
@@ -37,7 +37,7 @@ impl<StateId, Offset, State, Hasher> StateStore for MemoryStateStore<StateId, Of
     }
 
     fn put_state(&self, state_id: Self::StateId, offset: Self::Offset, state: Self::State) {
-        let new_val = PersistedState { offset, state };
+        let new_val = PersistedSnapshot { offset, data: state };
         let mut lock = self.data.write().unwrap();
         lock.insert(state_id, new_val);
     }

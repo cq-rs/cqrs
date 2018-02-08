@@ -35,7 +35,7 @@ impl<Event> EventStream for MemoryEventStream<Event>
             let mut i = initial_offset;
             let mut v = Vec::<PersistedEvent<usize, Event, ()>>::new();
             for e in evts {
-                v.push(PersistedEvent { offset: i, payload: e.clone(), metadata: () });
+                v.push(PersistedEvent { offset: i, data: e.clone(), metadata: () });
                 i += 1;
             }
             v

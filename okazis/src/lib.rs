@@ -6,18 +6,32 @@ pub enum ReadOffset<Offset> {
     Offset(Offset),
 }
 
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum Precondition<Offset> {
+    Always,
+    LastOffset(Offset),
+    NewStream,
+    EmptyStream,
+}
+
+impl<Offset> Default for Precondition<Offset> {
+    fn default() -> Self {
+        Precondition::Always
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq)]
 pub struct PersistedEvent<Offset, Event, Metadata>
 {
     pub offset: Offset,
-    pub payload: Event,
+    pub data: Event,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq)]
-pub struct PersistedState<Offset, State> {
+pub struct PersistedSnapshot<Offset, State> {
     pub offset: Offset,
-    pub state: State,
+    pub data: State,
 }
 
 pub trait EventStore {
@@ -94,7 +108,7 @@ impl<State, StateId, Offset> StateStore for NullStateStore<State, StateId, Offse
     type StateId = StateId;
     type State = State;
     type Offset = Offset;
-    type StateResult = Result<Option<PersistedState<Self::Offset, Self::State>>, Never>;
+    type StateResult = Result<Option<PersistedSnapshot<Self::Offset, Self::State>>, Never>;
     fn get_state(&self, state_id: Self::StateId) -> Self::StateResult {
         Ok(None)
     }
@@ -122,7 +136,7 @@ impl<Agg, AggId, EStore, EStream, Store, Event, Offset, ReadStreamErr, ReadState
     where
         EStore: EventStore<EventStream = EStream, StreamId = AggId>,
         EStream: EventStream<Offset = Offset, Event = Event, ReadResult = Result<Vec<PersistedEvent<Offset, Event, ()>>, ReadStreamErr>>,
-        Store: StateStore<State = Agg, StateId = AggId, Offset = Offset, StateResult = Result<Option<PersistedState<Offset, Agg>>, ReadStateErr>>,
+        Store: StateStore<State=Agg, StateId=AggId, Offset=Offset, StateResult=Result<Option<PersistedSnapshot<Offset, Agg>>, ReadStateErr>>,
         Agg: Aggregate<Event = Event>,
         Offset: Clone,
         Event: Clone,
@@ -130,12 +144,12 @@ impl<Agg, AggId, EStore, EStream, Store, Event, Offset, ReadStreamErr, ReadState
 {
     pub fn execute_persist_and_snapshot(&self, agg_id: EStore::StreamId, cmd: Agg::Command) -> Result<(),AggregateError<Agg::CommandError, ReadStreamErr, ReadStateErr>>
     {
-        let saved_snapshot : Option<PersistedState<EStream::Offset, Agg>> = self.state_store.get_state(agg_id.clone()).map_err(|e| AggregateError::ReadState(e))?;
+        let saved_snapshot: Option<PersistedSnapshot<EStream::Offset, Agg>> = self.state_store.get_state(agg_id.clone()).map_err(|e| AggregateError::ReadState(e))?;
         let stream = self.event_store.open_stream(agg_id.clone());
         let (last_offset, state) = {
             let (read_offset, mut snapshot) =
                 if let Some(ps) = saved_snapshot {
-                    (ReadOffset::Offset(ps.offset), ps.state)
+                    (ReadOffset::Offset(ps.offset), ps.data)
                 } else {
                     (ReadOffset::BeginningOfStream, Agg::default())
                 };
@@ -147,7 +161,7 @@ impl<Agg, AggId, EStore, EStream, Store, Event, Offset, ReadStreamErr, ReadState
             let prior_events: Vec<PersistedEvent<EStream::Offset, Agg::Event, ()>> =
                 stream.read(read_offset).map_err(|e| AggregateError::ReadStream(e))?;
             for e in prior_events {
-                snapshot.apply(e.payload);
+                snapshot.apply(e.data);
                 last_offset = Some(e.offset);
             }
             (last_offset, snapshot)
@@ -162,7 +176,7 @@ impl<Agg, AggId, EStore, EStream, Store, Event, Offset, ReadStreamErr, ReadState
             let mut last_offset = last_offset;
             let persisted_events: Vec<PersistedEvent<Offset, Event, ()>> = Vec::new();
             for e in persisted_events {
-                state.apply(e.payload);
+                state.apply(e.data);
                 last_offset = /* Precondition... */ Some(e.offset);
             }
             if let Some(offset) = last_offset {

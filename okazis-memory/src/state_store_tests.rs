@@ -18,11 +18,11 @@ fn can_get_state_from_store() {
 #[test]
 fn can_round_trip_a_value() {
     let ms = MemoryStateStore::<usize, usize, TestState>::default();
-    let expected = PersistedState {
+    let expected = PersistedSnapshot {
         offset: 23,
-        state: TestState,
+        data: TestState,
     };
-    ms.put_state(0, expected.offset, expected.state.clone());
+    ms.put_state(0, expected.offset, expected.data.clone());
     let ts = ms.get_state(0);
     assert_eq!(Ok(Some(expected)), ts);
 }
@@ -30,16 +30,16 @@ fn can_round_trip_a_value() {
 #[test]
 fn can_round_trip_multiple_values() {
     let ms = MemoryStateStore::<usize, usize, TestState>::default();
-    let e0 = PersistedState {
+    let e0 = PersistedSnapshot {
         offset: 14,
-        state: TestState,
+        data: TestState,
     };
-    let e1 = PersistedState {
+    let e1 = PersistedSnapshot {
         offset: 299,
-        state: TestState,
+        data: TestState,
     };
-    ms.put_state(0, e0.offset, e0.state.clone());
-    ms.put_state(1, e1.offset, e1.state.clone());
+    ms.put_state(0, e0.offset, e0.data.clone());
+    ms.put_state(1, e1.offset, e1.data.clone());
     let t0 = ms.get_state(0);
     let t1 = ms.get_state(1);
     let t2 = ms.get_state(2);
@@ -51,16 +51,16 @@ fn can_round_trip_multiple_values() {
 #[test]
 fn can_have_memory_state_store_with_alternate_hasher() {
     let ms = MemoryStateStore::<_, _, _, ::fnv::FnvBuildHasher>::default();
-    let e0 = PersistedState {
+    let e0 = PersistedSnapshot {
         offset: 14,
-        state: TestState,
+        data: TestState,
     };
-    let e1 = PersistedState {
+    let e1 = PersistedSnapshot {
         offset: 299,
-        state: TestState,
+        data: TestState,
     };
-    ms.put_state(0, e0.offset, e0.state.clone());
-    ms.put_state(1, e1.offset, e1.state.clone());
+    ms.put_state(0, e0.offset, e0.data.clone());
+    ms.put_state(1, e1.offset, e1.data.clone());
     let t0 = ms.get_state(0);
     let t1 = ms.get_state(1);
     let t2 = ms.get_state(2);
@@ -72,16 +72,16 @@ fn can_have_memory_state_store_with_alternate_hasher() {
 #[test]
 fn can_have_memory_state_store_with_alternate_key() {
     let ms = MemoryStateStore::<_, _, _>::default();
-    let e0 = PersistedState {
+    let e0 = PersistedSnapshot {
         offset: 14,
-        state: TestState,
+        data: TestState,
     };
-    let e1 = PersistedState {
+    let e1 = PersistedSnapshot {
         offset: 299,
-        state: TestState,
+        data: TestState,
     };
-    ms.put_state("0", e0.offset, e0.state.clone());
-    ms.put_state("1", e1.offset, e1.state.clone());
+    ms.put_state("0", e0.offset, e0.data.clone());
+    ms.put_state("1", e1.offset, e1.data.clone());
     let t0 = ms.get_state("0");
     let t1 = ms.get_state("1");
     let t2 = ms.get_state("2");

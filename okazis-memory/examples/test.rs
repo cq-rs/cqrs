@@ -99,7 +99,7 @@ fn main() {
     {
         let mut s0 = es.open_stream(0);
         let past_events = s0.read(BeginningOfStream).unwrap();
-        let state = past_events.iter().fold(State::default(), |s, e| s.apply(e.payload));
+        let state = past_events.iter().fold(State::default(), |s, e| s.apply(e.data));
 
         let result = state.execute(Command::Multiply(-1isize as usize));
         assert_eq!(result, Err(CommandError::Overflow));
@@ -115,7 +115,7 @@ fn main() {
     {
         let s0 = es.open_stream(0);
         let new_events = s0.read(Offset(0)).unwrap();
-        let state = new_events.iter().fold(State { value: 36 }, |s, e| s.apply(e.payload));
+        let state = new_events.iter().fold(State { value: 36 }, |s, e| s.apply(e.data));
 
         let result = state.execute(Command::Add(-1isize as usize));
         assert!(result.is_ok());
@@ -126,23 +126,23 @@ fn main() {
 
         let snapshot = state_store.get_state(0);
 
-        assert_eq!(snapshot, Ok(Some(PersistedState { offset: 0, state: State { value: 100 } })));
+        assert_eq!(snapshot, Ok(Some(PersistedSnapshot { offset: 0, data: State { value: 100 } })));
         let snapshot = snapshot.unwrap().unwrap();
 
         let s0 = es.open_stream(0);
         let new_events = s0.read(Offset(snapshot.offset)).unwrap();
-        let new_state = new_events.iter().fold(snapshot, |s, e| PersistedState { offset: e.offset, state: s.state.apply(e.payload) });
+        let new_state = new_events.iter().fold(snapshot, |s, e| PersistedSnapshot { offset: e.offset, data: s.data.apply(e.data) });
 
-        assert_eq!(new_state.state, State { value: 256 });
+        assert_eq!(new_state.data, State { value: 256 });
 
-        let result = new_state.state.execute(Command::DivideBy(25));
+        let result = new_state.data.execute(Command::DivideBy(25));
         assert!(result.is_ok());
 
         s0.append_events(vec![Event::Added(25)]);
 
         s0.append_events(/* Precondition::LastOffset(new_state.offset), */result.unwrap());
 
-        state_store.put_state(0, new_state.offset, new_state.state);
+        state_store.put_state(0, new_state.offset, new_state.data);
     }
 }
 
