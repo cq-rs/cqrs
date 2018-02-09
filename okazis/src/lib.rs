@@ -1,5 +1,3 @@
-extern crate futures;
-
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Since<Offset> {
     BeginningOfStream,
@@ -12,6 +10,12 @@ pub enum Precondition<Offset> {
     LastOffset(Offset),
     NewStream,
     EmptyStream,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq)]
+pub enum AppendError<Offset, Err> {
+    PreconditionFailed(Precondition<Offset>),
+    WriteError(Err),
 }
 
 impl<Offset> Default for Precondition<Offset> {
@@ -162,7 +166,7 @@ pub enum AggregateError<CmdErr, ReadStreamErr, ReadStateErr, WriteStreamErr, Wri
 impl<Aggregate, AggregateId, EventStore, StateStore, Offset, Event, Metadata, ReadStreamErr, ReadStateErr, WriteStreamErr, WriteStateErr>
 AggregateProcessor<Aggregate, EventStore, StateStore>
     where
-        EventStore: self::EventStore<AggregateId=AggregateId, Offset=Offset, Event=Event, Metadata=Metadata, ReadResult=Result<Vec<PersistedEvent<Offset, Event, Metadata>>, ReadStreamErr>, AppendResult=Result<Offset, WriteStreamErr>>,
+        EventStore: self::EventStore<AggregateId=AggregateId, Offset=Offset, Event=Event, Metadata=Metadata, ReadResult=Result<Option<Vec<PersistedEvent<Offset, Event, Metadata>>>, ReadStreamErr>, AppendResult=Result<Option<Offset>, WriteStreamErr>>,
         StateStore: self::StateStore<State=Aggregate, AggregateId=AggregateId, Version=Offset, StateResult=Result<Option<PersistedSnapshot<Offset, Aggregate>>, ReadStateErr>, PersistResult=Result<(), WriteStateErr>>,
         Aggregate: self::Aggregate<Event=Event>,
         Offset: Clone,
@@ -193,7 +197,8 @@ AggregateProcessor<Aggregate, EventStore, StateStore>
         // Read events since the last snapshot was taken
         let prior_events: Vec<PersistedEvent<Offset, Event, Metadata>> =
             self.event_store.read(&agg_id, read_offset)
-                .map_err(|e| AggregateError::ReadStream(e))?;
+                .map_err(|e| AggregateError::ReadStream(e))?
+                .unwrap_or(Vec::default());
 
         // Re-hydrate aggregate with existing events
         for e in prior_events {
@@ -223,12 +228,14 @@ AggregateProcessor<Aggregate, EventStore, StateStore>
 
             // Append new events to event store if underlying stream
             // has not changed and get new latest offset
-            let new_offset: Offset =
+            let new_offset: Option<Offset> =
                 self.event_store.append_events(&agg_id, &events_with_metadata, precondition)
                     .map_err(|e| AggregateError::WriteStream(e))?;
 
             // Persist state snapshot
-            self.state_store.put_state(&agg_id, new_offset, state);
+            if let Some(offset) = new_offset {
+                self.state_store.put_state(&agg_id, offset, state);
+            }
         }
 
         Ok(event_count)
