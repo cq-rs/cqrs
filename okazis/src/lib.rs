@@ -47,7 +47,7 @@ pub trait EventStore {
     type ReadResult;
 
     fn append_events(&self, agg_id: &Self::AggregateId, events: &[(Self::Event, Self::Metadata)], condition: Precondition<Self::Offset>) -> Self::AppendResult;
-    fn read(&self, agg_id: &Self::AggregateId, since_offset: Since<Self::Offset>) -> Self::ReadResult;
+    fn read(&self, agg_id: &Self::AggregateId, since: Since<Self::Offset>) -> Self::ReadResult;
 }
 
 pub trait StateStore {
@@ -61,21 +61,27 @@ pub trait StateStore {
     fn put_state(&self, agg_id: &Self::AggregateId, version: Self::Version, state: Self::State) -> Self::PersistResult;
 }
 
-pub trait MetadataProvider {
+pub trait EventDecorator {
     type Event;
-    type Metadata;
+    type DecoratedEvent;
 
-    fn associate_metadata(&self, event: Self::Event) -> (Self::Event, Self::Metadata);
+    fn decorate(&self, event: Self::Event) -> Self::DecoratedEvent;
+    fn decorate_events(&self, events: Vec<Self::Event>) -> Vec<Self::DecoratedEvent> {
+        events.into_iter()
+            .map(|e| self.decorate(e))
+            .collect()
+    }
 }
 
 pub trait Aggregate: Default {
     type Event;
     type Command;
     type CommandError;
-    fn apply(&mut self, event: &Self::Event);
+    fn apply(&mut self, event: Self::Event);
     fn execute(&self, cmd: Self::Command) -> Result<Vec<Self::Event>, Self::CommandError>;
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Never {}
 
 #[derive(Debug, Default, PartialEq, Hash, Clone, Copy)]
@@ -84,25 +90,25 @@ pub struct NullEventStore<Event, AggregateId, Offset, Metadata> {
 }
 
 #[derive(Debug, PartialEq, Hash, Clone, Copy)]
-pub struct DefaultMetadataProvider<Event, Metadata> {
+pub struct DefaultMetadataDecorator<Event, Metadata> {
     _phantom: ::std::marker::PhantomData<(Event, Metadata)>,
 }
 
-impl<Event, Metadata> Default for DefaultMetadataProvider<Event, Metadata> {
+impl<Event, Metadata> Default for DefaultMetadataDecorator<Event, Metadata> {
     fn default() -> Self {
-        DefaultMetadataProvider { _phantom: ::std::marker::PhantomData }
+        DefaultMetadataDecorator { _phantom: ::std::marker::PhantomData }
     }
 }
 
-impl<Event, Metadata> MetadataProvider for DefaultMetadataProvider<Event, Metadata>
+impl<Event, Metadata> EventDecorator for DefaultMetadataDecorator<Event, Metadata>
     where
         Metadata: Default,
 {
     type Event = Event;
-    type Metadata = Metadata;
+    type DecoratedEvent = (Event, Metadata);
 
-    fn associate_metadata(&self, event: Self::Event) -> (Self::Event, Self::Metadata) {
-        (event, Self::Metadata::default())
+    fn decorate(&self, event: Self::Event) -> Self::DecoratedEvent {
+        (event, Default::default())
     }
 }
 
@@ -114,14 +120,14 @@ impl<Event, AggregateId, Offset, Metadata> EventStore for NullEventStore<Event, 
     type Event = Event;
     type Metadata = Metadata;
     type Offset = Offset;
-    type AppendResult = Result<Offset, Never>;
-    type ReadResult = Result<Vec<PersistedEvent<Self::Offset, Self::Event, Metadata>>, Never>;
+    type AppendResult = Result<(), Never>;
+    type ReadResult = Result<Option<Vec<PersistedEvent<Self::Offset, Self::Event, Metadata>>>, Never>;
 
-    fn append_events(&self, aggregate_id: &Self::AggregateId, events: &[(Self::Event, Self::Metadata)], condition: Precondition<Self::Offset>) -> Self::AppendResult {
-        Ok(Offset::default())
+    fn append_events(&self, _aggregate_id: &Self::AggregateId, _events: &[(Self::Event, Self::Metadata)], _condition: Precondition<Self::Offset>) -> Self::AppendResult {
+        Ok(())
     }
-    fn read(&self, aggregate_id: &Self::AggregateId, offset: Since<Self::Offset>) -> Self::ReadResult {
-        Ok(Vec::new())
+    fn read(&self, _aggregate_id: &Self::AggregateId, _offset: Since<Self::Offset>) -> Self::ReadResult {
+        Ok(Some(Vec::new()))
     }
 }
 
@@ -137,14 +143,45 @@ impl<State, AggregateId, Version> StateStore for NullStateStore<State, Aggregate
     type StateResult = Result<Option<PersistedSnapshot<Self::Version, Self::State>>, Never>;
     type PersistResult = Result<(), Never>;
 
-    fn get_state(&self, agg_id: &Self::AggregateId) -> Self::StateResult {
+    fn get_state(&self, _agg_id: &Self::AggregateId) -> Self::StateResult {
         Ok(None)
     }
-    fn put_state(&self, agg_id: &Self::AggregateId, version: Self::Version, state: Self::State) -> Self::PersistResult {
+    fn put_state(&self, _agg_id: &Self::AggregateId, _version: Self::Version, _state: Self::State) -> Self::PersistResult {
         Ok(())
     }
 }
 
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum SnapshotDecision {
+    Persist,
+    Skip,
+}
+
+pub trait SnapshotDecider<AggregateId> {
+    fn should_snapshot(&self, agg_id: &AggregateId, new_event_count: usize) -> SnapshotDecision;
+}
+
+#[derive(Debug, Clone, Copy, Default, Hash, PartialEq, Eq)]
+struct AlwaysPersistSnapshot;
+
+impl<AggregateId> SnapshotDecider<AggregateId> for AlwaysPersistSnapshot {
+    #[inline]
+    fn should_snapshot(&self, _agg_id: &AggregateId, _new_event_count: usize) -> SnapshotDecision {
+        SnapshotDecision::Persist
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Hash, PartialEq, Eq)]
+struct NeverPersistSnapshot;
+
+impl<AggregateId> SnapshotDecider<AggregateId> for NeverPersistSnapshot {
+    #[inline]
+    fn should_snapshot(&self, _agg_id: &AggregateId, _new_event_count: usize) -> SnapshotDecision {
+        SnapshotDecision::Skip
+    }
+}
+
+#[derive(Debug, Hash, PartialEq, Clone)]
 pub struct AggregateProcessor<Aggregate, EventStore, StateStore>
     where
         EventStore: self::EventStore<Event=Aggregate::Event>,
@@ -155,6 +192,7 @@ pub struct AggregateProcessor<Aggregate, EventStore, StateStore>
     state_store: StateStore,
 }
 
+#[derive(Debug, Hash, PartialEq, Clone)]
 pub enum AggregateError<CmdErr, ReadStreamErr, ReadStateErr, WriteStreamErr, WriteStateErr> {
     BadCommand(CmdErr),
     ReadStream(ReadStreamErr),
@@ -166,21 +204,32 @@ pub enum AggregateError<CmdErr, ReadStreamErr, ReadStateErr, WriteStreamErr, Wri
 impl<Aggregate, AggregateId, EventStore, StateStore, Offset, Event, Metadata, ReadStreamErr, ReadStateErr, WriteStreamErr, WriteStateErr>
 AggregateProcessor<Aggregate, EventStore, StateStore>
     where
-        EventStore: self::EventStore<AggregateId=AggregateId, Offset=Offset, Event=Event, Metadata=Metadata, ReadResult=Result<Option<Vec<PersistedEvent<Offset, Event, Metadata>>>, ReadStreamErr>, AppendResult=Result<Option<Offset>, WriteStreamErr>>,
-        StateStore: self::StateStore<State=Aggregate, AggregateId=AggregateId, Version=Offset, StateResult=Result<Option<PersistedSnapshot<Offset, Aggregate>>, ReadStateErr>, PersistResult=Result<(), WriteStateErr>>,
+        EventStore: self::EventStore<
+            AggregateId=AggregateId,
+            Offset=Offset,
+            Event=Event,
+            Metadata=Metadata,
+            ReadResult=Result<Option<Vec<PersistedEvent<Offset, Event, Metadata>>>, ReadStreamErr>,
+            AppendResult=Result<(), WriteStreamErr>>,
+        StateStore: self::StateStore<
+            State=Aggregate,
+            AggregateId=AggregateId,
+            Version=Offset,
+            StateResult=Result<Option<PersistedSnapshot<Offset, Aggregate>>, ReadStateErr>,
+            PersistResult=Result<(), WriteStateErr>>,
         Aggregate: self::Aggregate<Event=Event>,
         Offset: Clone,
         Metadata: Default,
 {
-    pub fn execute_persist_and_snapshot(&self, agg_id: &AggregateId, cmd: Aggregate::Command) -> Result<usize, AggregateError<Aggregate::CommandError, ReadStreamErr, ReadStateErr, WriteStreamErr, WriteStateErr>>
+    pub fn execute_and_persist<D, S>(&self, agg_id: &AggregateId, cmd: Aggregate::Command, decorator: D, snapshot_decider: S) -> Result<usize, AggregateError<Aggregate::CommandError, ReadStreamErr, ReadStateErr, WriteStreamErr, WriteStateErr>>
+        where
+            D: EventDecorator<Event=Event, DecoratedEvent=(Event, Metadata)>,
+            S: SnapshotDecider<AggregateId>,
     {
-        // Retrieve Snapshot
-        let saved_snapshot: Option<PersistedSnapshot<Offset, Aggregate>> =
-            self.state_store.get_state(&agg_id)
-                .map_err(|e| AggregateError::ReadState(e))?;
+        let saved_snapshot = self.get_last_snapshot(&agg_id)?;
 
         // Instantiate aggregate with snapshot or default data
-        let (mut current_version, mut state) =
+        let (current_version, mut state) =
             if let Some(snapshot) = saved_snapshot {
                 (Some(snapshot.version), snapshot.data)
             } else {
@@ -194,17 +243,7 @@ AggregateProcessor<Aggregate, EventStore, StateStore>
                 (Since::BeginningOfStream, Precondition::EmptyStream)
             };
 
-        // Read events since the last snapshot was taken
-        let prior_events: Vec<PersistedEvent<Offset, Event, Metadata>> =
-            self.event_store.read(&agg_id, read_offset)
-                .map_err(|e| AggregateError::ReadStream(e))?
-                .unwrap_or(Vec::default());
-
-        // Re-hydrate aggregate with existing events
-        for e in prior_events {
-            state.apply(&e.event);
-            current_version = Some(e.offset);
-        }
+        self.rehydrate(&agg_id, &mut state, read_offset.clone())?;
 
         // Apply command to aggregate
         let events =
@@ -215,30 +254,53 @@ AggregateProcessor<Aggregate, EventStore, StateStore>
 
         // Skip if no new events
         if event_count > 0 {
-            // Apply the newly created events to the state
-            for event in &events {
-                state.apply(event);
-            }
-
-            // Apply metadata
-            let events_with_metadata: Vec<_> =
-                events.into_iter()
-                    .map(|e| DefaultMetadataProvider::default().associate_metadata(e))
-                    .collect();
+            let decorated_events = decorator.decorate_events(events);
 
             // Append new events to event store if underlying stream
-            // has not changed and get new latest offset
-            let new_offset: Option<Offset> =
-                self.event_store.append_events(&agg_id, &events_with_metadata, precondition)
-                    .map_err(|e| AggregateError::WriteStream(e))?;
+            // has not changed
+            self.event_store.append_events(&agg_id, &decorated_events, precondition)
+                .map_err(|e| AggregateError::WriteStream(e))?;
 
-            // Persist state snapshot
-            if let Some(offset) = new_offset {
-                self.state_store.put_state(&agg_id, offset, state);
+            if snapshot_decider.should_snapshot(&agg_id, event_count) == SnapshotDecision::Persist {
+                self.refresh_and_persist_snapshot(&agg_id, state, read_offset)?;
             }
         }
 
         Ok(event_count)
+    }
+
+    fn rehydrate(&self, agg_id: &AggregateId, agg: &mut Aggregate, since: Since<Offset>) -> Result<Option<Offset>, AggregateError<Aggregate::CommandError, ReadStreamErr, ReadStateErr, WriteStreamErr, WriteStateErr>> {
+        let read_events =
+            self.event_store.read(agg_id, since)
+                .map_err(|e| AggregateError::ReadStream(e))?;
+
+        let mut latest_offset = None;
+        if let Some(events) = read_events {
+            // Re-hydrate aggregate
+            for e in events {
+                agg.apply(e.event);
+                latest_offset = Some(e.offset);
+            }
+        }
+
+        Ok(latest_offset)
+    }
+
+    fn refresh_and_persist_snapshot(&self, agg_id: &AggregateId, agg: Aggregate, last_version: Since<Offset>) -> Result<(), AggregateError<Aggregate::CommandError, ReadStreamErr, ReadStateErr, WriteStreamErr, WriteStateErr>> {
+        let mut agg = agg;
+        let last_event_offset = self.rehydrate(&agg_id, &mut agg, last_version)?;
+
+        if let Some(version) = last_event_offset {
+            self.state_store.put_state(&agg_id, version, agg)
+                .map_err(|e| AggregateError::WriteState(e))?;
+        }
+
+        Ok(())
+    }
+
+    fn get_last_snapshot(&self, agg_id: &AggregateId) -> Result<Option<PersistedSnapshot<Offset, Aggregate>>, AggregateError<Aggregate::CommandError, ReadStreamErr, ReadStateErr, WriteStreamErr, WriteStateErr>> {
+        self.state_store.get_state(&agg_id)
+            .map_err(|e| AggregateError::ReadState(e))
     }
 }
 
@@ -263,22 +325,30 @@ mod tests {
         type Event = MyEvent;
         type Command = MyCommand;
         type CommandError = Never;
-        fn apply(&mut self, evt: &Self::Event) {}
-        fn execute(&self, cmd: Self::Command) -> Result<Vec<Self::Event>, Self::CommandError> {
+        fn apply(&mut self, _evt: Self::Event) {}
+        fn execute(&self, _cmd: Self::Command) -> Result<Vec<Self::Event>, Self::CommandError> {
             Ok(vec![MyEvent::Wow])
         }
     }
 
     #[test]
     fn maybe_this_works_() {
-        let es : NullEventStore<_, usize, usize, ()> = NullEventStore { _phantom: ::std::marker::PhantomData };
-        let ss : NullStateStore<_, usize, usize> = NullStateStore { _phantom: ::std::marker::PhantomData };
+        let es: NullEventStore<MyEvent, usize, usize, ()> =
+            NullEventStore { _phantom: ::std::marker::PhantomData };
+        let ss: NullStateStore<CoolAggregate, usize, usize> =
+            NullStateStore { _phantom: ::std::marker::PhantomData };
+
         let agg: AggregateProcessor<CoolAggregate, _, _> = AggregateProcessor {
             event_store: es,
             state_store: ss,
         };
+
         let result =
-            agg.execute_persist_and_snapshot(&0usize, MyCommand::Much);
-        assert!(result.is_ok());
+            agg.execute_and_persist(
+                &0usize,
+                MyCommand::Much,
+                DefaultMetadataDecorator::default(),
+                AlwaysPersistSnapshot::default());
+        assert_eq!(result, Ok(1usize));
     }
 }

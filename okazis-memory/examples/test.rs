@@ -1,9 +1,9 @@
 extern crate okazis;
 extern crate okazis_memory;
+extern crate fnv;
 
-use okazis::*;
-use okazis::ReadOffset::*;
-use okazis_memory::{MemoryEventStore, MemoryEventStream, MemoryStateStore};
+use okazis::{Since, EventStore, StateStore, PersistedSnapshot, Precondition};
+use okazis_memory::{MemoryEventStore, MemoryStateStore};
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
 enum Event {
@@ -88,18 +88,17 @@ fn main() {
 
     assert_eq!(mut_state, State { value: 2 });
 
-    let es = okazis_memory::MemoryEventStore::default();
+    let es = MemoryEventStore::<_, _, _, fnv::FnvBuildHasher>::default();
     {
-        let mut s0 = es.open_stream(0);
-        s0.append_events(vec![
-            Event::Added(100),
-            Event::Subtracted(36),
-        ]);
+        let result = es.append_events(&0, &vec![
+            (Event::Added(100), ()),
+            (Event::Subtracted(36), ()),
+        ], Precondition::Always);
+        assert!(result.is_ok());
     }
     {
-        let mut s0 = es.open_stream(0);
-        let past_events = s0.read(BeginningOfStream).unwrap();
-        let state = past_events.iter().fold(State::default(), |s, e| s.apply(e.data));
+        let past_events = es.read(&0, Since::BeginningOfStream).unwrap().unwrap();
+        let state = past_events.iter().fold(State::default(), |s, e| s.apply(e.event));
 
         let result = state.execute(Command::Multiply(-1isize as usize));
         assert_eq!(result, Err(CommandError::Overflow));
@@ -110,39 +109,51 @@ fn main() {
         let result = state.execute(Command::Multiply(4));
         assert_eq!(result, Ok(vec![Event::Multiplied(4)]));
 
-        s0.append_events(result.unwrap());
+        let decorated_events: Vec<_> = result.unwrap().into_iter()
+            .map(|e| (e, ()))
+            .collect();
+
+        let result = es.append_events(&0, &decorated_events, Precondition::Always);
+        assert!(result.is_ok());
     }
     {
-        let s0 = es.open_stream(0);
-        let new_events = s0.read(Offset(0)).unwrap();
-        let state = new_events.iter().fold(State { value: 36 }, |s, e| s.apply(e.data));
+        let new_events = es.read(&0, Since::Offset(0)).unwrap().unwrap();
+        let state = new_events.iter().fold(State { value: 36 }, |s, e| s.apply(e.event));
 
         let result = state.execute(Command::Add(-1isize as usize));
         assert!(result.is_ok());
     }
     {
-        let state_store = MemoryStateStore::<_, _, _>::default();
-        state_store.put_state(0, 0, State { value: 100 });
+        let state_store = MemoryStateStore::<_, _, _, fnv::FnvBuildHasher>::default();
+        let result = state_store.put_state(&0, 0, State { value: 100 });
+        assert!(result.is_ok());
 
-        let snapshot = state_store.get_state(0);
+        let snapshot = state_store.get_state(&0);
 
-        assert_eq!(snapshot, Ok(Some(PersistedSnapshot { offset: 0, data: State { value: 100 } })));
+        assert_eq!(snapshot, Ok(Some(PersistedSnapshot { version: 0, data: State { value: 100 } })));
         let snapshot = snapshot.unwrap().unwrap();
+        let snapshot_version = snapshot.version;
 
-        let s0 = es.open_stream(0);
-        let new_events = s0.read(Offset(snapshot.offset)).unwrap();
-        let new_state = new_events.iter().fold(snapshot, |s, e| PersistedSnapshot { offset: e.offset, data: s.data.apply(e.data) });
+        let new_events = es.read(&0, Since::Offset(snapshot.version)).unwrap().unwrap();
+        let new_state = new_events.iter().fold(snapshot, |s, e| PersistedSnapshot { version: e.offset, data: s.data.apply(e.event) });
 
         assert_eq!(new_state.data, State { value: 256 });
 
         let result = new_state.data.execute(Command::DivideBy(25));
         assert!(result.is_ok());
 
-        s0.append_events(vec![Event::Added(25)]);
+        let result_x = es.append_events(&0, &vec![(Event::Added(25), ())], Precondition::Always);
+        assert!(result_x.is_ok());
 
-        s0.append_events(/* Precondition::LastOffset(new_state.offset), */result.unwrap());
+        let decorated_events: Vec<_> = result.unwrap().into_iter()
+            .map(|e| (e, ()))
+            .collect();
 
-        state_store.put_state(0, new_state.offset, new_state.data);
+        let result = es.append_events(&0, &decorated_events, Precondition::LastOffset(snapshot_version));
+        assert!(result.is_err());
+
+        let result = state_store.put_state(&0, new_state.version, new_state.data);
+        assert!(result.is_ok());
     }
 }
 

@@ -1,47 +1,42 @@
 pub use super::*;
-use okazis::EventStream;
-use okazis::ReadOffset::*;
+use okazis::{EventStore, Since};
+use fnv::FnvBuildHasher;
 
 #[derive(Clone, Debug, Hash, PartialEq, Copy)]
 struct TestEvent;
 
 #[test]
 fn implements_default_trait() {
-    let _: MemoryEventStore<TestEvent> = Default::default();
+    let _: MemoryEventStore<usize, TestEvent, ()> = Default::default();
 }
 
 #[test]
-fn can_get_an_event_stream() {
-    let es: MemoryEventStore<TestEvent> = Default::default();
-    let id = 0usize;
-    let _: MemoryEventStream<TestEvent> = es.open_stream(id);
+fn can_use_custom_hasher() {
+    let _: MemoryEventStore<usize, TestEvent, (), FnvBuildHasher> = Default::default();
 }
+
+type TestMemoryEventStore = MemoryEventStore<usize, TestEvent, (), FnvBuildHasher>;
 
 #[test]
 fn can_get_an_event_stream_multiple_times_are_equal() {
-    let es: MemoryEventStore<TestEvent> = Default::default();
+    let es = TestMemoryEventStore::default();
     let id = 0;
-    let stream1 = es.open_stream(id);
-    let stream2 = es.open_stream(id);
-    stream1.append_events(vec![
-        TestEvent
-    ]);
-    let events1 = stream1.read(BeginningOfStream);
-    let events2 = stream2.read(BeginningOfStream);
+    es.append_events(&id, &vec![
+        (TestEvent, ())
+    ], Precondition::Always).unwrap();
+    let events1 = es.read(&id, Since::BeginningOfStream);
+    let events2 = es.read(&id, Since::BeginningOfStream);
     assert_eq!(events1, events2);
 }
 
 #[test]
 fn can_get_different_event_streams() {
-    let es: MemoryEventStore<TestEvent> = Default::default();
+    let es = TestMemoryEventStore::default();
 
-    let stream1 = es.open_stream(0);
-    let stream2 = es.open_stream(1);
-
-    stream1.append_events(vec![
-        TestEvent
-    ]);
-    let events1 = stream1.read(BeginningOfStream);
-    let events2 = stream2.read(BeginningOfStream);
+    es.append_events(&0, &vec![
+        (TestEvent, ())
+    ], Precondition::Always).unwrap();
+    let events1 = es.read(&0, Since::BeginningOfStream);
+    let events2 = es.read(&1, Since::BeginningOfStream);
     assert_ne!(events1, events2);
 }

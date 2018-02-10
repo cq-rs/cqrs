@@ -39,22 +39,24 @@ impl<AggregateId, Event, Metadata, Hasher> MemoryEventStore<AggregateId, Event, 
     }
 }
 
-impl<AggregateId, Event, Metadata> Default for MemoryEventStore<AggregateId, Event, Metadata>
+impl<AggregateId, Event, Metadata, Hasher> Default for MemoryEventStore<AggregateId, Event, Metadata, Hasher>
     where
         AggregateId: Hash + Eq,
+        Hasher: BuildHasher + Default,
 {
     fn default() -> Self {
         MemoryEventStore {
-            data: RwLock::default(),
+            data: RwLock::new(HashMap::<_, _, Hasher>::default()),
         }
     }
 }
 
-impl<AggregateId, Event, Metadata> EventStore for MemoryEventStore<AggregateId, Event, Metadata>
+impl<AggregateId, Event, Metadata, Hasher> EventStore for MemoryEventStore<AggregateId, Event, Metadata, Hasher>
     where
         AggregateId: Hash + Eq + Clone,
         Event: Clone,
         Metadata: Clone,
+        Hasher: BuildHasher,
 {
     type AggregateId = AggregateId;
     type Event = Event;

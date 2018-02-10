@@ -5,13 +5,24 @@ use okazis::{StateStore, PersistedSnapshot};
 use std::sync::RwLock;
 use super::Never;
 
-#[derive(Default)]
 pub struct MemoryStateStore<AggregateId, Version, State, Hasher = RandomState>
     where
         AggregateId: Eq + Hash,
         Hasher: BuildHasher,
 {
     data: RwLock<HashMap<AggregateId, PersistedSnapshot<Version, State>, Hasher>>
+}
+
+impl<AggregateId, Version, State, Hasher> Default for MemoryStateStore<AggregateId, Version, State, Hasher>
+    where
+        AggregateId: Eq + Hash,
+        Hasher: BuildHasher + Default,
+{
+    fn default() -> Self {
+        MemoryStateStore {
+            data: RwLock::new(HashMap::<_, _, Hasher>::default())
+        }
+    }
 }
 
 impl<AggregateId, Version, State, Hasher> StateStore for MemoryStateStore<AggregateId, Version, State, Hasher>
