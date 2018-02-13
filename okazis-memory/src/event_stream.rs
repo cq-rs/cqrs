@@ -3,11 +3,11 @@ use std::sync::{RwLock, Arc};
 use super::Never;
 
 #[derive(Debug)]
-pub(crate) struct MemoryEventStream<Event, Metadata> {
-    events: Arc<RwLock<Vec<(Event, Metadata)>>>,
+pub(crate) struct MemoryEventStream<Event> {
+    events: Arc<RwLock<Vec<Event>>>,
 }
 
-impl<Event, Metadata> Clone for MemoryEventStream<Event, Metadata> {
+impl<Event> Clone for MemoryEventStream<Event> {
     fn clone(&self) -> Self {
         MemoryEventStream {
             events: Arc::clone(&self.events)
@@ -15,7 +15,7 @@ impl<Event, Metadata> Clone for MemoryEventStream<Event, Metadata> {
     }
 }
 
-impl<Event, Metadata> Default for MemoryEventStream<Event, Metadata> {
+impl<Event> Default for MemoryEventStream<Event> {
     fn default() -> Self {
         MemoryEventStream {
             events: Arc::new(RwLock::default())
@@ -24,12 +24,11 @@ impl<Event, Metadata> Default for MemoryEventStream<Event, Metadata> {
 }
 
 
-impl<Event, Metadata> MemoryEventStream<Event, Metadata>
+impl<Event> MemoryEventStream<Event>
     where
         Event: Clone,
-        Metadata: Clone,
 {
-    pub(crate) fn append_events(&self, events: &[(Event, Metadata)], condition: Precondition<usize>) -> Result<Option<usize>, AppendError<usize, Never>> {
+    pub(crate) fn append_events(&self, events: &[Event], condition: Precondition<usize>) -> Result<Option<usize>, AppendError<usize, Never>> {
         let mut stream = self.events.write().unwrap();
 
         match condition {
@@ -47,12 +46,12 @@ impl<Event, Metadata> MemoryEventStream<Event, Metadata>
         }
     }
 
-    pub(crate) fn read(&self, offset: Since<usize>) -> Vec<PersistedEvent<usize, Event, Metadata>> {
-        fn read_out_events<Event: Clone, Metadata: Clone>(initial_offset: usize, evts: &[(Event, Metadata)]) -> Vec<PersistedEvent<usize, Event, Metadata>> {
+    pub(crate) fn read(&self, offset: Since<usize>) -> Vec<PersistedEvent<usize, Event>> {
+        fn read_out_events<Event: Clone>(initial_offset: usize, evts: &[Event]) -> Vec<PersistedEvent<usize, Event>> {
             let mut i = initial_offset;
-            let mut v = Vec::<PersistedEvent<usize, Event, Metadata>>::new();
+            let mut v = Vec::<PersistedEvent<usize, Event>>::new();
             for e in evts {
-                v.push(PersistedEvent { offset: i, event: e.0.clone(), metadata: e.1.clone() });
+                v.push(PersistedEvent { offset: i, event: e.clone() });
                 i += 1;
             }
             v

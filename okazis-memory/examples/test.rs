@@ -88,11 +88,11 @@ fn main() {
 
     assert_eq!(mut_state, State { value: 2 });
 
-    let es = MemoryEventStore::<_, _, _, fnv::FnvBuildHasher>::default();
+    let es = MemoryEventStore::<_, _, fnv::FnvBuildHasher>::default();
     {
         let result = es.append_events(&0, &vec![
-            (Event::Added(100), ()),
-            (Event::Subtracted(36), ()),
+            Event::Added(100),
+            Event::Subtracted(36),
         ], Precondition::Always);
         assert!(result.is_ok());
     }
@@ -110,7 +110,7 @@ fn main() {
         assert_eq!(result, Ok(vec![Event::Multiplied(4)]));
 
         let decorated_events: Vec<_> = result.unwrap().into_iter()
-            .map(|e| (e, ()))
+            .map(|e| e)
             .collect();
 
         let result = es.append_events(&0, &decorated_events, Precondition::Always);
@@ -142,11 +142,11 @@ fn main() {
         let result = new_state.data.execute(Command::DivideBy(25));
         assert!(result.is_ok());
 
-        let result_x = es.append_events(&0, &vec![(Event::Added(25), ())], Precondition::Always);
+        let result_x = es.append_events(&0, &vec![Event::Added(25)], Precondition::Always);
         assert!(result_x.is_ok());
 
         let decorated_events: Vec<_> = result.unwrap().into_iter()
-            .map(|e| (e, ()))
+            .map(|e| e)
             .collect();
 
         let result = es.append_events(&0, &decorated_events, Precondition::LastOffset(snapshot_version));

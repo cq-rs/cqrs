@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
 
 [dependencies]
-fnv = "*"
-futures = "*"
 okazis = { path = "../okazis" }
+
+[dev-dependencies]
+fnv = "*"

@@ -6,26 +6,26 @@ use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use super::Never;
 
-pub struct MemoryEventStore<AggregateId, Event, Metadata, Hasher = RandomState>
+pub struct MemoryEventStore<AggregateId, Event, Hasher = RandomState>
     where
         AggregateId: Hash + Eq,
         Hasher: BuildHasher,
 {
-    data: RwLock<HashMap<AggregateId, MemoryEventStream<Event, Metadata>, Hasher>>,
+    data: RwLock<HashMap<AggregateId, MemoryEventStream<Event>, Hasher>>,
 }
 
-impl<AggregateId, Event, Metadata, Hasher> MemoryEventStore<AggregateId, Event, Metadata, Hasher>
+impl<AggregateId, Event, Hasher> MemoryEventStore<AggregateId, Event, Hasher>
     where
         AggregateId: Hash + Eq + Clone,
         Hasher: BuildHasher,
 {
-    fn try_get_stream(&self, agg_id: &AggregateId) -> Option<MemoryEventStream<Event, Metadata>> {
+    fn try_get_stream(&self, agg_id: &AggregateId) -> Option<MemoryEventStream<Event>> {
         self.data.read().unwrap()
             .get(agg_id)
             .map(|es| es.clone())
     }
 
-    fn create_stream(&self, agg_id: &AggregateId) -> MemoryEventStream<Event, Metadata> {
+    fn create_stream(&self, agg_id: &AggregateId) -> MemoryEventStream<Event> {
         let mut lock = self.data.write().unwrap();
         match lock.get(&agg_id) {
             Some(es) => return es.clone(),
@@ -39,7 +39,7 @@ impl<AggregateId, Event, Metadata, Hasher> MemoryEventStore<AggregateId, Event, 
     }
 }
 
-impl<AggregateId, Event, Metadata, Hasher> Default for MemoryEventStore<AggregateId, Event, Metadata, Hasher>
+impl<AggregateId, Event, Hasher> Default for MemoryEventStore<AggregateId, Event, Hasher>
     where
         AggregateId: Hash + Eq,
         Hasher: BuildHasher + Default,
@@ -51,21 +51,19 @@ impl<AggregateId, Event, Metadata, Hasher> Default for MemoryEventStore<Aggregat
     }
 }
 
-impl<AggregateId, Event, Metadata, Hasher> EventStore for MemoryEventStore<AggregateId, Event, Metadata, Hasher>
+impl<AggregateId, Event, Hasher> EventStore for MemoryEventStore<AggregateId, Event, Hasher>
     where
         AggregateId: Hash + Eq + Clone,
         Event: Clone,
-        Metadata: Clone,
         Hasher: BuildHasher,
 {
     type AggregateId = AggregateId;
     type Event = Event;
-    type Metadata = Metadata;
     type Offset = usize;
     type AppendResult = Result<Option<Self::Offset>, AppendError<Self::Offset, Never>>;
-    type ReadResult = Result<Option<Vec<PersistedEvent<Self::Offset, Self::Event, Self::Metadata>>>, Never>;
+    type ReadResult = Result<Option<Vec<PersistedEvent<Self::Offset, Self::Event>>>, Never>;
 
-    fn append_events(&self, agg_id: &Self::AggregateId, events: &[(Self::Event, Self::Metadata)], condition: Precondition<Self::Offset>) -> Self::AppendResult {
+    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], condition: Precondition<Self::Offset>) -> Self::AppendResult {
         if let Some(stream) = self.try_get_stream(&agg_id) {
             stream.append_events(events, condition)
         } else {

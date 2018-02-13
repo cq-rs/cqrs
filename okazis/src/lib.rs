@@ -25,11 +25,10 @@ impl<Offset> Default for Precondition<Offset> {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq)]
-pub struct PersistedEvent<Offset, Event, Metadata>
+pub struct PersistedEvent<Offset, Event>
 {
     pub offset: Offset,
     pub event: Event,
-    pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq)]
@@ -41,12 +40,11 @@ pub struct PersistedSnapshot<Version, State> {
 pub trait EventStore {
     type AggregateId;
     type Event;
-    type Metadata;
     type Offset;
     type AppendResult;
     type ReadResult;
 
-    fn append_events(&self, agg_id: &Self::AggregateId, events: &[(Self::Event, Self::Metadata)], condition: Precondition<Self::Offset>) -> Self::AppendResult;
+    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], condition: Precondition<Self::Offset>) -> Self::AppendResult;
     fn read(&self, agg_id: &Self::AggregateId, since: Since<Self::Offset>) -> Self::ReadResult;
 }
 
@@ -85,47 +83,48 @@ pub trait Aggregate: Default {
 pub enum Never {}
 
 #[derive(Debug, Default, PartialEq, Hash, Clone, Copy)]
-pub struct NullEventStore<Event, AggregateId, Offset, Metadata> {
-    _phantom: ::std::marker::PhantomData<(Event, AggregateId, Offset, Metadata)>,
+pub struct NullEventStore<Event, AggregateId, Offset> {
+    _phantom: ::std::marker::PhantomData<(Event, AggregateId, Offset)>,
 }
 
 #[derive(Debug, PartialEq, Hash, Clone, Copy)]
-pub struct DefaultMetadataDecorator<Event, Metadata> {
-    _phantom: ::std::marker::PhantomData<(Event, Metadata)>,
+pub struct NullEventDecorator<Event> {
+    _phantom: ::std::marker::PhantomData<Event>,
 }
 
-impl<Event, Metadata> Default for DefaultMetadataDecorator<Event, Metadata> {
+impl<Event> Default for NullEventDecorator<Event> {
     fn default() -> Self {
-        DefaultMetadataDecorator { _phantom: ::std::marker::PhantomData }
+        NullEventDecorator { _phantom: ::std::marker::PhantomData }
     }
 }
 
-impl<Event, Metadata> EventDecorator for DefaultMetadataDecorator<Event, Metadata>
-    where
-        Metadata: Default,
+impl<Event> EventDecorator for NullEventDecorator<Event>
 {
     type Event = Event;
-    type DecoratedEvent = (Event, Metadata);
+    type DecoratedEvent = Event;
 
+    #[inline]
     fn decorate(&self, event: Self::Event) -> Self::DecoratedEvent {
-        (event, Default::default())
+        event
     }
 }
 
-impl<Event, AggregateId, Offset, Metadata> EventStore for NullEventStore<Event, AggregateId, Offset, Metadata>
+impl<Event, AggregateId, Offset> EventStore for NullEventStore<Event, AggregateId, Offset>
     where
         Offset: Default,
 {
     type AggregateId = AggregateId;
     type Event = Event;
-    type Metadata = Metadata;
     type Offset = Offset;
     type AppendResult = Result<(), Never>;
-    type ReadResult = Result<Option<Vec<PersistedEvent<Self::Offset, Self::Event, Metadata>>>, Never>;
+    type ReadResult = Result<Option<Vec<PersistedEvent<Self::Offset, Self::Event>>>, Never>;
 
-    fn append_events(&self, _aggregate_id: &Self::AggregateId, _events: &[(Self::Event, Self::Metadata)], _condition: Precondition<Self::Offset>) -> Self::AppendResult {
+    #[inline]
+    fn append_events(&self, _aggregate_id: &Self::AggregateId, _events: &[Self::Event], _condition: Precondition<Self::Offset>) -> Self::AppendResult {
         Ok(())
     }
+
+    #[inline]
     fn read(&self, _aggregate_id: &Self::AggregateId, _offset: Since<Self::Offset>) -> Self::ReadResult {
         Ok(Some(Vec::new()))
     }
@@ -143,9 +142,12 @@ impl<State, AggregateId, Version> StateStore for NullStateStore<State, Aggregate
     type StateResult = Result<Option<PersistedSnapshot<Self::Version, Self::State>>, Never>;
     type PersistResult = Result<(), Never>;
 
+    #[inline]
     fn get_state(&self, _agg_id: &Self::AggregateId) -> Self::StateResult {
         Ok(None)
     }
+
+    #[inline]
     fn put_state(&self, _agg_id: &Self::AggregateId, _version: Self::Version, _state: Self::State) -> Self::PersistResult {
         Ok(())
     }
@@ -184,7 +186,7 @@ impl<AggregateId> SnapshotDecider<AggregateId> for NeverPersistSnapshot {
 #[derive(Debug, Hash, PartialEq, Clone)]
 pub struct AggregateProcessor<Aggregate, EventStore, StateStore>
     where
-        EventStore: self::EventStore<Event=Aggregate::Event>,
+        EventStore: self::EventStore<Event = Aggregate::Event>,
         StateStore: self::StateStore<State=Aggregate, AggregateId=EventStore::AggregateId, Version=EventStore::Offset>,
         Aggregate: self::Aggregate,
 {
@@ -201,15 +203,14 @@ pub enum AggregateError<CmdErr, ReadStreamErr, ReadStateErr, WriteStreamErr, Wri
     WriteState(WriteStateErr),
 }
 
-impl<Aggregate, AggregateId, EventStore, StateStore, Offset, Event, Metadata, ReadStreamErr, ReadStateErr, WriteStreamErr, WriteStateErr>
+impl<Aggregate, AggregateId, EventStore, StateStore, Offset, Event, ReadStreamErr, ReadStateErr, WriteStreamErr, WriteStateErr>
 AggregateProcessor<Aggregate, EventStore, StateStore>
     where
         EventStore: self::EventStore<
             AggregateId=AggregateId,
             Offset=Offset,
             Event=Event,
-            Metadata=Metadata,
-            ReadResult=Result<Option<Vec<PersistedEvent<Offset, Event, Metadata>>>, ReadStreamErr>,
+            ReadResult=Result<Option<Vec<PersistedEvent<Offset, Event>>>, ReadStreamErr>,
             AppendResult=Result<(), WriteStreamErr>>,
         StateStore: self::StateStore<
             State=Aggregate,
@@ -219,11 +220,10 @@ AggregateProcessor<Aggregate, EventStore, StateStore>
             PersistResult=Result<(), WriteStateErr>>,
         Aggregate: self::Aggregate<Event=Event>,
         Offset: Clone,
-        Metadata: Default,
 {
     pub fn execute_and_persist<D, S>(&self, agg_id: &AggregateId, cmd: Aggregate::Command, decorator: D, snapshot_decider: S) -> Result<usize, AggregateError<Aggregate::CommandError, ReadStreamErr, ReadStateErr, WriteStreamErr, WriteStateErr>>
         where
-            D: EventDecorator<Event=Event, DecoratedEvent=(Event, Metadata)>,
+            D: EventDecorator<Event=Event, DecoratedEvent=Event>,
             S: SnapshotDecider<AggregateId>,
     {
         let saved_snapshot = self.get_last_snapshot(&agg_id)?;
@@ -333,7 +333,7 @@ mod tests {
 
     #[test]
     fn maybe_this_works_() {
-        let es: NullEventStore<MyEvent, usize, usize, ()> =
+        let es: NullEventStore<MyEvent, usize, usize> =
             NullEventStore { _phantom: ::std::marker::PhantomData };
         let ss: NullStateStore<CoolAggregate, usize, usize> =
             NullStateStore { _phantom: ::std::marker::PhantomData };
@@ -347,7 +347,7 @@ mod tests {
             agg.execute_and_persist(
                 &0usize,
                 MyCommand::Much,
-                DefaultMetadataDecorator::default(),
+                NullEventDecorator::default(),
                 AlwaysPersistSnapshot::default());
         assert_eq!(result, Ok(1usize));
     }

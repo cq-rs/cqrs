@@ -6,7 +6,7 @@ pub struct TestEvent {
     value: usize,
 }
 
-type TestMemoryEventStream = MemoryEventStream<TestEvent, ()>;
+type TestMemoryEventStream = MemoryEventStream<TestEvent>;
 
 #[test]
 fn can_create_default() {
@@ -31,12 +31,12 @@ fn no_events_are_in_empty_event_stream() {
 fn can_add_events_and_read_them_back_out() {
     let es = TestMemoryEventStream::default();
     let all_events = vec![
-        PersistedEvent { offset: 0, event: TestEvent { value: 143 }, metadata: () },
-        PersistedEvent { offset: 1, event: TestEvent { value: 554 }, metadata: () },
+        PersistedEvent { offset: 0, event: TestEvent { value: 143 } },
+        PersistedEvent { offset: 1, event: TestEvent { value: 554 } },
     ];
 
     let decorated_events: Vec<_> = all_events.iter()
-        .map(|pe| (pe.event.clone(), pe.metadata))
+        .map(|pe| pe.event.clone())
         .collect();
 
     es.append_events(&decorated_events, Precondition::Always).unwrap();
@@ -48,15 +48,15 @@ fn can_add_events_and_read_them_back_out() {
 fn can_add_events_and_read_from_middle() {
     let es = TestMemoryEventStream::default();
     let all_events = vec![
-        PersistedEvent { offset: 0, event: TestEvent { value: 143 }, metadata: () },
-        PersistedEvent { offset: 1, event: TestEvent { value: 554 }, metadata: () },
+        PersistedEvent { offset: 0, event: TestEvent { value: 143 } },
+        PersistedEvent { offset: 1, event: TestEvent { value: 554 } },
     ];
     let expected_events = vec![
         all_events[1].clone(),
     ];
 
     let decorated_events: Vec<_> = all_events.iter()
-        .map(|pe| (pe.event.clone(), pe.metadata))
+        .map(|pe| pe.event.clone())
         .collect();
 
     es.append_events(&decorated_events, Precondition::Always).unwrap();
@@ -68,16 +68,16 @@ fn can_add_events_and_read_from_middle() {
 fn reading_with_offset_one_past_end_gives_empty_set() {
     let es = TestMemoryEventStream::default();
     let all_events = vec![
-        PersistedEvent { offset: 0, event: TestEvent { value: 143 }, metadata: () },
-        PersistedEvent { offset: 1, event: TestEvent { value: 554 }, metadata: () },
+        PersistedEvent { offset: 0, event: TestEvent { value: 143 } },
+        PersistedEvent { offset: 1, event: TestEvent { value: 554 } },
     ];
 
     let decorated_events: Vec<_> = all_events.iter()
-        .map(|pe| (pe.event.clone(), pe.metadata))
+        .map(|pe| pe.event.clone())
         .collect();
 
     es.append_events(&decorated_events, Precondition::Always).unwrap();
-    let expected_events = Vec::<PersistedEvent<usize, TestEvent, ()>>::default();
+    let expected_events = Vec::<PersistedEvent<usize, TestEvent>>::default();
     let actual_events = es.read(Since::Offset(1));
     assert_eq!(expected_events, actual_events);
 }
@@ -86,16 +86,16 @@ fn reading_with_offset_one_past_end_gives_empty_set() {
 fn reading_with_offset_more_than_one_past_end_gives_empty_stream() {
     let es = TestMemoryEventStream::default();
     let all_events = vec![
-        PersistedEvent { offset: 0, event: TestEvent { value: 143 }, metadata: () },
-        PersistedEvent { offset: 1, event: TestEvent { value: 554 }, metadata: () },
+        PersistedEvent { offset: 0, event: TestEvent { value: 143 } },
+        PersistedEvent { offset: 1, event: TestEvent { value: 554 } },
     ];
 
     let decorated_events: Vec<_> = all_events.iter()
-        .map(|pe| (pe.event.clone(), pe.metadata))
+        .map(|pe| pe.event.clone())
         .collect();
 
     es.append_events(&decorated_events, Precondition::Always).unwrap();
-    let expected_events = Vec::<PersistedEvent<usize, TestEvent, ()>>::default();
+    let expected_events = Vec::<PersistedEvent<usize, TestEvent>>::default();
     let actual_events = es.read(Since::Offset(2));
     assert_eq!(expected_events, actual_events);
 }
