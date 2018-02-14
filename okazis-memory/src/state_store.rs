@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hash};
-use okazis::{StateStore, PersistedSnapshot};
+use okazis::{StateStore, PersistedSnapshot, PersistResult, ReadStateResult};
 use std::sync::RwLock;
 use super::Never;
 
+#[derive(Debug)]
 pub struct MemoryStateStore<AggregateId, Version, State, Hasher = RandomState>
     where
         AggregateId: Eq + Hash,
@@ -35,8 +36,8 @@ impl<AggregateId, Version, State, Hasher> StateStore for MemoryStateStore<Aggreg
     type AggregateId = AggregateId;
     type State = State;
     type Version = Version;
-    type StateResult = Result<Option<PersistedSnapshot<Version, State>>, Never>;
-    type PersistResult = Result<(), Never>;
+    type StateResult = ReadStateResult<Version, State, Never>;
+    type PersistResult = PersistResult<Never>;
 
     fn get_state(&self, agg_id: &Self::AggregateId) -> Self::StateResult {
         let lock = self.data.read().unwrap();

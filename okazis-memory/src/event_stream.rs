@@ -1,4 +1,4 @@
-use okazis::{Since, PersistedEvent, AppendError, Precondition};
+use okazis::{Since, PersistedEvent, AppendError, Precondition, PersistResult};
 use std::sync::{RwLock, Arc};
 use super::Never;
 
@@ -28,7 +28,7 @@ impl<Event> MemoryEventStream<Event>
     where
         Event: Clone,
 {
-    pub(crate) fn append_events(&self, events: &[Event], condition: Precondition<usize>) -> Result<Option<usize>, AppendError<usize, Never>> {
+    pub(crate) fn append_events(&self, events: &[Event], condition: Precondition<usize>) -> PersistResult<AppendError<usize, Never>> {
         let mut stream = self.events.write().unwrap();
 
         match condition {
@@ -39,11 +39,7 @@ impl<Event> MemoryEventStream<Event>
         }
 
         stream.extend_from_slice(events);
-        if stream.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(stream.len() - 1))
-        }
+        Ok(())
     }
 
     pub(crate) fn read(&self, offset: Since<usize>) -> Vec<PersistedEvent<usize, Event>> {

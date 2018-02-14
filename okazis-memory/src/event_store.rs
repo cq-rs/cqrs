@@ -1,4 +1,4 @@
-use okazis::{Precondition, AppendError, PersistedEvent, EventStore, Since};
+use okazis::{Precondition, AppendError, EventStore, Since, PersistResult, ReadStreamResult};
 use event_stream::MemoryEventStream;
 use std::sync::RwLock;
 use std::hash::{Hash, BuildHasher};
@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use super::Never;
 
+#[derive(Debug)]
 pub struct MemoryEventStore<AggregateId, Event, Hasher = RandomState>
     where
         AggregateId: Hash + Eq,
@@ -60,8 +61,8 @@ impl<AggregateId, Event, Hasher> EventStore for MemoryEventStore<AggregateId, Ev
     type AggregateId = AggregateId;
     type Event = Event;
     type Offset = usize;
-    type AppendResult = Result<Option<Self::Offset>, AppendError<Self::Offset, Never>>;
-    type ReadResult = Result<Option<Vec<PersistedEvent<Self::Offset, Self::Event>>>, Never>;
+    type AppendResult = PersistResult<AppendError<Self::Offset, Never>>;
+    type ReadResult = ReadStreamResult<Self::Offset, Self::Event, Never>;
 
     fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], condition: Precondition<Self::Offset>) -> Self::AppendResult {
         if let Some(stream) = self.try_get_stream(&agg_id) {
