@@ -1,6 +1,5 @@
-use okazis::{Version, Since, PersistedEvent, AppendError, Precondition, PersistResult};
+use okazis::{Version, Since, PersistedEvent, AppendError, Precondition, PersistResult, Never};
 use std::sync::{RwLock, Arc};
-use super::Never;
 
 #[derive(Debug)]
 pub(crate) struct MemoryEventStream<Event> {
@@ -33,7 +32,7 @@ impl<Event> MemoryEventStream<Event>
 
         match condition {
             Precondition::Always => {}
-            Precondition::LastVersion(i) if !stream.is_empty() && stream.len() - 1 == i.0 => {}
+            Precondition::LastVersion(i) if !stream.is_empty() && stream.len() == i + 1 => {}
             Precondition::EmptyStream if stream.is_empty() => {}
             _ => return Err(AppendError::PreconditionFailed(condition))
         }
@@ -43,19 +42,19 @@ impl<Event> MemoryEventStream<Event>
     }
 
     pub(crate) fn read(&self, version: Since) -> Vec<PersistedEvent<Event>> {
-        fn read_out_events<Event: Clone>(initial_version: usize, evts: &[Event]) -> Vec<PersistedEvent<Event>> {
+        fn read_out_events<Event: Clone>(initial_version: Version, evts: &[Event]) -> Vec<PersistedEvent<Event>> {
             let mut i = initial_version;
             let mut v = Vec::<PersistedEvent<Event>>::new();
             for e in evts {
-                v.push(PersistedEvent { version: Version(i), event: e.clone() });
+                v.push(PersistedEvent { version: i, event: e.clone() });
                 i += 1;
             }
             v
         }
         let events = self.events.read().unwrap();
         match version {
-            Since::BeginningOfStream => read_out_events(0, &events[..]),
-            Since::Version(o) if o < Version(events.len()) => read_out_events(o.0 + 1, &events[(o.0 + 1)..]),
+            Since::BeginningOfStream => read_out_events(Version::default(), &events[..]),
+            Since::Version(o) if o < Version::new(events.len()) => read_out_events(o + 1, &events[(*(o + 1).as_ref())..]),
             Since::Version(_) => Vec::default(),
         }
     }

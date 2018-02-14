@@ -1,10 +1,9 @@
-use okazis::{Precondition, AppendError, EventStore, Since, PersistResult, ReadStreamResult};
+use okazis::{Precondition, AppendError, EventStore, Since, PersistResult, ReadStreamResult, Never};
 use event_stream::MemoryEventStream;
 use std::sync::RwLock;
 use std::hash::{Hash, BuildHasher};
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
-use super::Never;
 
 #[derive(Debug)]
 pub struct MemoryEventStore<Event, AggregateId, Hasher = RandomState>

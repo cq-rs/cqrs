@@ -2,7 +2,8 @@ extern crate okazis;
 extern crate okazis_memory;
 extern crate fnv;
 
-use okazis::{CommandResult, Aggregate, NullEventDecorator, SnapshotDecision};
+use okazis::{CommandResult, Aggregate, SnapshotDecision};
+use okazis::trivial::NopEventDecorator;
 use okazis_memory::{MemoryEventStore, MemoryStateStore};
 
 use std::time::{Duration, Instant};
@@ -159,24 +160,24 @@ fn main() {
     let past_time = now - duration;
     let future_time = now + duration;
 
-    agg_store.execute_and_persist(&agg_1, Command::UpdateText("Hello world!".to_string()), NullEventDecorator::default()).unwrap();
+    agg_store.execute_and_persist(&agg_1, Command::UpdateText("Hello world!".to_string()), NopEventDecorator::default()).unwrap();
     println!("0: {:#?}", agg_store);
-    agg_store.execute_and_persist(&agg_2, Command::SetReminder(SetReminderData { current_time: now, reminder_time: future_time }), NullEventDecorator::default()).unwrap();
+    agg_store.execute_and_persist(&agg_2, Command::SetReminder(SetReminderData { current_time: now, reminder_time: future_time }), NopEventDecorator::default()).unwrap();
     println!("1: {:#?}", agg_store);
-    agg_store.execute_and_persist(&agg_2, Command::ToggleCompletion, NullEventDecorator::default()).unwrap();
+    agg_store.execute_and_persist(&agg_2, Command::ToggleCompletion, NopEventDecorator::default()).unwrap();
     println!("2: {:#?}", agg_store);
-    agg_store.execute_and_persist(&agg_2, Command::MarkCompleted, NullEventDecorator::default()).unwrap();
+    agg_store.execute_and_persist(&agg_2, Command::MarkCompleted, NopEventDecorator::default()).unwrap();
     println!("3: {:#?}", agg_store);
-    agg_store.execute_and_persist(&agg_2, Command::ResetCompleted, NullEventDecorator::default()).unwrap();
+    agg_store.execute_and_persist(&agg_2, Command::ResetCompleted, NopEventDecorator::default()).unwrap();
     println!("4: {:#?}", agg_store);
-    let err = agg_store.execute_and_persist(&agg_2, Command::SetReminder(SetReminderData { current_time: now, reminder_time: past_time }), NullEventDecorator::default()).unwrap_err();
+    let err = agg_store.execute_and_persist(&agg_2, Command::SetReminder(SetReminderData { current_time: now, reminder_time: past_time }), NopEventDecorator::default()).unwrap_err();
     println!("err: {:?}", err);
     println!("5: {:#?}", agg_store);
-    agg_store.execute_and_persist(&agg_2, Command::UpdateText("Complete CQRS!".to_string()), NullEventDecorator::default()).unwrap();
+    agg_store.execute_and_persist(&agg_2, Command::UpdateText("Complete CQRS!".to_string()), NopEventDecorator::default()).unwrap();
     println!("6: {:#?}", agg_store);
-    agg_store.execute_and_persist(&agg_2, Command::MarkCompleted, NullEventDecorator::default()).unwrap();
+    agg_store.execute_and_persist(&agg_2, Command::MarkCompleted, NopEventDecorator::default()).unwrap();
     println!("7: {:#?}", agg_store);
-    agg_store.execute_and_persist(&agg_2, Command::MarkCompleted, NullEventDecorator::default()).unwrap();
+    agg_store.execute_and_persist(&agg_2, Command::MarkCompleted, NopEventDecorator::default()).unwrap();
     println!("8: {:#?}", agg_store);
-
+    println!("---DONE---");
 }

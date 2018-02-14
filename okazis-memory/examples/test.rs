@@ -117,7 +117,7 @@ fn main() {
         assert!(result.is_ok());
     }
     {
-        let new_events = es.read(&0, Since::Version(Version(0))).unwrap().unwrap();
+        let new_events = es.read(&0, Since::Version(Version::new(0))).unwrap().unwrap();
         let state = new_events.iter().fold(State { value: 36 }, |s, e| s.apply(e.event));
 
         let result = state.execute(Command::Add(-1isize as usize));
@@ -125,12 +125,12 @@ fn main() {
     }
     {
         let state_store = MemoryStateStore::<_, _, fnv::FnvBuildHasher>::default();
-        let result = state_store.put_state(&0, Version(0), State { value: 100 });
+        let result = state_store.put_state(&0, Version::new(0), State { value: 100 });
         assert!(result.is_ok());
 
         let snapshot = state_store.get_state(&0);
 
-        assert_eq!(snapshot, Ok(Some(PersistedSnapshot { version: Version(0), data: State { value: 100 } })));
+        assert_eq!(snapshot, Ok(Some(PersistedSnapshot { version: Version::new(0), data: State { value: 100 } })));
         let snapshot = snapshot.unwrap().unwrap();
         let snapshot_version = snapshot.version;
 

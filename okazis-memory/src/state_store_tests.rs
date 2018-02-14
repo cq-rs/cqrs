@@ -27,7 +27,7 @@ fn can_get_state_from_store() {
 fn can_round_trip_a_value() {
     let ms = TestStateStore::default();
     let expected = PersistedSnapshot {
-        version: Version(23),
+        version: Version::new(23),
         data: TestState,
     };
     ms.put_state(&0, expected.version, expected.data.clone()).unwrap();
@@ -39,11 +39,11 @@ fn can_round_trip_a_value() {
 fn can_round_trip_multiple_values() {
     let ms = TestStateStore::default();
     let e0 = PersistedSnapshot {
-        version: Version(14),
+        version: Version::new(14),
         data: TestState,
     };
     let e1 = PersistedSnapshot {
-        version: Version(299),
+        version: Version::new(299),
         data: TestState,
     };
     ms.put_state(&0, e0.version, e0.data.clone()).unwrap();
@@ -60,11 +60,11 @@ fn can_round_trip_multiple_values() {
 fn can_have_memory_state_store_with_alternate_hasher() {
     let ms = TestStateStore::default();
     let e0 = PersistedSnapshot {
-        version: Version(14),
+        version: Version::new(14),
         data: TestState,
     };
     let e1 = PersistedSnapshot {
-        version: Version(299),
+        version: Version::new(299),
         data: TestState,
     };
     ms.put_state(&0, e0.version, e0.data.clone()).unwrap();
@@ -81,11 +81,11 @@ fn can_have_memory_state_store_with_alternate_hasher() {
 fn can_have_memory_state_store_with_alternate_key() {
     let ms = MemoryStateStore::<_, &'static str>::default();
     let e0 = PersistedSnapshot {
-        version: Version(14),
+        version: Version::new(14),
         data: TestState,
     };
     let e1 = PersistedSnapshot {
-        version: Version(299),
+        version: Version::new(299),
         data: TestState,
     };
     ms.put_state(&"0", e0.version, e0.data.clone()).unwrap();

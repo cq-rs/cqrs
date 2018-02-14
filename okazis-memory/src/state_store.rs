@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hash};
-use okazis::{StateStore, PersistedSnapshot, PersistResult, ReadStateResult, Version};
+use okazis::{StateStore, PersistedSnapshot, PersistResult, ReadStateResult, Version, Never};
 use std::sync::RwLock;
-use super::Never;
 
 #[derive(Debug)]
 pub struct MemoryStateStore<State, AggregateId, Hasher = RandomState>

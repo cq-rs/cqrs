@@ -1,10 +1,59 @@
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Version(pub usize);
+pub mod trivial;
+
+#[derive(Debug, Default, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Version(usize);
+
+impl Version {
+    pub fn new(version: usize) -> Self {
+        Version(version)
+    }
+
+    pub fn number(&self) -> usize {
+        self.0
+    }
+}
+
+impl PartialEq<usize> for Version {
+    fn eq(&self, rhs: &usize) -> bool {
+        *rhs == self.0
+    }
+}
+
+impl PartialEq<Version> for usize {
+    fn eq(&self, rhs: &Version) -> bool {
+        rhs.0 == *self
+    }
+}
+
+impl ::std::ops::Add<usize> for Version {
+    type Output = Version;
+    fn add(self, rhs: usize) -> Self::Output {
+        Version(self.0 + rhs)
+    }
+}
+
+impl ::std::ops::AddAssign<usize> for Version {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs;
+    }
+}
+
+impl ::std::convert::AsRef<usize> for Version {
+    fn as_ref(&self) -> &usize {
+        &self.0
+    }
+}
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Since {
     BeginningOfStream,
     Version(Version),
+}
+
+impl From<Version> for Since {
+    fn from(v: Version) -> Self {
+        Since::Version(v)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -15,15 +64,37 @@ pub enum Precondition {
     EmptyStream,
 }
 
+impl Default for Precondition {
+    fn default() -> Self {
+        Precondition::Always
+    }
+}
+
+impl From<Version> for Precondition {
+    fn from(v: Version) -> Self {
+        Precondition::LastVersion(v)
+    }
+}
+
+impl From<Option<Version>> for Precondition {
+    fn from(v_o: Option<Version>) -> Self {
+        if let Some(v) = v_o {
+            v.into()
+        } else {
+            Precondition::EmptyStream
+        }
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq)]
 pub enum AppendError<Err> {
     PreconditionFailed(Precondition),
     WriteError(Err),
 }
 
-impl Default for Precondition {
-    fn default() -> Self {
-        Precondition::Always
+impl<Err> From<Precondition> for AppendError<Err> {
+    fn from(p: Precondition) -> Self {
+        AppendError::PreconditionFailed(p)
     }
 }
 
@@ -89,84 +160,12 @@ pub trait Aggregate: Default {
     }
 }
 
+#[cfg(not(feature = "never_type"))]
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Never {}
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct NullEventStore<Event, AggregateId> {
-    _phantom: ::std::marker::PhantomData<(Event, AggregateId)>,
-}
-
-impl<Event, AggregateId> Default for NullEventStore<Event, AggregateId> {
-    fn default() -> Self {
-        NullEventStore {
-            _phantom: ::std::marker::PhantomData,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Hash, Clone, Copy)]
-pub struct NullEventDecorator<Event> {
-    _phantom: ::std::marker::PhantomData<Event>,
-}
-
-impl<Event> Default for NullEventDecorator<Event> {
-    fn default() -> Self {
-        NullEventDecorator { _phantom: ::std::marker::PhantomData }
-    }
-}
-
-impl<Event> EventDecorator for NullEventDecorator<Event>
-{
-    type Event = Event;
-    type DecoratedEvent = Event;
-
-    #[inline]
-    fn decorate(&self, event: Self::Event) -> Self::DecoratedEvent {
-        event
-    }
-}
-
-impl<Event, AggregateId> EventStore for NullEventStore<Event, AggregateId>
-{
-    type AggregateId = AggregateId;
-    type Event = Event;
-    type AppendResult = PersistResult<Never>;
-    type ReadResult = ReadStreamResult<Self::Event, Never>;
-
-    #[inline]
-    fn append_events(&self, _aggregate_id: &Self::AggregateId, _events: &[Self::Event], _condition: Precondition) -> Self::AppendResult {
-        Ok(())
-    }
-
-    #[inline]
-    fn read(&self, _aggregate_id: &Self::AggregateId, _version: Since) -> Self::ReadResult {
-        Ok(Some(Vec::new()))
-    }
-}
-
-#[derive(Debug, Default, PartialEq, Copy, Clone)]
-pub struct NullStateStore<State, AggregateId> {
-    _phantom: ::std::marker::PhantomData<(State, AggregateId)>,
-}
-
-impl<State, AggregateId> StateStore for NullStateStore<State, AggregateId>
-{
-    type AggregateId = AggregateId;
-    type State = State;
-    type StateResult = ReadStateResult<Self::State, Never>;
-    type PersistResult = PersistResult<Never>;
-
-    #[inline]
-    fn get_state(&self, _agg_id: &Self::AggregateId) -> Self::StateResult {
-        Ok(None)
-    }
-
-    #[inline]
-    fn put_state(&self, _agg_id: &Self::AggregateId, _version: Version, _state: Self::State) -> Self::PersistResult {
-        Ok(())
-    }
-}
+#[cfg(feature = "never_type")]
+type Never = !;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum SnapshotDecision {
@@ -294,10 +293,10 @@ AggregateStore<EventStore, StateStore>
 
             if state.should_snapshot() == SnapshotDecision::Persist {
                 let new_snapshot_version =
-                    if let Some(Version(v)) = version {
-                        Version(v + event_count)
+                    if let Some(v) = version {
+                        v + event_count
                     } else {
-                        Version(event_count - 1)
+                        Version::new(event_count - 1)
                     };
 
                 self.state_store.put_state(&agg_id, new_snapshot_version, state)
@@ -360,9 +359,9 @@ mod tests {
 
     #[test]
     fn maybe_this_works_() {
-        let es: NullEventStore<MyEvent, usize> =
+        let es: trivial::NullEventStore<MyEvent, usize> =
             NullEventStore { _phantom: ::std::marker::PhantomData };
-        let ss: NullStateStore<CoolAggregate, usize> =
+        let ss: trivial::NullStateStore<CoolAggregate, usize> =
             NullStateStore { _phantom: ::std::marker::PhantomData };
 
         let agg = AggregateStore::new(es, ss);
@@ -371,7 +370,7 @@ mod tests {
             agg.execute_and_persist(
                 &0,
                 MyCommand::Much,
-                NullEventDecorator::default());
+                trivial::NopEventDecorator::default());
         assert_eq!(result, Ok(1usize));
     }
 }
