@@ -1,9 +1,9 @@
-extern crate okazis;
-extern crate okazis_memory;
+extern crate cqrs;
+extern crate cqrs_memory;
 extern crate fnv;
 
-use okazis::{Since, EventStore, StateStore, PersistedSnapshot, Precondition, Version};
-use okazis_memory::{MemoryEventStore, MemoryStateStore};
+use cqrs::{Since, EventStore, StateStore, PersistedSnapshot, Precondition, Version};
+use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
 enum Event {

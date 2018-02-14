@@ -1,5 +1,4 @@
 pub use super::*;
-use okazis::{Version, Precondition, Since};
 
 #[derive(PartialEq, Clone, Copy, Hash, Debug)]
 pub struct TestEvent {

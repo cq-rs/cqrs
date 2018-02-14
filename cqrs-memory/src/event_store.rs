@@ -1,4 +1,4 @@
-use okazis::{Precondition, AppendError, EventStore, Since, PersistResult, ReadStreamResult, Never};
+use cqrs::{Precondition, AppendError, EventStore, Since, PersistResult, ReadStreamResult, Never};
 use event_stream::MemoryEventStream;
 use std::sync::RwLock;
 use std::hash::{Hash, BuildHasher};

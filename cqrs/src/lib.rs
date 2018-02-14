@@ -359,10 +359,8 @@ mod tests {
 
     #[test]
     fn maybe_this_works_() {
-        let es: trivial::NullEventStore<MyEvent, usize> =
-            NullEventStore { _phantom: ::std::marker::PhantomData };
-        let ss: trivial::NullStateStore<CoolAggregate, usize> =
-            NullStateStore { _phantom: ::std::marker::PhantomData };
+        let es: trivial::NullEventStore<MyEvent, usize> = Default::default();
+        let ss: trivial::NullStateStore<CoolAggregate, usize> = Default::default();
 
         let agg = AggregateStore::new(es, ss);
 

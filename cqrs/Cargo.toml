@@ -1,10 +1,6 @@
 [package]
-name = "okazis-memory"
+name = "cqrs"
 version = "0.1.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
 
 [dependencies]
-okazis = { path = "../okazis" }
-
-[dev-dependencies]
-fnv = "*"

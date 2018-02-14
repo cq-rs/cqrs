@@ -1,4 +1,4 @@
-use okazis::{Version, Since, PersistedEvent, AppendError, Precondition, PersistResult, Never};
+use cqrs::{Version, Since, PersistedEvent, AppendError, Precondition, PersistResult, Never};
 use std::sync::{RwLock, Arc};
 
 #[derive(Debug)]

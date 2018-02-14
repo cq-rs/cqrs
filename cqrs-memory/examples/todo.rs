@@ -1,10 +1,10 @@
-extern crate okazis;
-extern crate okazis_memory;
+extern crate cqrs;
+extern crate cqrs_memory;
 extern crate fnv;
 
-use okazis::{CommandResult, Aggregate, SnapshotDecision};
-use okazis::trivial::NopEventDecorator;
-use okazis_memory::{MemoryEventStore, MemoryStateStore};
+use cqrs::{CommandResult, Aggregate, AggregateStore, SnapshotDecision};
+use cqrs::trivial::NopEventDecorator;
+use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
 use std::time::{Duration, Instant};
 
@@ -150,7 +150,7 @@ fn main() {
     //let es = okazis::NullEventStore::<Event, usize>::default();
     let ss = MemoryStateStore::<TodoState, usize, fnv::FnvBuildHasher>::default();
     //let ss = okazis::NullStateStore::<TodoState, usize>::default();
-    let agg_store = okazis::AggregateStore::new(es, ss);
+    let agg_store = AggregateStore::new(es, ss);
 
     let agg_1 = 0;
     let agg_2 = 34;

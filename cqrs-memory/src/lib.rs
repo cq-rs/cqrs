@@ -1,6 +1,6 @@
 #[cfg(test)]
 extern crate fnv;
-extern crate okazis;
+extern crate cqrs;
 
 pub mod event_store;
 pub mod state_store;

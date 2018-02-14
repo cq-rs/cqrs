@@ -1,5 +1,4 @@
 pub use super::*;
-use okazis::{EventStore, Since};
 use fnv::FnvBuildHasher;
 
 #[derive(Clone, Debug, Hash, PartialEq, Copy)]

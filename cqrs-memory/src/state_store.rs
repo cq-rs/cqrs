@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hash};
-use okazis::{StateStore, PersistedSnapshot, PersistResult, ReadStateResult, Version, Never};
+use cqrs::{StateStore, PersistedSnapshot, PersistResult, ReadStateResult, Version, Never};
 use std::sync::RwLock;
 
 #[derive(Debug)]
