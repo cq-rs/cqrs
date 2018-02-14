@@ -2,7 +2,7 @@ extern crate okazis;
 extern crate okazis_memory;
 extern crate fnv;
 
-use okazis::{Since, EventStore, StateStore, PersistedSnapshot, Precondition};
+use okazis::{Since, EventStore, StateStore, PersistedSnapshot, Precondition, Version};
 use okazis_memory::{MemoryEventStore, MemoryStateStore};
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
@@ -117,25 +117,25 @@ fn main() {
         assert!(result.is_ok());
     }
     {
-        let new_events = es.read(&0, Since::Offset(0)).unwrap().unwrap();
+        let new_events = es.read(&0, Since::Version(Version(0))).unwrap().unwrap();
         let state = new_events.iter().fold(State { value: 36 }, |s, e| s.apply(e.event));
 
         let result = state.execute(Command::Add(-1isize as usize));
         assert!(result.is_ok());
     }
     {
-        let state_store = MemoryStateStore::<_, _, _, fnv::FnvBuildHasher>::default();
-        let result = state_store.put_state(&0, 0, State { value: 100 });
+        let state_store = MemoryStateStore::<_, _, fnv::FnvBuildHasher>::default();
+        let result = state_store.put_state(&0, Version(0), State { value: 100 });
         assert!(result.is_ok());
 
         let snapshot = state_store.get_state(&0);
 
-        assert_eq!(snapshot, Ok(Some(PersistedSnapshot { version: 0, data: State { value: 100 } })));
+        assert_eq!(snapshot, Ok(Some(PersistedSnapshot { version: Version(0), data: State { value: 100 } })));
         let snapshot = snapshot.unwrap().unwrap();
         let snapshot_version = snapshot.version;
 
-        let new_events = es.read(&0, Since::Offset(snapshot.version)).unwrap().unwrap();
-        let new_state = new_events.iter().fold(snapshot, |s, e| PersistedSnapshot { version: e.offset, data: s.data.apply(e.event) });
+        let new_events = es.read(&0, Since::Version(snapshot.version)).unwrap().unwrap();
+        let new_state = new_events.iter().fold(snapshot, |s, e| PersistedSnapshot { version: e.version, data: s.data.apply(e.event) });
 
         assert_eq!(new_state.data, State { value: 256 });
 
@@ -149,7 +149,7 @@ fn main() {
             .map(|e| e)
             .collect();
 
-        let result = es.append_events(&0, &decorated_events, Precondition::LastOffset(snapshot_version));
+        let result = es.append_events(&0, &decorated_events, Precondition::LastVersion(snapshot_version));
         assert!(result.is_err());
 
         let result = state_store.put_state(&0, new_state.version, new_state.data);
@@ -159,6 +159,6 @@ fn main() {
 
 // Things to think about:
 // - When writing, have preconditions to appending events
-//   - Expected Last Offset: Offset
+//   - Expected Last Version: Version
 //   - EmptyStream / NoStream (for some backends these may be interpreted the same)
 //   - Always

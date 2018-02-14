@@ -7,15 +7,15 @@ struct TestEvent;
 
 #[test]
 fn implements_default_trait() {
-    let _: MemoryEventStore<usize, TestEvent> = Default::default();
+    let _: MemoryEventStore<TestEvent, usize> = Default::default();
 }
 
 #[test]
 fn can_use_custom_hasher() {
-    let _: MemoryEventStore<usize, TestEvent, FnvBuildHasher> = Default::default();
+    let _: MemoryEventStore<TestEvent, usize, FnvBuildHasher> = Default::default();
 }
 
-type TestMemoryEventStore = MemoryEventStore<usize, TestEvent, FnvBuildHasher>;
+type TestMemoryEventStore = MemoryEventStore<TestEvent, usize, FnvBuildHasher>;
 
 #[test]
 fn can_get_an_event_stream_multiple_times_are_equal() {

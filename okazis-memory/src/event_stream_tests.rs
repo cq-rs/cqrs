@@ -1,5 +1,5 @@
 pub use super::*;
-use okazis::{Precondition, Since};
+use okazis::{Version, Precondition, Since};
 
 #[derive(PartialEq, Clone, Copy, Hash, Debug)]
 pub struct TestEvent {
@@ -31,8 +31,8 @@ fn no_events_are_in_empty_event_stream() {
 fn can_add_events_and_read_them_back_out() {
     let es = TestMemoryEventStream::default();
     let all_events = vec![
-        PersistedEvent { offset: 0, event: TestEvent { value: 143 } },
-        PersistedEvent { offset: 1, event: TestEvent { value: 554 } },
+        PersistedEvent { version: Version(0), event: TestEvent { value: 143 } },
+        PersistedEvent { version: Version(1), event: TestEvent { value: 554 } },
     ];
 
     let decorated_events: Vec<_> = all_events.iter()
@@ -48,8 +48,8 @@ fn can_add_events_and_read_them_back_out() {
 fn can_add_events_and_read_from_middle() {
     let es = TestMemoryEventStream::default();
     let all_events = vec![
-        PersistedEvent { offset: 0, event: TestEvent { value: 143 } },
-        PersistedEvent { offset: 1, event: TestEvent { value: 554 } },
+        PersistedEvent { version: Version(0), event: TestEvent { value: 143 } },
+        PersistedEvent { version: Version(1), event: TestEvent { value: 554 } },
     ];
     let expected_events = vec![
         all_events[1].clone(),
@@ -60,16 +60,16 @@ fn can_add_events_and_read_from_middle() {
         .collect();
 
     es.append_events(&decorated_events, Precondition::Always).unwrap();
-    let actual_events = es.read(Since::Offset(0));
+    let actual_events = es.read(Since::Version(Version(0)));
     assert_eq!(expected_events, actual_events);
 }
 
 #[test]
-fn reading_with_offset_one_past_end_gives_empty_set() {
+fn reading_with_version_one_past_end_gives_empty_set() {
     let es = TestMemoryEventStream::default();
     let all_events = vec![
-        PersistedEvent { offset: 0, event: TestEvent { value: 143 } },
-        PersistedEvent { offset: 1, event: TestEvent { value: 554 } },
+        PersistedEvent { version: Version(0), event: TestEvent { value: 143 } },
+        PersistedEvent { version: Version(1), event: TestEvent { value: 554 } },
     ];
 
     let decorated_events: Vec<_> = all_events.iter()
@@ -77,17 +77,17 @@ fn reading_with_offset_one_past_end_gives_empty_set() {
         .collect();
 
     es.append_events(&decorated_events, Precondition::Always).unwrap();
-    let expected_events = Vec::<PersistedEvent<usize, TestEvent>>::default();
-    let actual_events = es.read(Since::Offset(1));
+    let expected_events = Vec::<PersistedEvent<TestEvent>>::default();
+    let actual_events = es.read(Since::Version(Version(1)));
     assert_eq!(expected_events, actual_events);
 }
 
 #[test]
-fn reading_with_offset_more_than_one_past_end_gives_empty_stream() {
+fn reading_with_version_more_than_one_past_end_gives_empty_stream() {
     let es = TestMemoryEventStream::default();
     let all_events = vec![
-        PersistedEvent { offset: 0, event: TestEvent { value: 143 } },
-        PersistedEvent { offset: 1, event: TestEvent { value: 554 } },
+        PersistedEvent { version: Version(0), event: TestEvent { value: 143 } },
+        PersistedEvent { version: Version(1), event: TestEvent { value: 554 } },
     ];
 
     let decorated_events: Vec<_> = all_events.iter()
@@ -95,7 +95,7 @@ fn reading_with_offset_more_than_one_past_end_gives_empty_stream() {
         .collect();
 
     es.append_events(&decorated_events, Precondition::Always).unwrap();
-    let expected_events = Vec::<PersistedEvent<usize, TestEvent>>::default();
-    let actual_events = es.read(Since::Offset(2));
+    let expected_events = Vec::<PersistedEvent<TestEvent>>::default();
+    let actual_events = es.read(Since::Version(Version(2)));
     assert_eq!(expected_events, actual_events);
 }

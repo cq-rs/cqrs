@@ -4,16 +4,16 @@ use fnv::FnvBuildHasher;
 #[derive(Default, Clone, Copy, PartialEq, Hash, Debug)]
 struct TestState;
 
-type TestStateStore = MemoryStateStore<usize, usize, TestState, FnvBuildHasher>;
+type TestStateStore = MemoryStateStore<TestState, usize, FnvBuildHasher>;
 
 #[test]
 fn can_create_default_instance() {
-    let _ = MemoryStateStore::<usize, usize, TestState>::default();
+    let _ = MemoryStateStore::<TestState, usize>::default();
 }
 
 #[test]
 fn can_create_default_instance_with_alternate_hasher() {
-    let _ = MemoryStateStore::<usize, usize, TestState, FnvBuildHasher>::default();
+    let _ = MemoryStateStore::<TestState, usize, FnvBuildHasher>::default();
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn can_get_state_from_store() {
 fn can_round_trip_a_value() {
     let ms = TestStateStore::default();
     let expected = PersistedSnapshot {
-        version: 23,
+        version: Version(23),
         data: TestState,
     };
     ms.put_state(&0, expected.version, expected.data.clone()).unwrap();
@@ -39,11 +39,11 @@ fn can_round_trip_a_value() {
 fn can_round_trip_multiple_values() {
     let ms = TestStateStore::default();
     let e0 = PersistedSnapshot {
-        version: 14,
+        version: Version(14),
         data: TestState,
     };
     let e1 = PersistedSnapshot {
-        version: 299,
+        version: Version(299),
         data: TestState,
     };
     ms.put_state(&0, e0.version, e0.data.clone()).unwrap();
@@ -60,11 +60,11 @@ fn can_round_trip_multiple_values() {
 fn can_have_memory_state_store_with_alternate_hasher() {
     let ms = TestStateStore::default();
     let e0 = PersistedSnapshot {
-        version: 14,
+        version: Version(14),
         data: TestState,
     };
     let e1 = PersistedSnapshot {
-        version: 299,
+        version: Version(299),
         data: TestState,
     };
     ms.put_state(&0, e0.version, e0.data.clone()).unwrap();
@@ -79,13 +79,13 @@ fn can_have_memory_state_store_with_alternate_hasher() {
 
 #[test]
 fn can_have_memory_state_store_with_alternate_key() {
-    let ms = MemoryStateStore::<&'static str, usize, _>::default();
+    let ms = MemoryStateStore::<_, &'static str>::default();
     let e0 = PersistedSnapshot {
-        version: 14,
+        version: Version(14),
         data: TestState,
     };
     let e1 = PersistedSnapshot {
-        version: 299,
+        version: Version(299),
         data: TestState,
     };
     ms.put_state(&"0", e0.version, e0.data.clone()).unwrap();

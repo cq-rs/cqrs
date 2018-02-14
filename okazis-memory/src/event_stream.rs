@@ -1,4 +1,4 @@
-use okazis::{Since, PersistedEvent, AppendError, Precondition, PersistResult};
+use okazis::{Version, Since, PersistedEvent, AppendError, Precondition, PersistResult};
 use std::sync::{RwLock, Arc};
 use super::Never;
 
@@ -28,12 +28,12 @@ impl<Event> MemoryEventStream<Event>
     where
         Event: Clone,
 {
-    pub(crate) fn append_events(&self, events: &[Event], condition: Precondition<usize>) -> PersistResult<AppendError<usize, Never>> {
+    pub(crate) fn append_events(&self, events: &[Event], condition: Precondition) -> PersistResult<AppendError<Never>> {
         let mut stream = self.events.write().unwrap();
 
         match condition {
             Precondition::Always => {}
-            Precondition::LastOffset(i) if !stream.is_empty() && stream.len() - 1 == i => {}
+            Precondition::LastVersion(i) if !stream.is_empty() && stream.len() - 1 == i.0 => {}
             Precondition::EmptyStream if stream.is_empty() => {}
             _ => return Err(AppendError::PreconditionFailed(condition))
         }
@@ -42,21 +42,21 @@ impl<Event> MemoryEventStream<Event>
         Ok(())
     }
 
-    pub(crate) fn read(&self, offset: Since<usize>) -> Vec<PersistedEvent<usize, Event>> {
-        fn read_out_events<Event: Clone>(initial_offset: usize, evts: &[Event]) -> Vec<PersistedEvent<usize, Event>> {
-            let mut i = initial_offset;
-            let mut v = Vec::<PersistedEvent<usize, Event>>::new();
+    pub(crate) fn read(&self, version: Since) -> Vec<PersistedEvent<Event>> {
+        fn read_out_events<Event: Clone>(initial_version: usize, evts: &[Event]) -> Vec<PersistedEvent<Event>> {
+            let mut i = initial_version;
+            let mut v = Vec::<PersistedEvent<Event>>::new();
             for e in evts {
-                v.push(PersistedEvent { offset: i, event: e.clone() });
+                v.push(PersistedEvent { version: Version(i), event: e.clone() });
                 i += 1;
             }
             v
         }
         let events = self.events.read().unwrap();
-        match offset {
+        match version {
             Since::BeginningOfStream => read_out_events(0, &events[..]),
-            Since::Offset(o) if o < events.len() => read_out_events(o + 1, &events[(o + 1)..]),
-            Since::Offset(_) => Vec::default(),
+            Since::Version(o) if o < Version(events.len()) => read_out_events(o.0 + 1, &events[(o.0 + 1)..]),
+            Since::Version(_) => Vec::default(),
         }
     }
 }

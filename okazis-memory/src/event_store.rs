@@ -7,7 +7,7 @@ use std::collections::hash_map::RandomState;
 use super::Never;
 
 #[derive(Debug)]
-pub struct MemoryEventStore<AggregateId, Event, Hasher = RandomState>
+pub struct MemoryEventStore<Event, AggregateId, Hasher = RandomState>
     where
         AggregateId: Hash + Eq,
         Hasher: BuildHasher,
@@ -15,7 +15,7 @@ pub struct MemoryEventStore<AggregateId, Event, Hasher = RandomState>
     data: RwLock<HashMap<AggregateId, MemoryEventStream<Event>, Hasher>>,
 }
 
-impl<AggregateId, Event, Hasher> MemoryEventStore<AggregateId, Event, Hasher>
+impl<Event, AggregateId, Hasher> MemoryEventStore<Event, AggregateId, Hasher>
     where
         AggregateId: Hash + Eq + Clone,
         Hasher: BuildHasher,
@@ -40,7 +40,7 @@ impl<AggregateId, Event, Hasher> MemoryEventStore<AggregateId, Event, Hasher>
     }
 }
 
-impl<AggregateId, Event, Hasher> Default for MemoryEventStore<AggregateId, Event, Hasher>
+impl<Event, AggregateId, Hasher> Default for MemoryEventStore<Event, AggregateId, Hasher>
     where
         AggregateId: Hash + Eq,
         Hasher: BuildHasher + Default,
@@ -52,7 +52,7 @@ impl<AggregateId, Event, Hasher> Default for MemoryEventStore<AggregateId, Event
     }
 }
 
-impl<AggregateId, Event, Hasher> EventStore for MemoryEventStore<AggregateId, Event, Hasher>
+impl<Event, AggregateId, Hasher> EventStore for MemoryEventStore<Event, AggregateId, Hasher>
     where
         AggregateId: Hash + Eq + Clone,
         Event: Clone,
@@ -60,11 +60,10 @@ impl<AggregateId, Event, Hasher> EventStore for MemoryEventStore<AggregateId, Ev
 {
     type AggregateId = AggregateId;
     type Event = Event;
-    type Offset = usize;
-    type AppendResult = PersistResult<AppendError<Self::Offset, Never>>;
-    type ReadResult = ReadStreamResult<Self::Offset, Self::Event, Never>;
+    type AppendResult = PersistResult<AppendError<Never>>;
+    type ReadResult = ReadStreamResult<Self::Event, Never>;
 
-    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], condition: Precondition<Self::Offset>) -> Self::AppendResult {
+    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], condition: Precondition) -> Self::AppendResult {
         if let Some(stream) = self.try_get_stream(&agg_id) {
             stream.append_events(events, condition)
         } else {
@@ -77,7 +76,7 @@ impl<AggregateId, Event, Hasher> EventStore for MemoryEventStore<AggregateId, Ev
         }
     }
 
-    fn read(&self, agg_id: &Self::AggregateId, since: Since<Self::Offset>) -> Self::ReadResult {
+    fn read(&self, agg_id: &Self::AggregateId, since: Since) -> Self::ReadResult {
         match self.try_get_stream(&agg_id) {
             Some(es) => Ok(Some(es.read(since))),
             None => Ok(None),

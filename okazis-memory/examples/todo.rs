@@ -51,6 +51,7 @@ impl Default for TodoStatus {
 
 #[derive(Debug, Clone, PartialEq)]
 struct TodoState {
+    event_count: usize,
     description: String,
     reminder: Option<Instant>,
     status: TodoStatus,
@@ -60,6 +61,7 @@ impl Default for TodoState {
     fn default() -> Self {
         println!("default");
         TodoState {
+            event_count: 0,
             description: String::default(),
             reminder: None,
             status: TodoStatus::NotCompleted,
@@ -74,6 +76,7 @@ impl Aggregate for TodoState {
 
     fn apply(&mut self, evt: Self::Event) {
         println!("apply {:?}", evt);
+        self.event_count += 1;
         match evt {
             Event::TextUpdated(txt) => self.description = txt,
             Event::ReminderUpdated(r) => self.reminder = r,
@@ -133,15 +136,19 @@ impl Aggregate for TodoState {
     }
 
     fn should_snapshot(&self) -> SnapshotDecision {
-        SnapshotDecision::Skip
+        if self.event_count % 4 == 0 {
+            SnapshotDecision::Persist
+        } else {
+            SnapshotDecision::Skip
+        }
     }
 }
 
 fn main() {
-    let es = MemoryEventStore::<usize, Event, fnv::FnvBuildHasher>::default();
-    //let es = okazis::NullEventStore::<Event, usize, usize>::default();
-    let ss = MemoryStateStore::<usize, usize, TodoState, fnv::FnvBuildHasher>::default();
-    //let ss = okazis::NullStateStore::<TodoState, usize, usize>::default();
+    let es = MemoryEventStore::<Event, usize, fnv::FnvBuildHasher>::default();
+    //let es = okazis::NullEventStore::<Event, usize>::default();
+    let ss = MemoryStateStore::<TodoState, usize, fnv::FnvBuildHasher>::default();
+    //let ss = okazis::NullStateStore::<TodoState, usize>::default();
     let agg_store = okazis::AggregateStore::new(es, ss);
 
     let agg_1 = 0;
@@ -162,4 +169,14 @@ fn main() {
     println!("3: {:#?}", agg_store);
     agg_store.execute_and_persist(&agg_2, Command::ResetCompleted, NullEventDecorator::default()).unwrap();
     println!("4: {:#?}", agg_store);
+    let err = agg_store.execute_and_persist(&agg_2, Command::SetReminder(SetReminderData { current_time: now, reminder_time: past_time }), NullEventDecorator::default()).unwrap_err();
+    println!("err: {:?}", err);
+    println!("5: {:#?}", agg_store);
+    agg_store.execute_and_persist(&agg_2, Command::UpdateText("Complete CQRS!".to_string()), NullEventDecorator::default()).unwrap();
+    println!("6: {:#?}", agg_store);
+    agg_store.execute_and_persist(&agg_2, Command::MarkCompleted, NullEventDecorator::default()).unwrap();
+    println!("7: {:#?}", agg_store);
+    agg_store.execute_and_persist(&agg_2, Command::MarkCompleted, NullEventDecorator::default()).unwrap();
+    println!("8: {:#?}", agg_store);
+
 }

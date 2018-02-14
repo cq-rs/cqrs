@@ -1,20 +1,20 @@
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hash};
-use okazis::{StateStore, PersistedSnapshot, PersistResult, ReadStateResult};
+use okazis::{StateStore, PersistedSnapshot, PersistResult, ReadStateResult, Version};
 use std::sync::RwLock;
 use super::Never;
 
 #[derive(Debug)]
-pub struct MemoryStateStore<AggregateId, Version, State, Hasher = RandomState>
+pub struct MemoryStateStore<State, AggregateId, Hasher = RandomState>
     where
         AggregateId: Eq + Hash,
         Hasher: BuildHasher,
 {
-    data: RwLock<HashMap<AggregateId, PersistedSnapshot<Version, State>, Hasher>>
+    data: RwLock<HashMap<AggregateId, PersistedSnapshot<State>, Hasher>>
 }
 
-impl<AggregateId, Version, State, Hasher> Default for MemoryStateStore<AggregateId, Version, State, Hasher>
+impl<State, AggregateId, Hasher> Default for MemoryStateStore<State, AggregateId, Hasher>
     where
         AggregateId: Eq + Hash,
         Hasher: BuildHasher + Default,
@@ -26,17 +26,15 @@ impl<AggregateId, Version, State, Hasher> Default for MemoryStateStore<Aggregate
     }
 }
 
-impl<AggregateId, Version, State, Hasher> StateStore for MemoryStateStore<AggregateId, Version, State, Hasher>
+impl<State, AggregateId, Hasher> StateStore for MemoryStateStore<State, AggregateId, Hasher>
     where
         AggregateId: Eq + Hash + Clone,
-        Version: Clone,
         State: Clone,
         Hasher: BuildHasher,
 {
     type AggregateId = AggregateId;
     type State = State;
-    type Version = Version;
-    type StateResult = ReadStateResult<Version, State, Never>;
+    type StateResult = ReadStateResult<State, Never>;
     type PersistResult = PersistResult<Never>;
 
     fn get_state(&self, agg_id: &Self::AggregateId) -> Self::StateResult {
@@ -47,7 +45,7 @@ impl<AggregateId, Version, State, Hasher> StateStore for MemoryStateStore<Aggreg
         }
     }
 
-    fn put_state(&self, agg_id: &Self::AggregateId, version: Self::Version, state: Self::State) -> Self::PersistResult {
+    fn put_state(&self, agg_id: &Self::AggregateId, version: Version, state: Self::State) -> Self::PersistResult {
         let new_val = PersistedSnapshot { version, data: state };
         let mut lock = self.data.write().unwrap();
         lock.insert(agg_id.clone(), new_val);
