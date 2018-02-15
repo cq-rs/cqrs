@@ -1,6 +1,6 @@
-use super::{Version, Since, Precondition};
-use super::{EventStore, StateStore, EventDecorator};
-use super::{PersistResult, ReadStreamResult, ReadStateResult, Never};
+use super::{Version, Since, Precondition, Never};
+use super::{EventSource, EventAppend, SnapshotSource, SnapshotPersist, EventDecorator};
+use super::{PersistedEvent, PersistedSnapshot};
 use std::marker::PhantomData;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -16,51 +16,60 @@ impl<Event, AggregateId> Default for NullEventStore<Event, AggregateId> {
     }
 }
 
-impl<Event, AggregateId> EventStore for NullEventStore<Event, AggregateId>
-{
+impl<Event, AggregateId> EventSource for NullEventStore<Event, AggregateId> {
     type AggregateId = AggregateId;
     type Event = Event;
-    type AppendResult = PersistResult<Never>;
-    type ReadResult = ReadStreamResult<Self::Event, Never>;
+    type Events = Vec<PersistedEvent<Self::Event>>;
+    type Error = Never;
 
     #[inline]
-    fn append_events(&self, _aggregate_id: &Self::AggregateId, _events: &[Self::Event], _condition: Precondition) -> Self::AppendResult {
-        Ok(())
+    fn read_events(&self, _aggregate_id: &Self::AggregateId, _version: Since) -> Result<Option<Self::Events>, Self::Error> {
+        Ok(None)
     }
+}
+
+impl<Event, AggregateId> EventAppend for NullEventStore<Event, AggregateId> {
+    type AggregateId = AggregateId;
+    type Event = Event;
+    type Error = Never;
 
     #[inline]
-    fn read(&self, _aggregate_id: &Self::AggregateId, _version: Since) -> Self::ReadResult {
-        Ok(Some(Vec::new()))
+    fn append_events(&self, _aggregate_id: &Self::AggregateId, _events: &[Self::Event], _condition: Precondition) -> Result<(), Self::Error> {
+        Ok(())
     }
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub struct NullStateStore<State, AggregateId> {
-    _phantom: PhantomData<(State, AggregateId)>,
+pub struct NullSnapshotStore<Snapshot, AggregateId> {
+    _phantom: PhantomData<(Snapshot, AggregateId)>,
 }
 
-impl<State, AggregateId> Default for NullStateStore<State, AggregateId> {
+impl<Snapshot, AggregateId> Default for NullSnapshotStore<Snapshot, AggregateId> {
     fn default() -> Self {
-        NullStateStore {
+        NullSnapshotStore {
             _phantom: PhantomData,
         }
     }
 }
 
-impl<State, AggregateId> StateStore for NullStateStore<State, AggregateId>
-{
+impl<Snapshot, AggregateId> SnapshotSource for NullSnapshotStore<Snapshot, AggregateId> {
     type AggregateId = AggregateId;
-    type State = State;
-    type StateResult = ReadStateResult<Self::State, Never>;
-    type PersistResult = PersistResult<Never>;
+    type Snapshot = Snapshot;
+    type Error = Never;
 
     #[inline]
-    fn get_state(&self, _agg_id: &Self::AggregateId) -> Self::StateResult {
+    fn get_snapshot(&self, _agg_id: &Self::AggregateId) -> Result<Option<PersistedSnapshot<Self::Snapshot>>, Self::Error> {
         Ok(None)
     }
+}
+
+impl<Snapshot, AggregateId> SnapshotPersist for NullSnapshotStore<Snapshot, AggregateId> {
+    type AggregateId = AggregateId;
+    type Snapshot = Snapshot;
+    type Error = Never;
 
     #[inline]
-    fn put_state(&self, _agg_id: &Self::AggregateId, _version: Version, _state: Self::State) -> Self::PersistResult {
+    fn persist_snapshot(&self, _agg_id: &Self::AggregateId, _version: Version, _snapshot: Self::Snapshot) -> Result<(), Self::Error> {
         Ok(())
     }
 }
@@ -89,3 +98,6 @@ impl<Event> EventDecorator for NopEventDecorator<Event>
     }
 }
 
+#[cfg(test)]
+#[path = "trivial_tests.rs"]
+mod tests;
