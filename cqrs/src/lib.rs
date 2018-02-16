@@ -1,11 +1,20 @@
+#![cfg_attr(all(nightly, test), feature(plugin))]
+#![cfg_attr(all(nightly, test), plugin(clippy))]
+
+#[cfg(test)]
+extern crate smallvec;
+
 use std::ops::{Add, AddAssign};
 use std::sync::Arc;
 use std::rc::Rc;
-use std::error;
+use std::borrow::Borrow;
+use std::fmt;
+
+use std::error::Error as StdError;
 
 pub mod trivial;
 pub mod domain;
-pub mod store;
+pub mod error;
 
 #[derive(Debug, Default, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Version(usize);
@@ -20,13 +29,22 @@ impl Version {
     }
 }
 
+impl fmt::Display for Version {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
 impl PartialEq<usize> for Version {
+    #[inline]
     fn eq(&self, rhs: &usize) -> bool {
         *rhs == self.0
     }
 }
 
 impl PartialEq<Version> for usize {
+    #[inline]
     fn eq(&self, rhs: &Version) -> bool {
         rhs.0 == *self
     }
@@ -34,40 +52,23 @@ impl PartialEq<Version> for usize {
 
 impl Add<usize> for Version {
     type Output = Version;
+    #[inline]
     fn add(self, rhs: usize) -> Self::Output {
         Version(self.0 + rhs)
     }
 }
 
 impl AddAssign<usize> for Version {
+    #[inline]
     fn add_assign(&mut self, rhs: usize) {
         self.0 += rhs;
     }
 }
 
-impl AsRef<usize> for Version {
-    fn as_ref(&self) -> &usize {
+impl ::std::borrow::Borrow<usize> for Version {
+    #[inline]
+    fn borrow(&self) -> &usize {
         &self.0
-    }
-}
-
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub enum AggregateVersion {
-    Initial,
-    Version(Version),
-}
-
-impl Default for AggregateVersion {
-    #[inline]
-    fn default() -> Self {
-        AggregateVersion::Initial
-    }
-}
-
-impl From<Version> for AggregateVersion {
-    #[inline]
-    fn from(v: Version) -> Self {
-        AggregateVersion::Version(v)
     }
 }
 
@@ -75,15 +76,6 @@ impl From<Version> for AggregateVersion {
 pub enum Since {
     BeginningOfStream,
     Version(Version),
-}
-
-impl From<AggregateVersion> for Since {
-    fn from(v: AggregateVersion) -> Self {
-        match v {
-            AggregateVersion::Initial => Since::BeginningOfStream,
-            AggregateVersion::Version(v) => Since::Version(v),
-        }
-    }
 }
 
 impl From<Version> for Since {
@@ -115,53 +107,24 @@ impl From<Version> for Precondition {
     }
 }
 
-impl From<AggregateVersion> for Precondition {
-    fn from(av: AggregateVersion) -> Self {
-        if let AggregateVersion::Version(v) = av {
-            Precondition::LastVersion(v)
-        } else {
-            Precondition::EmptyStream
-        }
-    }
-}
-
 #[derive(Debug, Clone, Hash, PartialEq)]
-pub enum LoadResult<T, E> {
-    Found(T),
-    NotFound,
-    Error(E),
-}
-
-#[derive(Debug, Clone, Hash, PartialEq)]
-pub enum AppendError<Err> {
-    PreconditionFailed(Precondition),
-    WriteError(Err),
-}
-
-impl<Err> From<Precondition> for AppendError<Err> {
-    fn from(p: Precondition) -> Self {
-        AppendError::PreconditionFailed(p)
-    }
-}
-
-#[derive(Debug, Clone, Hash, PartialEq)]
-pub struct PersistedEvent<Event>
+pub struct VersionedEvent<Event>
 {
     pub version: Version,
     pub event: Event,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq)]
-pub struct PersistedSnapshot<State> {
+pub struct VersionedSnapshot<Snapshot> {
     pub version: Version,
-    pub data: State,
+    pub snapshot: Snapshot,
 }
 
 pub trait EventSource {
     type AggregateId;
     type Event;
-    type Events: IntoIterator<Item=PersistedEvent<Self::Event>>;
-    type Error: error::Error;
+    type Events;
+    type Error: StdError;
 
     fn read_events(&self, agg_id: &Self::AggregateId, since: Since) -> Result<Option<Self::Events>, Self::Error>;
 }
@@ -205,7 +168,7 @@ impl<T: EventSource> EventSource for Arc<T> {
 pub trait EventAppend {
     type AggregateId;
     type Event;
-    type Error: error::Error;
+    type Error: StdError;
 
     fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], condition: Precondition) -> Result<(), Self::Error>;
 }
@@ -246,9 +209,9 @@ impl<T: EventAppend> EventAppend for Arc<T> {
 pub trait SnapshotSource {
     type AggregateId;
     type Snapshot;
-    type Error: error::Error;
+    type Error: StdError;
 
-    fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<PersistedSnapshot<Self::Snapshot>>, Self::Error>;
+    fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<VersionedSnapshot<Self::Snapshot>>, Self::Error>;
 }
 
 impl<'a, T: SnapshotSource + 'a> SnapshotSource for &'a T {
@@ -257,7 +220,7 @@ impl<'a, T: SnapshotSource + 'a> SnapshotSource for &'a T {
     type Error = T::Error;
 
     #[inline]
-    fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<PersistedSnapshot<Self::Snapshot>>, Self::Error> {
+    fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<VersionedSnapshot<Self::Snapshot>>, Self::Error> {
         (**self).get_snapshot(agg_id)
     }
 }
@@ -268,7 +231,7 @@ impl<T: SnapshotSource> SnapshotSource for Rc<T> {
     type Error = T::Error;
 
     #[inline]
-    fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<PersistedSnapshot<Self::Snapshot>>, Self::Error> {
+    fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<VersionedSnapshot<Self::Snapshot>>, Self::Error> {
         (**self).get_snapshot(agg_id)
     }
 }
@@ -279,7 +242,7 @@ impl<T: SnapshotSource> SnapshotSource for Arc<T> {
     type Error = T::Error;
 
     #[inline]
-    fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<PersistedSnapshot<Self::Snapshot>>, Self::Error> {
+    fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<VersionedSnapshot<Self::Snapshot>>, Self::Error> {
         (**self).get_snapshot(agg_id)
     }
 }
@@ -287,7 +250,7 @@ impl<T: SnapshotSource> SnapshotSource for Arc<T> {
 pub trait SnapshotPersist {
     type AggregateId;
     type Snapshot;
-    type Error: error::Error;
+    type Error: StdError;
 
     fn persist_snapshot(&self, agg_id: &Self::AggregateId, version: Version, snapshot: Self::Snapshot) -> Result<(), Self::Error>;
 }
@@ -329,33 +292,13 @@ pub trait EventDecorator {
     type Event;
     type DecoratedEvent;
 
-    fn decorate(&self, event: Self::Event) -> Self::DecoratedEvent;
-    fn decorate_events(&self, events: Vec<Self::Event>) -> Vec<Self::DecoratedEvent> {
-        events.into_iter()
+    fn decorate(&self, event: &Self::Event) -> Self::DecoratedEvent;
+    fn decorate_events(&self, events: &[Self::Event]) -> Vec<Self::DecoratedEvent> {
+        events.iter()
             .map(|e| self.decorate(e))
             .collect()
     }
 }
-
-#[cfg(not(feature = "never_type"))]
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub enum Never {}
-
-#[cfg(not(feature = "never_type"))]
-impl error::Error for Never {
-    fn description(&self) -> &str {
-        unreachable!()
-    }
-}
-
-impl ::std::fmt::Display for Never {
-    fn fmt(&self, _: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        unreachable!()
-    }
-}
-
-#[cfg(feature = "never_type")]
-type Never = !;
 
 #[cfg(test)]
 #[path = "lib_tests.rs"]

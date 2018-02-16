@@ -1,4 +1,6 @@
-use cqrs::{Precondition, AppendError, EventStore, Since, PersistResult, ReadStreamResult, Never};
+use cqrs::{Precondition, Since, VersionedEvent};
+use cqrs::error::{AppendEventsError, Never};
+use cqrs::{EventAppend, EventSource};
 use event_stream::MemoryEventStream;
 use std::sync::RwLock;
 use std::hash::{Hash, BuildHasher};
@@ -6,26 +8,26 @@ use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 
 #[derive(Debug)]
-pub struct MemoryEventStore<Event, AggregateId, Hasher = RandomState>
+pub struct MemoryEventStore<Event, AggId, Hasher = RandomState>
     where
-        AggregateId: Hash + Eq,
+        AggId: Hash + Eq,
         Hasher: BuildHasher,
 {
-    data: RwLock<HashMap<AggregateId, MemoryEventStream<Event>, Hasher>>,
+    data: RwLock<HashMap<AggId, MemoryEventStream<Event>, Hasher>>,
 }
 
-impl<Event, AggregateId, Hasher> MemoryEventStore<Event, AggregateId, Hasher>
+impl<Event, AggId, Hasher> MemoryEventStore<Event, AggId, Hasher>
     where
-        AggregateId: Hash + Eq + Clone,
+        AggId: Hash + Eq + Clone,
         Hasher: BuildHasher,
 {
-    fn try_get_stream(&self, agg_id: &AggregateId) -> Option<MemoryEventStream<Event>> {
+    fn try_get_stream(&self, agg_id: &AggId) -> Option<MemoryEventStream<Event>> {
         self.data.read().unwrap()
             .get(agg_id)
             .map(|es| es.clone())
     }
 
-    fn create_stream(&self, agg_id: &AggregateId) -> MemoryEventStream<Event> {
+    fn create_stream(&self, agg_id: &AggId) -> MemoryEventStream<Event> {
         let mut lock = self.data.write().unwrap();
         match lock.get(&agg_id) {
             Some(es) => return es.clone(),
@@ -39,9 +41,9 @@ impl<Event, AggregateId, Hasher> MemoryEventStore<Event, AggregateId, Hasher>
     }
 }
 
-impl<Event, AggregateId, Hasher> Default for MemoryEventStore<Event, AggregateId, Hasher>
+impl<Event, AggId, Hasher> Default for MemoryEventStore<Event, AggId, Hasher>
     where
-        AggregateId: Hash + Eq,
+        AggId: Hash + Eq,
         Hasher: BuildHasher + Default,
 {
     fn default() -> Self {
@@ -51,18 +53,36 @@ impl<Event, AggregateId, Hasher> Default for MemoryEventStore<Event, AggregateId
     }
 }
 
-impl<Event, AggregateId, Hasher> EventStore for MemoryEventStore<Event, AggregateId, Hasher>
+impl<Event, AggId, Hasher> EventSource for MemoryEventStore<Event, AggId, Hasher>
     where
-        AggregateId: Hash + Eq + Clone,
+        AggId: Hash + Eq + Clone,
         Event: Clone,
         Hasher: BuildHasher,
 {
-    type AggregateId = AggregateId;
+    type AggregateId = AggId;
     type Event = Event;
-    type AppendResult = PersistResult<AppendError<Never>>;
-    type ReadResult = ReadStreamResult<Self::Event, Never>;
+    type Events = Vec<VersionedEvent<Self::Event>>;
+    type Error = Never;
 
-    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], condition: Precondition) -> Self::AppendResult {
+    fn read_events(&self, agg_id: &Self::AggregateId, since: Since) -> Result<Option<Self::Events>, Self::Error> {
+        match self.try_get_stream(&agg_id) {
+            Some(es) => Ok(Some(es.read(since))),
+            None => Ok(None),
+        }
+    }
+}
+
+impl<Event, AggId, Hasher> EventAppend for MemoryEventStore<Event, AggId, Hasher>
+    where
+        AggId: Hash + Eq + Clone,
+        Event: Clone,
+        Hasher: BuildHasher,
+{
+    type AggregateId = AggId;
+    type Event = Event;
+    type Error = AppendEventsError<Never>;
+
+    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], condition: Precondition) -> Result<(), Self::Error> {
         if let Some(stream) = self.try_get_stream(&agg_id) {
             stream.append_events(events, condition)
         } else {
@@ -70,15 +90,8 @@ impl<Event, AggregateId, Hasher> EventStore for MemoryEventStore<Event, Aggregat
                 let stream = self.create_stream(&agg_id);
                 stream.append_events(events, Precondition::Always)
             } else {
-                Err(AppendError::PreconditionFailed(condition))
+                Err(AppendEventsError::PreconditionFailed(condition))
             }
-        }
-    }
-
-    fn read(&self, agg_id: &Self::AggregateId, since: Since) -> Self::ReadResult {
-        match self.try_get_stream(&agg_id) {
-            Some(es) => Ok(Some(es.read(since))),
-            None => Ok(None),
         }
     }
 }

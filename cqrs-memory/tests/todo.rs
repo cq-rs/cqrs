@@ -4,6 +4,7 @@ extern crate fnv;
 extern crate smallvec;
 
 use cqrs::trivial::NopEventDecorator;
+use cqrs::{Since, VersionedEvent, Version};
 use cqrs::domain::Aggregate;
 use cqrs::domain::command::{DecoratedAggregateCommand, PersistAndSnapshotAggregateCommander};
 use cqrs::domain::query::SnapshotPlusEventsAggregateView;
@@ -165,7 +166,8 @@ impl Aggregate for TodoState {
     }
 }
 
-fn main() {
+#[test]
+fn main_test() {
     let es = MemoryEventStore::<Event, usize, fnv::FnvBuildHasher>::default();
     //let es = okazis::NullEventStore::<Event, usize>::default();
     let ss = MemoryStateStore::<TodoState, usize, fnv::FnvBuildHasher>::default();
@@ -191,23 +193,36 @@ fn main() {
     command.execute_with_decorator(&agg_1, Command::UpdateText("Hello world!".to_string()), decorator).unwrap();
     println!("0: {:#?}", view);
     command.execute_with_decorator(&agg_2, Command::SetReminder(SetReminderData { current_time: now, reminder_time: future_time }), decorator).unwrap();
-    println!("---\n1: {:#?}", view);
+    println!("1: {:#?}", view);
     command.execute_with_decorator(&agg_2, Command::ToggleCompletion, decorator).unwrap();
-    println!("---\n2: {:#?}", view);
+    println!("2: {:#?}", view);
     command.execute_with_decorator(&agg_2, Command::MarkCompleted, decorator).unwrap();
-    println!("---\n3: {:#?}", view);
+    println!("3: {:#?}", view);
     command.execute_with_decorator(&agg_2, Command::ResetCompleted, decorator).unwrap();
-    println!("---\n4: {:#?}", view);
+    println!("4: {:#?}", view);
     let err = command.execute_with_decorator(&agg_2, Command::SetReminder(SetReminderData { current_time: now, reminder_time: past_time }), decorator).unwrap_err();
-    println!("---\nerr: {:?}", err);
-    println!("---\n5: {:#?}", view);
+    println!("err: {:?}", err);
+    println!("5: {:#?}", view);
     command.execute_with_decorator(&agg_2, Command::CancelReminder, decorator).unwrap();
-    println!("---\n6: {:#?}", view);
+    println!("6: {:#?}", view);
     command.execute_with_decorator(&agg_2, Command::UpdateText("Complete CQRS!".to_string()), decorator).unwrap();
-    println!("---\n7: {:#?}", view);
+    println!("7: {:#?}", view);
     command.execute_with_decorator(&agg_2, Command::MarkCompleted, decorator).unwrap();
-    println!("---\n8: {:#?}", view);
+    println!("8: {:#?}", view);
     command.execute_with_decorator(&agg_2, Command::MarkCompleted, decorator).unwrap();
-    println!("---\n9: {:#?}", view);
+    println!("9: {:#?}", view);
+
+    let expected_events = vec![
+        VersionedEvent { version: Version::new(0), event: Event::ReminderUpdated(Some(future_time)) },
+        VersionedEvent { version: Version::new(1), event: Event::Completed },
+        VersionedEvent { version: Version::new(2), event: Event::Uncompleted },
+        VersionedEvent { version: Version::new(3), event: Event::ReminderUpdated(None) },
+        VersionedEvent { version: Version::new(4), event: Event::TextUpdated("Complete CQRS!".to_string()) },
+        VersionedEvent { version: Version::new(5), event: Event::Completed },
+    ];
+    let actual_events =
+        cqrs::EventSource::read_events(&es, &agg_2, Since::BeginningOfStream).unwrap().unwrap();
+
+    assert_eq!(actual_events, expected_events);
     println!("---DONE---");
 }

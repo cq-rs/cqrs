@@ -1,6 +1,7 @@
-use super::{Version, Since, Precondition, Never};
+use super::{Version, Since, Precondition};
 use super::{EventSource, EventAppend, SnapshotSource, SnapshotPersist, EventDecorator};
-use super::{PersistedEvent, PersistedSnapshot};
+use super::{VersionedEvent, VersionedSnapshot};
+use error::Never;
 use std::marker::PhantomData;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -19,7 +20,7 @@ impl<Event, AggregateId> Default for NullEventStore<Event, AggregateId> {
 impl<Event, AggregateId> EventSource for NullEventStore<Event, AggregateId> {
     type AggregateId = AggregateId;
     type Event = Event;
-    type Events = Vec<PersistedEvent<Self::Event>>;
+    type Events = Vec<VersionedEvent<Self::Event>>;
     type Error = Never;
 
     #[inline]
@@ -58,7 +59,7 @@ impl<Snapshot, AggregateId> SnapshotSource for NullSnapshotStore<Snapshot, Aggre
     type Error = Never;
 
     #[inline]
-    fn get_snapshot(&self, _agg_id: &Self::AggregateId) -> Result<Option<PersistedSnapshot<Self::Snapshot>>, Self::Error> {
+    fn get_snapshot(&self, _agg_id: &Self::AggregateId) -> Result<Option<VersionedSnapshot<Self::Snapshot>>, Self::Error> {
         Ok(None)
     }
 }
@@ -74,12 +75,20 @@ impl<Snapshot, AggregateId> SnapshotPersist for NullSnapshotStore<Snapshot, Aggr
     }
 }
 
-#[derive(Debug, PartialEq, Hash, Clone, Copy)]
-pub struct NopEventDecorator<Event> {
+#[derive(Debug)]
+pub struct NopEventDecorator<Event: Clone> {
     _phantom: PhantomData<Event>,
 }
 
-impl<Event> Default for NopEventDecorator<Event> {
+impl<Event: Clone> Clone for NopEventDecorator<Event> {
+    fn clone(&self) -> Self {
+        Default::default()
+    }
+}
+
+impl<Event: Clone> Copy for NopEventDecorator<Event> {}
+
+impl<Event: Clone> Default for NopEventDecorator<Event> {
     fn default() -> Self {
         NopEventDecorator {
             _phantom: PhantomData,
@@ -87,14 +96,14 @@ impl<Event> Default for NopEventDecorator<Event> {
     }
 }
 
-impl<Event> EventDecorator for NopEventDecorator<Event>
+impl<Event: Clone> EventDecorator for NopEventDecorator<Event>
 {
     type Event = Event;
     type DecoratedEvent = Event;
 
     #[inline]
-    fn decorate(&self, event: Self::Event) -> Self::DecoratedEvent {
-        event
+    fn decorate(&self, event: &Self::Event) -> Self::DecoratedEvent {
+        event.clone()
     }
 }
 

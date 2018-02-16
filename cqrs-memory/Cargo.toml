@@ -8,3 +8,4 @@ cqrs = { path = "../cqrs" }
 
 [dev-dependencies]
 fnv = "*"
+smallvec = "*"

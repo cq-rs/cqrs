@@ -17,82 +17,82 @@ fn can_create_default_instance_with_alternate_hasher() {
 }
 
 #[test]
-fn can_get_state_from_store() {
+fn can_get_snapshot_from_store() {
     let ms = TestStateStore::default();
-    let ts = ms.get_state(&0);
+    let ts = ms.get_snapshot(&0);
     assert!(ts.is_ok());
 }
 
 #[test]
 fn can_round_trip_a_value() {
     let ms = TestStateStore::default();
-    let expected = PersistedSnapshot {
+    let expected = VersionedSnapshot {
         version: Version::new(23),
-        data: TestState,
+        snapshot: TestState,
     };
-    ms.put_state(&0, expected.version, expected.data.clone()).unwrap();
-    let ts = ms.get_state(&0);
+    ms.persist_snapshot(&0, expected.version, expected.snapshot.clone()).unwrap();
+    let ts = ms.get_snapshot(&0);
     assert_eq!(Ok(Some(expected)), ts);
 }
 
 #[test]
 fn can_round_trip_multiple_values() {
     let ms = TestStateStore::default();
-    let e0 = PersistedSnapshot {
+    let e0 = VersionedSnapshot {
         version: Version::new(14),
-        data: TestState,
+        snapshot: TestState,
     };
-    let e1 = PersistedSnapshot {
+    let e1 = VersionedSnapshot {
         version: Version::new(299),
-        data: TestState,
+        snapshot: TestState,
     };
-    ms.put_state(&0, e0.version, e0.data.clone()).unwrap();
-    ms.put_state(&1, e1.version, e1.data.clone()).unwrap();
-    let t0 = ms.get_state(&0);
-    let t1 = ms.get_state(&1);
-    let t2 = ms.get_state(&2);
+    ms.persist_snapshot(&0, e0.version, e0.snapshot.clone()).unwrap();
+    ms.persist_snapshot(&1, e1.version, e1.snapshot.clone()).unwrap();
+    let t0 = ms.get_snapshot(&0);
+    let t1 = ms.get_snapshot(&1);
+    let t2 = ms.get_snapshot(&2);
     assert_eq!(Ok(Some(e0)), t0);
     assert_eq!(Ok(Some(e1)), t1);
     assert_eq!(Ok(None), t2);
 }
 
 #[test]
-fn can_have_memory_state_store_with_alternate_hasher() {
+fn can_have_memory_snapshot_store_with_alternate_hasher() {
     let ms = TestStateStore::default();
-    let e0 = PersistedSnapshot {
+    let e0 = VersionedSnapshot {
         version: Version::new(14),
-        data: TestState,
+        snapshot: TestState,
     };
-    let e1 = PersistedSnapshot {
+    let e1 = VersionedSnapshot {
         version: Version::new(299),
-        data: TestState,
+        snapshot: TestState,
     };
-    ms.put_state(&0, e0.version, e0.data.clone()).unwrap();
-    ms.put_state(&1, e1.version, e1.data.clone()).unwrap();
-    let t0 = ms.get_state(&0);
-    let t1 = ms.get_state(&1);
-    let t2 = ms.get_state(&2);
+    ms.persist_snapshot(&0, e0.version, e0.snapshot.clone()).unwrap();
+    ms.persist_snapshot(&1, e1.version, e1.snapshot.clone()).unwrap();
+    let t0 = ms.get_snapshot(&0);
+    let t1 = ms.get_snapshot(&1);
+    let t2 = ms.get_snapshot(&2);
     assert_eq!(Ok(Some(e0)), t0);
     assert_eq!(Ok(Some(e1)), t1);
     assert_eq!(Ok(None), t2);
 }
 
 #[test]
-fn can_have_memory_state_store_with_alternate_key() {
+fn can_have_memory_snapshot_store_with_alternate_key() {
     let ms = MemoryStateStore::<_, &'static str>::default();
-    let e0 = PersistedSnapshot {
+    let e0 = VersionedSnapshot {
         version: Version::new(14),
-        data: TestState,
+        snapshot: TestState,
     };
-    let e1 = PersistedSnapshot {
+    let e1 = VersionedSnapshot {
         version: Version::new(299),
-        data: TestState,
+        snapshot: TestState,
     };
-    ms.put_state(&"0", e0.version, e0.data.clone()).unwrap();
-    ms.put_state(&"1", e1.version, e1.data.clone()).unwrap();
-    let t0 = ms.get_state(&"0");
-    let t1 = ms.get_state(&"1");
-    let t2 = ms.get_state(&"2");
+    ms.persist_snapshot(&"0", e0.version, e0.snapshot.clone()).unwrap();
+    ms.persist_snapshot(&"1", e1.version, e1.snapshot.clone()).unwrap();
+    let t0 = ms.get_snapshot(&"0");
+    let t1 = ms.get_snapshot(&"1");
+    let t2 = ms.get_snapshot(&"2");
     assert_eq!(Ok(Some(e0)), t0);
     assert_eq!(Ok(Some(e1)), t1);
     assert_eq!(Ok(None), t2);

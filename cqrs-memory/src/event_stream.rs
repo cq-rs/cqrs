@@ -1,4 +1,5 @@
-use cqrs::{Version, Since, PersistedEvent, AppendError, Precondition, PersistResult, Never};
+use cqrs::{Version, Since, VersionedEvent, Precondition};
+use cqrs::error::{AppendEventsError, Never};
 use std::sync::{RwLock, Arc};
 
 #[derive(Debug)]
@@ -27,35 +28,47 @@ impl<Event> MemoryEventStream<Event>
     where
         Event: Clone,
 {
-    pub(crate) fn append_events(&self, events: &[Event], condition: Precondition) -> PersistResult<AppendError<Never>> {
+    pub(crate) fn append_events(&self, events: &[Event], condition: Precondition) -> Result<(), AppendEventsError<Never>> {
         let mut stream = self.events.write().unwrap();
 
         match condition {
             Precondition::Always => {}
             Precondition::LastVersion(i) if !stream.is_empty() && stream.len() == i + 1 => {}
             Precondition::EmptyStream if stream.is_empty() => {}
-            _ => return Err(AppendError::PreconditionFailed(condition))
+            Precondition::NewStream | Precondition::EmptyStream | Precondition::LastVersion(_) =>
+                return Err(AppendEventsError::PreconditionFailed(condition)),
         }
 
         stream.extend_from_slice(events);
         Ok(())
     }
 
-    pub(crate) fn read(&self, version: Since) -> Vec<PersistedEvent<Event>> {
-        fn read_out_events<Event: Clone>(initial_version: Version, evts: &[Event]) -> Vec<PersistedEvent<Event>> {
-            let mut i = initial_version;
-            let mut v = Vec::<PersistedEvent<Event>>::new();
-            for e in evts {
-                v.push(PersistedEvent { version: i, event: e.clone() });
-                i += 1;
-            }
-            v
-        }
+    pub(crate) fn read(&self, version: Since) -> Vec<VersionedEvent<Event>> {
         let events = self.events.read().unwrap();
         match version {
-            Since::BeginningOfStream => read_out_events(Version::default(), &events[..]),
-            Since::Version(o) if o < Version::new(events.len()) => read_out_events(o + 1, &events[(*(o + 1).as_ref())..]),
-            Since::Version(_) => Vec::default(),
+            Since::BeginningOfStream => {
+                let mut version = Version::default();
+                let mut evts = Vec::new();
+                for event in events.iter() {
+                    evts.push(VersionedEvent{ version, event: event.to_owned() });
+                    version += 1;
+                }
+                evts
+            }
+            Since::Version(o) => {
+                let next_version = o + 1;
+                if o.number() >= events.len() {
+                    Vec::default()
+                } else {
+                    let mut version = next_version;
+                    let mut evts = Vec::new();
+                    for event in events[next_version.number()..].iter() {
+                        evts.push(VersionedEvent { version, event: event.to_owned() });
+                        version += 1;
+                    }
+                    evts
+                }
+            }
         }
     }
 }

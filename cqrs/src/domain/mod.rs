@@ -1,14 +1,13 @@
-pub mod sync;
+use super::{Precondition, Since, Version};
+use super::{VersionedEvent, VersionedSnapshot};
+use std::borrow::Borrow;
+use std::ops;
 
-pub type CommandResult<Event, Error> = Result<Vec<Event>, Error>;
-
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum SnapshotChoice {
-    Persist,
-    Skip,
-}
+pub mod query;
+pub mod command;
 
 pub trait Aggregate: Default {
+    type Events;//: Borrow<[Self::Event]> + IntoIterator<Item=Self::Event>;
     type Event;
     type Snapshot;
     type Command;
@@ -16,45 +15,112 @@ pub trait Aggregate: Default {
 
     fn from_snapshot(snapshot: Self::Snapshot) -> Self;
     fn apply(&mut self, event: Self::Event);
-    fn execute(&self, command: Self::Command) -> CommandResult<Self::Event, Self::CommandError>;
-    fn should_snapshot(&self) -> SnapshotChoice {
-        SnapshotChoice::Skip
-    }
+    fn execute(&self, command: Self::Command) -> Result<Self::Events, Self::CommandError>;
     fn snapshot(self) -> Self::Snapshot;
 }
 
-#[derive(Debug, Clone, Default, Hash, PartialEq, Eq)]
-struct AlwaysSnapshotAggregate<A: Aggregate>(A);
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum AggregateVersion {
+    Initial,
+    Version(Version),
+}
 
-impl<A: Aggregate> Aggregate for AlwaysSnapshotAggregate<A> {
-    type Event = A::Event;
-    type Snapshot = A::Snapshot;
-    type Command = A::Command;
-    type CommandError = A::CommandError;
-
+impl Default for AggregateVersion {
     #[inline]
-    fn from_snapshot(snapshot: Self::Snapshot) -> Self {
-        AlwaysSnapshotAggregate(A::from_snapshot(snapshot))
+    fn default() -> Self {
+        AggregateVersion::Initial
+    }
+}
+
+impl ops::AddAssign<usize> for AggregateVersion {
+    #[inline]
+    fn add_assign(&mut self, rhs: usize) {
+        if rhs == 0 {
+            return;
+        }
+
+        if let AggregateVersion::Version(v) = *self {
+            *self = AggregateVersion::Version(v + rhs);
+        } else {
+            *self = AggregateVersion::Version(Version(rhs - 1))
+        }
+    }
+}
+
+impl From<Version> for AggregateVersion {
+    #[inline]
+    fn from(v: Version) -> Self {
+        AggregateVersion::Version(v)
+    }
+}
+
+impl From<AggregateVersion> for Since {
+    fn from(v: AggregateVersion) -> Self {
+        match v {
+            AggregateVersion::Initial => Since::BeginningOfStream,
+            AggregateVersion::Version(v) => Since::Version(v),
+        }
+    }
+}
+
+impl From<AggregateVersion> for Precondition {
+    fn from(av: AggregateVersion) -> Self {
+        if let AggregateVersion::Version(v) = av {
+            Precondition::LastVersion(v)
+        } else {
+            Precondition::EmptyStream
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Hash)]
+pub struct HydratedAggregate<Agg: Aggregate> {
+    version: AggregateVersion,
+    aggregate: Agg,
+}
+
+impl <Agg: Aggregate> HydratedAggregate<Agg> {
+    pub fn new(version: AggregateVersion, aggregate: Agg) -> HydratedAggregate<Agg> {
+        HydratedAggregate {
+            version,
+            aggregate
+        }
     }
 
     #[inline]
-    fn apply(&mut self, evt: Self::Event) {
-        self.0.apply(evt);
+    pub fn is_initial(&self) -> bool {
+        self.version == AggregateVersion::Initial
     }
 
-    #[inline]
-    fn execute(&self, cmd: Self::Command) -> CommandResult<Self::Event, Self::CommandError> {
-        self.0.execute(cmd)
+    pub fn get_version(&self) -> AggregateVersion {
+        self.version
     }
 
-    #[inline]
-    fn should_snapshot(&self) -> SnapshotChoice {
-        SnapshotChoice::Persist
+    pub fn snapshot(self) -> Option<VersionedSnapshot<Agg::Snapshot>> {
+        if let AggregateVersion::Version(v) = self.version {
+            Some(VersionedSnapshot {
+                version: v,
+                snapshot: self.aggregate.snapshot(),
+            })
+        } else {
+            None
+        }
     }
+}
 
-    #[inline]
-    fn snapshot(self) -> Self::Snapshot {
-        self.0.snapshot()
+impl<Agg, Event> HydratedAggregate<Agg>
+    where
+        Agg: Aggregate<Event=Event>,
+{
+    pub fn apply(&mut self, event: VersionedEvent<Event>) {
+        self.aggregate.apply(event.event);
+        self.version = event.version.into();
+    }
+}
+
+impl<Agg: Aggregate> Borrow<Agg> for HydratedAggregate<Agg> {
+    fn borrow(&self) -> &Agg {
+        &self.aggregate
     }
 }
 

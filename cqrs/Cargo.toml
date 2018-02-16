@@ -4,3 +4,10 @@ version = "0.1.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
 
 [dependencies]
+
+[dev-dependencies]
+#clippy = "*"
+smallvec = "*"
+
+[build-dependencies]
+rustc_version = "*"
