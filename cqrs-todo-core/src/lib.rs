@@ -142,9 +142,9 @@ pub enum TodoStatus {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TodoData {
-    description: domain::Description,
-    reminder: Option<domain::Reminder>,
-    status: TodoStatus,
+    pub description: domain::Description,
+    pub reminder: Option<domain::Reminder>,
+    pub status: TodoStatus,
 }
 
 impl TodoData {

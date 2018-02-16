@@ -5,12 +5,13 @@ extern crate cqrs_todo_core;
 
 use cqrs::trivial::NopEventDecorator;
 use cqrs::{Since, VersionedEvent, Version};
-use cqrs::domain::{HydratedAggregate, AggregateVersion};
+use cqrs::domain::{AggregateVersion, HydratedAggregate};
 use cqrs::domain::command::{DecoratedAggregateCommand, PersistAndSnapshotAggregateCommander};
 use cqrs::domain::query::{AggregateQuery, SnapshotPlusEventsAggregateView};
 use cqrs::error::{CommandAggregateError, LoadAggregateError, PersistAggregateError, AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
+use std::borrow::Borrow;
 use std::time::{Instant, Duration};
 
 use cqrs_todo_core::{Event, TodoAggregate, TodoState, TodoData, TodoStatus, Command};

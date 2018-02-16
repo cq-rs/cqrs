@@ -2,6 +2,7 @@ use super::{Precondition, Since, Version};
 use super::{VersionedEvent, VersionedSnapshot};
 use std::borrow::Borrow;
 use std::ops;
+use std::fmt;
 
 pub mod query;
 pub mod command;
@@ -23,6 +24,15 @@ pub trait Aggregate: Default {
 pub enum AggregateVersion {
     Initial,
     Version(Version),
+}
+
+impl fmt::Display for AggregateVersion {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            AggregateVersion::Initial => f.write_str("initial"),
+            AggregateVersion::Version(ref v) => v.fmt(f),
+        }
+    }
 }
 
 impl Default for AggregateVersion {

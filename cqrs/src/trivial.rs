@@ -1,7 +1,7 @@
 use super::{Version, Since, Precondition};
 use super::{EventSource, EventAppend, SnapshotSource, SnapshotPersist, EventDecorator};
 use super::{VersionedEvent, VersionedSnapshot};
-use error::Never;
+use error::{AppendEventsError, Never};
 use std::marker::PhantomData;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -32,7 +32,7 @@ impl<Event, AggregateId> EventSource for NullEventStore<Event, AggregateId> {
 impl<Event, AggregateId> EventAppend for NullEventStore<Event, AggregateId> {
     type AggregateId = AggregateId;
     type Event = Event;
-    type Error = Never;
+    type Error = AppendEventsError<Never>;
 
     #[inline]
     fn append_events(&self, _aggregate_id: &Self::AggregateId, _events: &[Self::Event], _condition: Precondition) -> Result<(), Self::Error> {
