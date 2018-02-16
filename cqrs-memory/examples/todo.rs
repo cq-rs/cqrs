@@ -1,169 +1,20 @@
 extern crate cqrs;
 extern crate cqrs_memory;
 extern crate fnv;
-extern crate smallvec;
+extern crate cqrs_todo_core;
 
 use cqrs::trivial::NopEventDecorator;
-use cqrs::domain::Aggregate;
+use cqrs::{Since, VersionedEvent, Version};
 use cqrs::domain::command::{DecoratedAggregateCommand, PersistAndSnapshotAggregateCommander};
 use cqrs::domain::query::SnapshotPlusEventsAggregateView;
 use cqrs::error::{CommandAggregateError, LoadAggregateError, PersistAggregateError, AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
-use smallvec::SmallVec;
 
-use std::time::{Duration, Instant};
-use std::fmt;
-use std::error;
+use std::time::{Instant, Duration};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Event {
-    TextUpdated(String),
-    ReminderUpdated(Option<Instant>),
-    Completed,
-    Uncompleted,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct SetReminderData {
-    current_time: Instant,
-    reminder_time: Instant,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Command {
-    UpdateText(String),
-    SetReminder(SetReminderData),
-    CancelReminder,
-    ToggleCompletion,
-    MarkCompleted,
-    ResetCompleted,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum CommandError {
-    InvalidText,
-    ReminderTimeInPast,
-}
-
-impl error::Error for CommandError {
-    fn description(&self) -> &str {
-        match *self {
-            CommandError::InvalidText => "invalid command text",
-            CommandError::ReminderTimeInPast => "reminder time cannot be in the past",
-        }
-    }
-}
-
-impl fmt::Display for CommandError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let err = self as &error::Error;
-        f.write_str(err.description())
-    }
-}
-
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-enum TodoStatus {
-    Completed,
-    NotCompleted,
-}
-
-impl Default for TodoStatus {
-    fn default() -> Self {
-        TodoStatus::NotCompleted
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct TodoState {
-    event_count: usize,
-    description: String,
-    reminder: Option<Instant>,
-    status: TodoStatus,
-}
-
-impl Default for TodoState {
-    fn default() -> Self {
-        println!("default");
-        TodoState {
-            event_count: 0,
-            description: String::default(),
-            reminder: None,
-            status: TodoStatus::NotCompleted,
-        }
-    }
-}
-
-impl Aggregate for TodoState {
-    type Events = SmallVec<[Self::Event;1]>;
-    type Event = Event;
-    type Snapshot = Self;
-    type Command = Command;
-    type CommandError = CommandError;
-
-    fn from_snapshot(snapshot: Self::Snapshot) -> Self {
-        snapshot
-    }
-
-    fn apply(&mut self, evt: Self::Event) {
-        println!("apply {:?}", evt);
-        self.event_count += 1;
-        match evt {
-            Event::TextUpdated(txt) => self.description = txt,
-            Event::ReminderUpdated(r) => self.reminder = r,
-            Event::Completed => self.status = TodoStatus::Completed,
-            Event::Uncompleted => self.status = TodoStatus::NotCompleted,
-        }
-    }
-
-    fn execute(&self, cmd: Self::Command) -> Result<Self::Events, Self::CommandError> {
-        let mut events = SmallVec::new();
-        println!("execute {:?}", cmd);
-        match cmd {
-            Command::UpdateText(txt) => {
-                if txt.is_empty() {
-                    return Err(CommandError::InvalidText);
-                } else if txt != self.description {
-                    events.push(Event::TextUpdated(txt));
-                }
-            }
-            Command::SetReminder(rem) => {
-                if rem.current_time >= rem.reminder_time {
-                    return Err(CommandError::ReminderTimeInPast);
-                } else {
-                    match self.reminder {
-                        Some(existing_time) if existing_time == rem.reminder_time => {},
-                        _ => events.push(Event::ReminderUpdated(Some(rem.reminder_time))),
-                    }
-                }
-            }
-            Command::CancelReminder if self.reminder.is_some() => events.push(Event::ReminderUpdated(None)),
-            Command::CancelReminder => {},
-            Command::ToggleCompletion => {
-                match self.status {
-                    TodoStatus::Completed => events.push(Event::Uncompleted),
-                    TodoStatus::NotCompleted => events.push(Event::Completed),
-                }
-            }
-            Command::MarkCompleted => {
-                match self.status {
-                    TodoStatus::Completed => {},
-                    TodoStatus::NotCompleted => events.push(Event::Completed),
-                }
-            }
-            Command::ResetCompleted => {
-                match self.status {
-                    TodoStatus::Completed => events.push(Event::Uncompleted),
-                    TodoStatus::NotCompleted => {},
-                }
-            }
-        }
-        Ok(events)
-    }
-
-    fn snapshot(self) -> Self::Snapshot {
-        self
-    }
-}
+use cqrs_todo_core::{Event, TodoAggregate, TodoState, Command};
+use cqrs_todo_core::domain;
+use cqrs_todo_core::error;
 
 fn main() {
     let es = MemoryEventStore::<Event, usize, fnv::FnvBuildHasher>::default();
@@ -176,38 +27,66 @@ fn main() {
     let command = PersistAndSnapshotAggregateCommander::new(command_view, &es, &ss);
 
     let command =
-        &command as &DecoratedAggregateCommand<TodoState, NopEventDecorator<Event>, AggregateId=usize, Error=CommandAggregateError<CommandError, LoadAggregateError<Never, Never>, PersistAggregateError<AppendEventsError<Never>, Never>>>;
+        &command as &DecoratedAggregateCommand<TodoAggregate, NopEventDecorator<Event>, AggregateId=usize, Error=CommandAggregateError<error::CommandError, LoadAggregateError<Never, Never>, PersistAggregateError<AppendEventsError<Never>, Never>>>;
 
     let agg_1 = 0;
     let agg_2 = 34;
 
     let now = Instant::now();
     let duration = Duration::from_secs(1000);
-    let past_time = now - duration;
+    //let past_time = now - duration;
     let future_time = now + duration;
+
+    let creation_description = domain::Description::new("Hello world!").unwrap();
+    let other_creation_description = domain::Description::new("Otherwise").unwrap();
+    let future_reminder = domain::Reminder::new(future_time, now).unwrap();
+    let updated_description = domain::Description::new("Complete CQRS implementation").unwrap();
 
     let decorator = NopEventDecorator::<Event>::default();
 
-    command.execute_with_decorator(&agg_1, Command::UpdateText("Hello world!".to_string()), decorator).unwrap();
-    println!("0: {:#?}", view);
-    command.execute_with_decorator(&agg_2, Command::SetReminder(SetReminderData { current_time: now, reminder_time: future_time }), decorator).unwrap();
-    println!("---\n1: {:#?}", view);
+    command.execute_with_decorator(&agg_1, Command::Create(other_creation_description.clone(), Some(future_reminder)), decorator).unwrap();
+    command.execute_with_decorator(&agg_2, Command::Create(creation_description.clone(), None), decorator).unwrap();
+    println!("0: {:#?}\n", view);
+    command.execute_with_decorator(&agg_2, Command::SetReminder(future_reminder), decorator).unwrap();
+    println!("1: {:#?}\n", view);
     command.execute_with_decorator(&agg_2, Command::ToggleCompletion, decorator).unwrap();
-    println!("---\n2: {:#?}", view);
+    println!("2: {:#?}\n", view);
     command.execute_with_decorator(&agg_2, Command::MarkCompleted, decorator).unwrap();
-    println!("---\n3: {:#?}", view);
+    println!("3: {:#?}\n", view);
     command.execute_with_decorator(&agg_2, Command::ResetCompleted, decorator).unwrap();
-    println!("---\n4: {:#?}", view);
-    let err = command.execute_with_decorator(&agg_2, Command::SetReminder(SetReminderData { current_time: now, reminder_time: past_time }), decorator).unwrap_err();
-    println!("---\nerr: {:?}", err);
-    println!("---\n5: {:#?}", view);
+    println!("4: {:#?}\n", view);
     command.execute_with_decorator(&agg_2, Command::CancelReminder, decorator).unwrap();
-    println!("---\n6: {:#?}", view);
-    command.execute_with_decorator(&agg_2, Command::UpdateText("Complete CQRS!".to_string()), decorator).unwrap();
-    println!("---\n7: {:#?}", view);
+    println!("5: {:#?}\n", view);
+    command.execute_with_decorator(&agg_2, Command::UpdateText(updated_description.clone()), decorator).unwrap();
+    println!("6: {:#?}\n", view);
     command.execute_with_decorator(&agg_2, Command::MarkCompleted, decorator).unwrap();
-    println!("---\n8: {:#?}", view);
+    println!("7: {:#?}\n", view);
     command.execute_with_decorator(&agg_2, Command::MarkCompleted, decorator).unwrap();
-    println!("---\n9: {:#?}", view);
+    println!("8: {:#?}\n", view);
+
+    let expected_events_1 = vec![
+        VersionedEvent { version: Version::new(0), event: Event::Created(other_creation_description) },
+        VersionedEvent { version: Version::new(1), event: Event::ReminderUpdated(Some(future_reminder)) },
+    ];
+    let actual_events_1 =
+        cqrs::EventSource::read_events(&es, &agg_1, Since::BeginningOfStream).unwrap().unwrap();
+
+    assert_eq!(actual_events_1, expected_events_1);
+
+    let expected_events_2 = vec![
+        VersionedEvent { version: Version::new(0), event: Event::Created(creation_description) },
+        VersionedEvent { version: Version::new(1), event: Event::ReminderUpdated(Some(future_reminder)) },
+        VersionedEvent { version: Version::new(2), event: Event::Completed },
+        VersionedEvent { version: Version::new(3), event: Event::Uncompleted },
+        VersionedEvent { version: Version::new(4), event: Event::ReminderUpdated(None) },
+        VersionedEvent { version: Version::new(5), event: Event::TextUpdated(updated_description) },
+        VersionedEvent { version: Version::new(6), event: Event::Completed },
+    ];
+    let actual_events_2 =
+        cqrs::EventSource::read_events(&es, &agg_2, Since::BeginningOfStream).unwrap().unwrap();
+
+    assert_eq!(actual_events_2, expected_events_2);
+
     println!("---DONE---");
 }
+

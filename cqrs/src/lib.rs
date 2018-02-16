@@ -7,7 +7,6 @@ extern crate smallvec;
 use std::ops::{Add, AddAssign};
 use std::sync::Arc;
 use std::rc::Rc;
-use std::borrow::Borrow;
 use std::fmt;
 
 use std::error::Error as StdError;

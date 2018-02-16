@@ -96,6 +96,10 @@ impl <Agg: Aggregate> HydratedAggregate<Agg> {
         self.version
     }
 
+    pub fn inspect_aggregate(&self) -> &Agg {
+        &self.aggregate
+    }
+
     pub fn snapshot(self) -> Option<VersionedSnapshot<Agg::Snapshot>> {
         if let AggregateVersion::Version(v) = self.version {
             Some(VersionedSnapshot {

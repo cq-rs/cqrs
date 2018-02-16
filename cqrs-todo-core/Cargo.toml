@@ -1,11 +1,8 @@
 [package]
-name = "cqrs-memory"
+name = "cqrs-todo-core"
 version = "0.1.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
 
 [dependencies]
 cqrs = { path = "../cqrs" }
-
-[dev-dependencies]
-fnv = "*"
-cqrs-todo-core = { path = "../cqrs-todo-core" }
+smallvec = "*"

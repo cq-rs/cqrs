@@ -3,6 +3,7 @@ use trivial::{NullEventStore, NullSnapshotStore, NopEventDecorator};
 use domain::Aggregate;
 use domain::query::{SnapshotPlusEventsAggregateView, AggregateQuery};
 use domain::command::{PersistAndSnapshotAggregateCommander, DecoratedAggregateCommand};
+use error::Never;
 use smallvec::SmallVec;
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -23,7 +24,7 @@ impl Aggregate for CoolAggregate {
     type Event = MyEvent;
     type Snapshot = Self;
     type Command = MyCommand;
-    type CommandError = ::Never;
+    type CommandError = Never;
     fn from_snapshot(x: Self) -> Self {
         x
     }
@@ -48,22 +49,11 @@ fn maybe_this_works() {
 
     let view = SnapshotPlusEventsAggregateView::new(&es, &ss);
     let command_view = SnapshotPlusEventsAggregateView::new(&es, &ss);
-    let command = PersistAndSnapshotAggregateCommander::new(command_view, &es, &ss);
+    let command: PersistAndSnapshotAggregateCommander<CoolAggregate, _, _, _> = PersistAndSnapshotAggregateCommander::new(command_view, &es, &ss);
 
     command.execute_with_decorator(&0, MyCommand::Much, NopEventDecorator::default()).unwrap();
 
     let agg: HydratedAggregate<CoolAggregate> = view.rehydrate(&0).unwrap();
 
     println!("{:?}", agg);
-
-    panic!("Yep");
-
-//    let agg = AggregateStore::<CoolAggregate, _, _, _, _>::create(es, ss);
-
-//    let result =
-//        agg.execute_and_persist(
-//            &0,
-//            MyCommand::Much,
-//            &NopEventDecorator::default());
-//    assert_eq!(result, Ok(1usize));
 }

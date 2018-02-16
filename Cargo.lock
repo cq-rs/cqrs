@@ -11,7 +11,15 @@ name = "cqrs-memory"
 version = "0.1.0"
 dependencies = [
  "cqrs 0.1.0",
+ "cqrs-todo-core 0.1.0",
  "fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "cqrs-todo-core"
+version = "0.1.0"
+dependencies = [
+ "cqrs 0.1.0",
  "smallvec 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
