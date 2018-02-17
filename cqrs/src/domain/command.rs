@@ -91,7 +91,7 @@ impl<Agg, Query, EAppend, SPersist, Decorator> DecoratedAggregateCommand<Agg, De
 
         println!("version: {:?}", state.version);
 
-        if let Some(snapshot) = state.take_snapshot() {
+        if let Some(snapshot) = state.to_snapshot() {
             self.persister.persist_snapshot(agg_id, snapshot)
                 .map_err(PersistAggregateError::Snapshot)
                 .map_err(CommandAggregateError::Persist)?;

@@ -1,6 +1,5 @@
 pub use super::*;
 use trivial::{NullEventStore, NullSnapshotStore, NopEventDecorator};
-use domain::Aggregate;
 use domain::query::QueryableSnapshotAggregate;
 use domain::command::{PersistAndSnapshotAggregateCommander, DecoratedAggregateCommand};
 use error::Never;
@@ -38,12 +37,16 @@ impl Aggregate for CoolAggregate {
 impl SnapshotAggregate for CoolAggregate {
     type Snapshot = Self;
 
-    fn from_snapshot(snapshot: Self::Snapshot) -> Self {
-        snapshot
-    }
-
-    fn take_snapshot(self) -> Self::Snapshot {
+    fn to_snapshot(self) -> Self::Snapshot {
         self
+    }
+}
+
+impl RestoreAggregate for CoolAggregate {
+    type Snapshot = Self;
+
+    fn restore(snapshot: Self::Snapshot) -> Self {
+        snapshot
     }
 }
 

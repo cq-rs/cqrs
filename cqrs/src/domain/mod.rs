@@ -20,8 +20,13 @@ pub trait Aggregate: Default {
 pub trait SnapshotAggregate: Aggregate {
     type Snapshot;
 
-    fn from_snapshot(snapshot:Self::Snapshot) -> Self;
-    fn take_snapshot(self) -> Self::Snapshot;
+    fn to_snapshot(self) -> Self::Snapshot;
+}
+
+pub trait RestoreAggregate: Aggregate {
+    type Snapshot;
+
+    fn restore(snapshot: Self::Snapshot) -> Self;
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -113,24 +118,26 @@ impl <Agg: Aggregate> HydratedAggregate<Agg> {
     }
 }
 
-impl<Agg: SnapshotAggregate> HydratedAggregate<Agg> {
-    fn from_snapshot(snapshot: Option<VersionedSnapshot<Agg::Snapshot>>) -> Self {
+impl<Agg: RestoreAggregate> HydratedAggregate<Agg> {
+    fn restore(snapshot: Option<VersionedSnapshot<Agg::Snapshot>>) -> Self {
         if let Some(snap) = snapshot {
             HydratedAggregate {
                 version: AggregateVersion::Version(snap.version),
-                aggregate: Agg::from_snapshot(snap.snapshot),
+                aggregate: Agg::restore(snap.snapshot),
                 rehydrated_version: AggregateVersion::Version(snap.version),
             }
         } else {
             HydratedAggregate::default()
         }
     }
+}
 
-    fn take_snapshot(self) -> Option<VersionedSnapshot<Agg::Snapshot>> {
+impl<Agg: SnapshotAggregate> HydratedAggregate<Agg> {
+    fn to_snapshot(self) -> Option<VersionedSnapshot<Agg::Snapshot>> {
         if let AggregateVersion::Version(v) = self.version {
             Some(VersionedSnapshot {
                 version: v,
-                snapshot: self.aggregate.take_snapshot(),
+                snapshot: self.aggregate.to_snapshot(),
             })
         } else {
             None
