@@ -9,11 +9,11 @@ extern crate serde;
 extern crate serde_json;
 
 use cqrs::trivial::{NullEventStore, NullSnapshotStore, NopEventDecorator};
-use cqrs::{Precondition, Since, VersionedEvent, VersionedSnapshot, Version, EventSource, EventAppend, SnapshotPersist, SnapshotSource};
+use cqrs::{Precondition, Since, VersionedEvent, VersionedSnapshot, EventAppend};
 use cqrs::domain::command::{DecoratedAggregateCommand, PersistAndSnapshotAggregateCommander};
-use cqrs::domain::query::QueryableAggregate;
+use cqrs::domain::query::QueryableSnapshotAggregate;
 use cqrs::domain::HydratedAggregate;
-use cqrs::error::{CommandAggregateError, LoadAggregateError, PersistAggregateError, AppendEventsError, Never};
+use cqrs::error::{AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
 use std::borrow::Borrow;
@@ -23,9 +23,8 @@ use std::sync::Arc;
 
 use cqrs_todo_core::{Event, TodoAggregate, TodoState, TodoStatus, Command};
 use cqrs_todo_core::domain;
-use cqrs_todo_core::error;
 
-use nickel::{Nickel, HttpRouter};
+use nickel::Nickel;
 use nickel::status::StatusCode;
 use nickel::MediaType;
 use clap::{App, Arg};
@@ -160,10 +159,10 @@ impl<S, I, H> cqrs::SnapshotPersist for MemoryOrNullSnapshotStore<S, I, H>
     type Snapshot = S;
     type Error = Never;
 
-    fn persist_snapshot(&self, agg_id: &Self::AggregateId, version: Version, snapshot: S) -> Result<(), Self::Error> {
+    fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: VersionedSnapshot<S>) -> Result<(), Self::Error> {
         match *self {
-            MemoryOrNullSnapshotStore::Memory(ref mem) => mem.persist_snapshot(agg_id, version, snapshot),
-            MemoryOrNullSnapshotStore::Null(ref nil) => nil.persist_snapshot(agg_id, version, snapshot),
+            MemoryOrNullSnapshotStore::Memory(ref mem) => mem.persist_snapshot(agg_id, snapshot),
+            MemoryOrNullSnapshotStore::Null(ref nil) => nil.persist_snapshot(agg_id, snapshot),
         }
     }
 }
@@ -276,7 +275,7 @@ fn main() {
         }
     });
 
-    server.listen("127.0.0.1:2777");
+    server.listen("127.0.0.1:2777").unwrap();
 
     println!("---DONE---");
 }

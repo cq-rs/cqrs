@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hash};
-use cqrs::{SnapshotSource, SnapshotPersist, VersionedSnapshot, Version};
+use cqrs::{SnapshotSource, SnapshotPersist, VersionedSnapshot};
 use cqrs::error::Never;
 use std::sync::RwLock;
 
@@ -55,10 +55,9 @@ impl<Snapshot, AggId, Hasher> SnapshotPersist for MemoryStateStore<Snapshot, Agg
     type Snapshot = Snapshot;
     type Error = Never;
 
-    fn persist_snapshot(&self, agg_id: &Self::AggregateId, version: Version, snapshot: Self::Snapshot) -> Result<(), Never> {
-        let new_val = VersionedSnapshot { version, snapshot };
-        let mut lock = self.data.write().unwrap();
-        lock.insert(agg_id.clone(), new_val);
+    fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: VersionedSnapshot<Self::Snapshot>) -> Result<(), Never> {
+        self.data.write().unwrap()
+            .insert(agg_id.clone(), snapshot);
         Ok(())
     }
 }

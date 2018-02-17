@@ -7,7 +7,7 @@ use cqrs::trivial::NopEventDecorator;
 use cqrs::{Since, VersionedEvent, Version};
 use cqrs::domain::{AggregateVersion, HydratedAggregate};
 use cqrs::domain::command::{DecoratedAggregateCommand, PersistAndSnapshotAggregateCommander};
-use cqrs::domain::query::QueryableAggregate;
+use cqrs::domain::query::QueryableSnapshotAggregate;
 use cqrs::error::{CommandAggregateError, LoadAggregateError, PersistAggregateError, AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 

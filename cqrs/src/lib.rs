@@ -251,7 +251,7 @@ pub trait SnapshotPersist {
     type Snapshot;
     type Error: StdError;
 
-    fn persist_snapshot(&self, agg_id: &Self::AggregateId, version: Version, snapshot: Self::Snapshot) -> Result<(), Self::Error>;
+    fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: VersionedSnapshot<Self::Snapshot>) -> Result<(), Self::Error>;
 }
 
 impl<'a, T: SnapshotPersist + 'a> SnapshotPersist for &'a T {
@@ -260,8 +260,8 @@ impl<'a, T: SnapshotPersist + 'a> SnapshotPersist for &'a T {
     type Error = T::Error;
 
     #[inline]
-    fn persist_snapshot(&self, agg_id: &Self::AggregateId, version: Version, snapshot: Self::Snapshot) -> Result<(), Self::Error> {
-        (**self).persist_snapshot(agg_id, version, snapshot)
+    fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: VersionedSnapshot<Self::Snapshot>) -> Result<(), Self::Error> {
+        (**self).persist_snapshot(agg_id, snapshot)
     }
 }
 
@@ -271,8 +271,8 @@ impl<T: SnapshotPersist> SnapshotPersist for Rc<T> {
     type Error = T::Error;
 
     #[inline]
-    fn persist_snapshot(&self, agg_id: &Self::AggregateId, version: Version, snapshot: Self::Snapshot) -> Result<(), Self::Error> {
-        (**self).persist_snapshot(agg_id, version, snapshot)
+    fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: VersionedSnapshot<Self::Snapshot>) -> Result<(), Self::Error> {
+        (**self).persist_snapshot(agg_id, snapshot)
     }
 }
 
@@ -282,8 +282,8 @@ impl<T: SnapshotPersist> SnapshotPersist for Arc<T> {
     type Error = T::Error;
 
     #[inline]
-    fn persist_snapshot(&self, agg_id: &Self::AggregateId, version: Version, snapshot: Self::Snapshot) -> Result<(), Self::Error> {
-        (**self).persist_snapshot(agg_id, version, snapshot)
+    fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: VersionedSnapshot<Self::Snapshot>) -> Result<(), Self::Error> {
+        (**self).persist_snapshot(agg_id, snapshot)
     }
 }
 

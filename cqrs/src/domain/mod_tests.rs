@@ -1,7 +1,7 @@
 pub use super::*;
 use trivial::{NullEventStore, NullSnapshotStore, NopEventDecorator};
 use domain::Aggregate;
-use domain::query::QueryableAggregate;
+use domain::query::QueryableSnapshotAggregate;
 use domain::command::{PersistAndSnapshotAggregateCommander, DecoratedAggregateCommand};
 use error::Never;
 use smallvec::SmallVec;
@@ -22,12 +22,8 @@ struct CoolAggregate;
 impl Aggregate for CoolAggregate {
     type Events = SmallVec<[Self::Event;1]>;
     type Event = MyEvent;
-    type Snapshot = Self;
     type Command = MyCommand;
     type CommandError = Never;
-    fn from_snapshot(x: Self) -> Self {
-        x
-    }
     fn apply(&mut self, evt: Self::Event) {
         println!("applying {:?}", evt);
     }
@@ -37,7 +33,16 @@ impl Aggregate for CoolAggregate {
         v.push(MyEvent::Wow);
         Ok(v)
     }
-    fn snapshot(self) -> Self::Snapshot {
+}
+
+impl SnapshotAggregate for CoolAggregate {
+    type Snapshot = Self;
+
+    fn from_snapshot(snapshot: Self::Snapshot) -> Self {
+        snapshot
+    }
+
+    fn take_snapshot(self) -> Self::Snapshot {
         self
     }
 }

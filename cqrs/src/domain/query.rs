@@ -1,4 +1,4 @@
-use super::{Aggregate, AggregateVersion, HydratedAggregate};
+use super::{Aggregate, SnapshotAggregate, HydratedAggregate};
 use super::super::{Since, EventSource, SnapshotSource, VersionedEvent};
 use error::LoadAggregateError;
 use std::borrow::Borrow;
@@ -16,10 +16,12 @@ pub trait QueryableAggregate: Aggregate {
             _phantom: PhantomData,
         }
     }
+}
 
+pub trait QueryableSnapshotAggregate: SnapshotAggregate {
     fn snapshot_view<SSource>(snapshot_source: SSource) -> SnapshotView<Self, SSource>
         where
-            SSource: SnapshotSource<Snapshot=<Self as Aggregate>::Snapshot>,
+            SSource: SnapshotSource<Snapshot=<Self as SnapshotAggregate>::Snapshot>,
     {
         SnapshotView {
             snapshot_source,
@@ -31,7 +33,7 @@ pub trait QueryableAggregate: Aggregate {
         where
             ESource: EventSource<Event=<Self as Aggregate>::Event>,
             ESource::Events: Borrow<[VersionedEvent<ESource::Event>]> + IntoIterator<Item=VersionedEvent<ESource::Event>>,
-            SSource: SnapshotSource<Snapshot=<Self as Aggregate>::Snapshot, AggregateId=ESource::AggregateId>,
+            SSource: SnapshotSource<Snapshot=<Self as SnapshotAggregate>::Snapshot, AggregateId=ESource::AggregateId>,
     {
         SnapshotAndEventsView {
             event_source,
@@ -42,6 +44,7 @@ pub trait QueryableAggregate: Aggregate {
 }
 
 impl<T: Aggregate> QueryableAggregate for T {}
+impl<T: SnapshotAggregate> QueryableSnapshotAggregate for T {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EventsView<Agg, ESource>
@@ -79,7 +82,7 @@ impl<Agg, ESource> EventsView<Agg, ESource>
 #[derive(Debug, Clone, PartialEq)]
 pub struct SnapshotView<Agg, SSource>
     where
-        Agg: Aggregate,
+        Agg: SnapshotAggregate,
         SSource: SnapshotSource<Snapshot=Agg::Snapshot>,
 {
     snapshot_source: SSource,
@@ -88,29 +91,19 @@ pub struct SnapshotView<Agg, SSource>
 
 impl<Agg, SSource> SnapshotView<Agg, SSource>
     where
-        Agg: Aggregate,
+        Agg: SnapshotAggregate,
         SSource: SnapshotSource<Snapshot=Agg::Snapshot>,
 {
     pub fn rehydrate(&self, agg_id: &SSource::AggregateId) -> Result<HydratedAggregate<Agg>, SSource::Error> {
-        let snapshot = self.snapshot_source.get_snapshot(agg_id)?;
-        if let Some(s) = snapshot {
-            Ok(HydratedAggregate {
-                aggregate: Agg::from_snapshot(s.snapshot),
-                version: AggregateVersion::Version(s.version),
-            })
-        } else {
-            Ok(HydratedAggregate {
-                aggregate: Agg::default(),
-                version: AggregateVersion::Initial,
-            })
-        }
+        let aggregate = HydratedAggregate::from_snapshot(self.snapshot_source.get_snapshot(agg_id)?);
+        Ok(aggregate)
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SnapshotAndEventsView<Agg, ESource, SSource>
     where
-        Agg: Aggregate,
+        Agg: SnapshotAggregate,
         ESource: EventSource<Event=Agg::Event>,
         ESource::Events: Borrow<[VersionedEvent<Agg::Event>]> + IntoIterator<Item=VersionedEvent<Agg::Event>>,
         SSource: SnapshotSource<Snapshot=Agg::Snapshot, AggregateId=ESource::AggregateId>,
@@ -122,7 +115,7 @@ pub struct SnapshotAndEventsView<Agg, ESource, SSource>
 
 impl<Agg, ESource, SSource> SnapshotAndEventsView<Agg, ESource, SSource>
     where
-        Agg: Aggregate,
+        Agg: SnapshotAggregate,
         ESource: EventSource<Event=Agg::Event>,
         ESource::Events: Borrow<[VersionedEvent<Agg::Event>]> + IntoIterator<Item=VersionedEvent<Agg::Event>>,
         SSource: SnapshotSource<Snapshot=Agg::Snapshot, AggregateId=ESource::AggregateId>,
@@ -170,7 +163,7 @@ impl<Agg, ESource> AggregateQuery<Agg> for EventsView<Agg, ESource>
 
 impl<Agg, SSource> AggregateQuery<Agg> for SnapshotView<Agg, SSource>
     where
-        Agg: Aggregate,
+        Agg: SnapshotAggregate,
         SSource: SnapshotSource<Snapshot=Agg::Snapshot>,
 {
     type AggregateId = SSource::AggregateId;
@@ -184,7 +177,7 @@ impl<Agg, SSource> AggregateQuery<Agg> for SnapshotView<Agg, SSource>
 
 impl<Agg, ESource, SSource> AggregateQuery<Agg> for SnapshotAndEventsView<Agg, ESource, SSource>
     where
-        Agg: Aggregate,
+        Agg: SnapshotAggregate,
         ESource: EventSource<Event=Agg::Event>,
         ESource::Events: Borrow<[VersionedEvent<ESource::Event>]> + IntoIterator<Item=VersionedEvent<ESource::Event>>,
         SSource: SnapshotSource<Snapshot=Agg::Snapshot, AggregateId=ESource::AggregateId>,

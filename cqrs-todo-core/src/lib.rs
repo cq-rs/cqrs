@@ -2,7 +2,7 @@ extern crate cqrs;
 extern crate smallvec;
 
 use smallvec::SmallVec;
-use cqrs::domain::Aggregate;
+use cqrs::domain::{Aggregate, SnapshotAggregate};
 
 pub mod domain {
     use std::time::Instant;
@@ -319,16 +319,8 @@ impl TodoAggregate {
 impl Aggregate for TodoAggregate {
     type Events = SmallVec<[Self::Event;1]>;
     type Event = Event;
-    type Snapshot = TodoState;
     type Command = Command;
     type CommandError = error::CommandError;
-
-    fn from_snapshot(snapshot: Self::Snapshot) -> Self {
-        TodoAggregate {
-            applied_event_count: 0,
-            state: snapshot,
-        }
-    }
 
     fn apply(&mut self, event: Self::Event) {
         println!("apply {:?}", event);
@@ -340,8 +332,19 @@ impl Aggregate for TodoAggregate {
         println!("execute {:?}", command);
         self.state.execute(command)
     }
+}
 
-    fn snapshot(self) -> Self::Snapshot {
+impl SnapshotAggregate for TodoAggregate {
+    type Snapshot = TodoState;
+
+    fn from_snapshot(snapshot: Self::Snapshot) -> Self {
+        TodoAggregate {
+            applied_event_count: 0,
+            state: snapshot,
+        }
+    }
+
+    fn take_snapshot(self) -> Self::Snapshot {
         self.state
     }
 }

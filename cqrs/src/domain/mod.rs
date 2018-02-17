@@ -10,22 +10,19 @@ pub mod command;
 pub trait Aggregate: Default {
     type Events;//: Borrow<[Self::Event]> + IntoIterator<Item=Self::Event>;
     type Event;
-    type Snapshot;
     type Command;
     type CommandError;
 
-    fn from_snapshot(snapshot: Self::Snapshot) -> Self;
     fn apply(&mut self, event: Self::Event);
     fn execute(&self, command: Self::Command) -> Result<Self::Events, Self::CommandError>;
-    fn snapshot(self) -> Self::Snapshot;
 }
 
-//pub trait SnapshotableAggregate: Aggregate {
-//    type Snapshot;
+pub trait SnapshotAggregate: Aggregate {
+    type Snapshot;
 
-//    fn from_snapshot(snapshot:Self::Snapshot) -> Self;
-//    fn take_snapshot(self) -> Option<Self::Snapshot>;
-//}
+    fn from_snapshot(snapshot:Self::Snapshot) -> Self;
+    fn take_snapshot(self) -> Self::Snapshot;
+}
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AggregateVersion {
@@ -94,16 +91,10 @@ impl From<AggregateVersion> for Precondition {
 pub struct HydratedAggregate<Agg: Aggregate> {
     version: AggregateVersion,
     aggregate: Agg,
+    rehydrated_version: AggregateVersion,
 }
 
 impl <Agg: Aggregate> HydratedAggregate<Agg> {
-    pub fn new(version: AggregateVersion, aggregate: Agg) -> HydratedAggregate<Agg> {
-        HydratedAggregate {
-            version,
-            aggregate
-        }
-    }
-
     #[inline]
     pub fn is_initial(&self) -> bool {
         self.version == AggregateVersion::Initial
@@ -117,11 +108,29 @@ impl <Agg: Aggregate> HydratedAggregate<Agg> {
         &self.aggregate
     }
 
-    pub fn snapshot(self) -> Option<VersionedSnapshot<Agg::Snapshot>> {
+    pub fn last_snapshot(&self) -> AggregateVersion {
+        self.rehydrated_version
+    }
+}
+
+impl<Agg: SnapshotAggregate> HydratedAggregate<Agg> {
+    fn from_snapshot(snapshot: Option<VersionedSnapshot<Agg::Snapshot>>) -> Self {
+        if let Some(snap) = snapshot {
+            HydratedAggregate {
+                version: AggregateVersion::Version(snap.version),
+                aggregate: Agg::from_snapshot(snap.snapshot),
+                rehydrated_version: AggregateVersion::Version(snap.version),
+            }
+        } else {
+            HydratedAggregate::default()
+        }
+    }
+
+    fn take_snapshot(self) -> Option<VersionedSnapshot<Agg::Snapshot>> {
         if let AggregateVersion::Version(v) = self.version {
             Some(VersionedSnapshot {
                 version: v,
-                snapshot: self.aggregate.snapshot(),
+                snapshot: self.aggregate.take_snapshot(),
             })
         } else {
             None

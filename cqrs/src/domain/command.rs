@@ -1,5 +1,5 @@
 use super::super::{EventAppend, SnapshotPersist, EventDecorator};
-use super::{Aggregate, AggregateVersion};
+use super::{Aggregate, SnapshotAggregate};
 use super::query::AggregateQuery;
 use error::{CommandAggregateError, PersistAggregateError};
 use std::borrow::Borrow;
@@ -23,7 +23,7 @@ pub trait DecoratedAggregateCommand<Agg: Aggregate, Decorator: EventDecorator<Ev
 #[derive(Debug, Clone, PartialEq)]
 pub struct PersistAndSnapshotAggregateCommander<Agg, Query, EAppend, SPersist>
     where
-        Agg: Aggregate,
+        Agg: SnapshotAggregate,
         Query: AggregateQuery<Agg>,
         EAppend: EventAppend<AggregateId=Query::AggregateId>,
         SPersist: SnapshotPersist<AggregateId=Query::AggregateId, Snapshot=Agg::Snapshot>,
@@ -36,7 +36,7 @@ pub struct PersistAndSnapshotAggregateCommander<Agg, Query, EAppend, SPersist>
 
 impl<Agg, Query, EAppend, SPersist> PersistAndSnapshotAggregateCommander<Agg, Query, EAppend, SPersist>
     where
-        Agg: Aggregate,
+        Agg: SnapshotAggregate,
         Query: AggregateQuery<Agg>,
         EAppend: EventAppend<AggregateId=Query::AggregateId>,
         SPersist: SnapshotPersist<AggregateId=Query::AggregateId, Snapshot=Agg::Snapshot>,
@@ -53,7 +53,7 @@ impl<Agg, Query, EAppend, SPersist> PersistAndSnapshotAggregateCommander<Agg, Qu
 
 impl<Agg, Query, EAppend, SPersist, Decorator> DecoratedAggregateCommand<Agg, Decorator> for PersistAndSnapshotAggregateCommander<Agg, Query, EAppend, SPersist>
     where
-        Agg: Aggregate,
+        Agg: SnapshotAggregate,
         Agg::Events: Borrow<[Agg::Event]> + IntoIterator<Item=Agg::Event>,
         Query: AggregateQuery<Agg>,
         EAppend: EventAppend<AggregateId=Query::AggregateId>,
@@ -91,8 +91,8 @@ impl<Agg, Query, EAppend, SPersist, Decorator> DecoratedAggregateCommand<Agg, De
 
         println!("version: {:?}", state.version);
 
-        if let AggregateVersion::Version(snapshot_version) = state.version {
-            self.persister.persist_snapshot(agg_id, snapshot_version, state.aggregate.snapshot())
+        if let Some(snapshot) = state.take_snapshot() {
+            self.persister.persist_snapshot(agg_id, snapshot)
                 .map_err(PersistAggregateError::Snapshot)
                 .map_err(CommandAggregateError::Persist)?;
         }

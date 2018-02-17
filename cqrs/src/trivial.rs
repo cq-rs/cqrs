@@ -1,4 +1,4 @@
-use super::{Version, Since, Precondition};
+use super::{Since, Precondition};
 use super::{EventSource, EventAppend, SnapshotSource, SnapshotPersist, EventDecorator};
 use super::{VersionedEvent, VersionedSnapshot};
 use error::{AppendEventsError, Never};
@@ -70,7 +70,7 @@ impl<Snapshot, AggregateId> SnapshotPersist for NullSnapshotStore<Snapshot, Aggr
     type Error = Never;
 
     #[inline]
-    fn persist_snapshot(&self, _agg_id: &Self::AggregateId, _version: Version, _snapshot: Self::Snapshot) -> Result<(), Self::Error> {
+    fn persist_snapshot(&self, _agg_id: &Self::AggregateId, _snapshot: VersionedSnapshot<Self::Snapshot>) -> Result<(), Self::Error> {
         Ok(())
     }
 }

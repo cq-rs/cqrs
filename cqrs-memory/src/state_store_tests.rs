@@ -1,4 +1,5 @@
 pub use super::*;
+use cqrs::Version;
 use fnv::FnvBuildHasher;
 
 #[derive(Default, Clone, Copy, PartialEq, Hash, Debug)]
@@ -30,7 +31,7 @@ fn can_round_trip_a_value() {
         version: Version::new(23),
         snapshot: TestState,
     };
-    ms.persist_snapshot(&0, expected.version, expected.snapshot.clone()).unwrap();
+    ms.persist_snapshot(&0, expected.clone()).unwrap();
     let ts = ms.get_snapshot(&0);
     assert_eq!(Ok(Some(expected)), ts);
 }
@@ -46,8 +47,8 @@ fn can_round_trip_multiple_values() {
         version: Version::new(299),
         snapshot: TestState,
     };
-    ms.persist_snapshot(&0, e0.version, e0.snapshot.clone()).unwrap();
-    ms.persist_snapshot(&1, e1.version, e1.snapshot.clone()).unwrap();
+    ms.persist_snapshot(&0, e0.clone()).unwrap();
+    ms.persist_snapshot(&1, e1.clone()).unwrap();
     let t0 = ms.get_snapshot(&0);
     let t1 = ms.get_snapshot(&1);
     let t2 = ms.get_snapshot(&2);
@@ -67,8 +68,8 @@ fn can_have_memory_snapshot_store_with_alternate_hasher() {
         version: Version::new(299),
         snapshot: TestState,
     };
-    ms.persist_snapshot(&0, e0.version, e0.snapshot.clone()).unwrap();
-    ms.persist_snapshot(&1, e1.version, e1.snapshot.clone()).unwrap();
+    ms.persist_snapshot(&0, e0.clone()).unwrap();
+    ms.persist_snapshot(&1, e1.clone()).unwrap();
     let t0 = ms.get_snapshot(&0);
     let t1 = ms.get_snapshot(&1);
     let t2 = ms.get_snapshot(&2);
@@ -88,8 +89,8 @@ fn can_have_memory_snapshot_store_with_alternate_key() {
         version: Version::new(299),
         snapshot: TestState,
     };
-    ms.persist_snapshot(&"0", e0.version, e0.snapshot.clone()).unwrap();
-    ms.persist_snapshot(&"1", e1.version, e1.snapshot.clone()).unwrap();
+    ms.persist_snapshot(&"0", e0.clone()).unwrap();
+    ms.persist_snapshot(&"1", e1.clone()).unwrap();
     let t0 = ms.get_snapshot(&"0");
     let t1 = ms.get_snapshot(&"1");
     let t2 = ms.get_snapshot(&"2");
