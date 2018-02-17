@@ -11,7 +11,7 @@ extern crate serde_json;
 use cqrs::trivial::{NullEventStore, NullSnapshotStore, NopEventDecorator};
 use cqrs::{Precondition, Since, VersionedEvent, VersionedSnapshot, Version, EventSource, EventAppend, SnapshotPersist, SnapshotSource};
 use cqrs::domain::command::{DecoratedAggregateCommand, PersistAndSnapshotAggregateCommander};
-use cqrs::domain::query::{AggregateQuery, SnapshotPlusEventsAggregateView};
+use cqrs::domain::query::QueryableAggregate;
 use cqrs::domain::HydratedAggregate;
 use cqrs::error::{CommandAggregateError, LoadAggregateError, PersistAggregateError, AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
@@ -209,8 +209,10 @@ fn main() {
 
     es.append_events(&0, &events, Precondition::Always).unwrap();
 
-    let view = SnapshotPlusEventsAggregateView::new(Arc::clone(&es), Arc::clone(&ss));
-    let command_view = SnapshotPlusEventsAggregateView::new(Arc::clone(&es), Arc::clone(&ss));
+    let view = TodoAggregate::snapshot_with_events_view(Arc::clone(&es), Arc::clone(&ss));
+
+    //let view = SnapshotPlusEventsAggregateView::new(Arc::clone(&es), Arc::clone(&ss));
+    let command_view = TodoAggregate::snapshot_with_events_view(Arc::clone(&es), Arc::clone(&ss));
     let command  : PersistAndSnapshotAggregateCommander<TodoAggregate, _, _, _> = PersistAndSnapshotAggregateCommander::new(command_view, Arc::clone(&es), Arc::clone(&ss));
 
     let view = Arc::new(view);

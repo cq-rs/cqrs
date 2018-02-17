@@ -20,6 +20,13 @@ pub trait Aggregate: Default {
     fn snapshot(self) -> Self::Snapshot;
 }
 
+//pub trait SnapshotableAggregate: Aggregate {
+//    type Snapshot;
+
+//    fn from_snapshot(snapshot:Self::Snapshot) -> Self;
+//    fn take_snapshot(self) -> Option<Self::Snapshot>;
+//}
+
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AggregateVersion {
     Initial,

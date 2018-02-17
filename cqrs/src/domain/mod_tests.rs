@@ -1,7 +1,7 @@
 pub use super::*;
 use trivial::{NullEventStore, NullSnapshotStore, NopEventDecorator};
 use domain::Aggregate;
-use domain::query::{SnapshotPlusEventsAggregateView, AggregateQuery};
+use domain::query::QueryableAggregate;
 use domain::command::{PersistAndSnapshotAggregateCommander, DecoratedAggregateCommand};
 use error::Never;
 use smallvec::SmallVec;
@@ -47,8 +47,8 @@ fn maybe_this_works() {
     let es: NullEventStore<MyEvent, usize> = Default::default();
     let ss: NullSnapshotStore<CoolAggregate, usize> = Default::default();
 
-    let view = SnapshotPlusEventsAggregateView::new(&es, &ss);
-    let command_view = SnapshotPlusEventsAggregateView::new(&es, &ss);
+    let view = CoolAggregate::snapshot_with_events_view(&es, &ss);
+    let command_view = CoolAggregate::snapshot_with_events_view(&es, &ss);
     let command: PersistAndSnapshotAggregateCommander<CoolAggregate, _, _, _> = PersistAndSnapshotAggregateCommander::new(command_view, &es, &ss);
 
     command.execute_with_decorator(&0, MyCommand::Much, NopEventDecorator::default()).unwrap();

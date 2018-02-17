@@ -7,11 +7,10 @@ use cqrs::trivial::NopEventDecorator;
 use cqrs::{Since, VersionedEvent, Version};
 use cqrs::domain::{AggregateVersion, HydratedAggregate};
 use cqrs::domain::command::{DecoratedAggregateCommand, PersistAndSnapshotAggregateCommander};
-use cqrs::domain::query::{AggregateQuery, SnapshotPlusEventsAggregateView};
+use cqrs::domain::query::QueryableAggregate;
 use cqrs::error::{CommandAggregateError, LoadAggregateError, PersistAggregateError, AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
-use std::borrow::Borrow;
 use std::time::{Instant, Duration};
 
 use cqrs_todo_core::{Event, TodoAggregate, TodoState, TodoData, TodoStatus, Command};
@@ -25,8 +24,8 @@ fn main_test() {
     let ss = MemoryStateStore::<TodoState, usize, fnv::FnvBuildHasher>::default();
     //let ss = okazis::NullStateStore::<TodoState, usize>::default();
 
-    let view = SnapshotPlusEventsAggregateView::new(&es, &ss);
-    let command_view = SnapshotPlusEventsAggregateView::new(&es, &ss);
+    let view = TodoAggregate::snapshot_with_events_view(&es, &ss);
+    let command_view = TodoAggregate::snapshot_with_events_view(&es, &ss);
     let command = PersistAndSnapshotAggregateCommander::new(command_view, &es, &ss);
 
     let command =
