@@ -81,7 +81,53 @@ impl<EErr, SErr> error::Error for PersistAggregateError<EErr, SErr>
 }
 
 #[derive(Debug, Clone, Hash, PartialEq)]
+pub enum ExecuteError<CErr, LErr> {
+    AggregateNotFound,
+    Command(CErr),
+    Load(LErr),
+}
+
+impl<CErr, LErr> fmt::Display for ExecuteError<CErr, LErr>
+    where
+        CErr: error::Error,
+        LErr: error::Error,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let err = self as &error::Error;
+        f.write_str(err.description())?;
+        if let Some(cause) = err.cause() {
+            write!(f, ": {}", cause)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl<CErr, LErr> error::Error for ExecuteError<CErr, LErr>
+    where
+        CErr: error::Error,
+        LErr: error::Error,
+{
+    fn description(&self) -> &str {
+        match *self {
+            ExecuteError::AggregateNotFound => "aggregate not found",
+            ExecuteError::Command(_) => "invalid command",
+            ExecuteError::Load(_) => "loading aggregate",
+        }
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        match *self {
+            ExecuteError::AggregateNotFound => None,
+            ExecuteError::Command(ref e) => Some(e),
+            ExecuteError::Load(ref e) => Some(e),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq)]
 pub enum CommandAggregateError<CErr, LErr, PErr> {
+    AggregateNotFound,
     Command(CErr),
     Load(LErr),
     Persist(PErr),
@@ -96,8 +142,11 @@ impl<CErr, LErr, PErr> fmt::Display for CommandAggregateError<CErr, LErr, PErr>
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let err = self as &error::Error;
         f.write_str(err.description())?;
-        f.write_str(": ")?;
-        write!(f, "{}", err.cause().unwrap())
+        if let Some(cause) = err.cause() {
+            write!(f, ": {}", cause)
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -109,6 +158,7 @@ impl<CErr, LErr, PErr> error::Error for CommandAggregateError<CErr, LErr, PErr>
 {
     fn description(&self) -> &str {
         match *self {
+            CommandAggregateError::AggregateNotFound => "aggregate not found",
             CommandAggregateError::Command(_) => "executing command",
             CommandAggregateError::Load(_) => "loading aggregate",
             CommandAggregateError::Persist(_) => "persisting aggregate",
@@ -117,6 +167,7 @@ impl<CErr, LErr, PErr> error::Error for CommandAggregateError<CErr, LErr, PErr>
 
     fn cause(&self) -> Option<&error::Error> {
         match *self {
+            CommandAggregateError::AggregateNotFound => None,
             CommandAggregateError::Command(ref e) => Some(e),
             CommandAggregateError::Load(ref e) => Some(e),
             CommandAggregateError::Persist(ref e) => Some(e),

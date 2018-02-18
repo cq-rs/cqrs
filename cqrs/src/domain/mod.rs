@@ -6,6 +6,7 @@ use std::fmt;
 
 pub mod query;
 pub mod command;
+pub mod persist;
 
 pub trait Aggregate: Default {
     type Events;//: Borrow<[Self::Event]> + IntoIterator<Item=Self::Event>;
@@ -118,16 +119,12 @@ impl <Agg: Aggregate> HydratedAggregate<Agg> {
     }
 }
 
-impl<Agg: RestoreAggregate> HydratedAggregate<Agg> {
-    fn restore(snapshot: Option<VersionedSnapshot<Agg::Snapshot>>) -> Self {
-        if let Some(snap) = snapshot {
-            HydratedAggregate {
-                version: AggregateVersion::Version(snap.version),
-                aggregate: Agg::restore(snap.snapshot),
-                rehydrated_version: AggregateVersion::Version(snap.version),
-            }
-        } else {
-            HydratedAggregate::default()
+impl<Agg: RestoreAggregate> From<VersionedSnapshot<Agg::Snapshot>> for HydratedAggregate<Agg> {
+    fn from(snapshot: VersionedSnapshot<Agg::Snapshot>) -> Self {
+        HydratedAggregate {
+            version: AggregateVersion::Version(snapshot.version),
+            aggregate: Agg::restore(snapshot.snapshot),
+            rehydrated_version: AggregateVersion::Version(snapshot.version),
         }
     }
 }

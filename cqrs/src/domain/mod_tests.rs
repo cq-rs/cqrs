@@ -59,9 +59,13 @@ fn maybe_this_works() {
     let command_view = CoolAggregate::snapshot_with_events_view(&es, &ss);
     let command: PersistAndSnapshotAggregateCommander<CoolAggregate, _, _, _> = PersistAndSnapshotAggregateCommander::new(command_view, &es, &ss);
 
-    command.execute_with_decorator(&0, MyCommand::Much, NopEventDecorator::default()).unwrap();
+    let err = command.execute_with_decorator(&0, MyCommand::Much, NopEventDecorator::default()).unwrap_err();
 
-    let agg: HydratedAggregate<CoolAggregate> = view.rehydrate(&0).unwrap();
+    assert_eq!(err, ::error::CommandAggregateError::AggregateNotFound);
+
+    let agg: Option<HydratedAggregate<CoolAggregate>> = view.rehydrate(&0).unwrap();
 
     println!("{:?}", agg);
+
+//    assert_eq!(agg, Err(::error::CommandAggregateError::AggregateNotFound));
 }

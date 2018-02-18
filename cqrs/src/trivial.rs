@@ -76,34 +76,36 @@ impl<Snapshot, AggregateId> SnapshotPersist for NullSnapshotStore<Snapshot, Aggr
 }
 
 #[derive(Debug)]
-pub struct NopEventDecorator<Event: Clone> {
+pub struct NopEventDecorator<'a, Event: 'a> {
     _phantom: PhantomData<Event>,
+    _phantom_lifetime: PhantomData<&'a ()>,
 }
 
-impl<Event: Clone> Clone for NopEventDecorator<Event> {
+impl<'a, Event: 'a> Clone for NopEventDecorator<'a, Event> {
     fn clone(&self) -> Self {
         Default::default()
     }
 }
 
-impl<Event: Clone> Copy for NopEventDecorator<Event> {}
+impl<'a, Event: 'a> Copy for NopEventDecorator<'a, Event> {}
 
-impl<Event: Clone> Default for NopEventDecorator<Event> {
+impl<'a, Event: 'a> Default for NopEventDecorator<'a, Event> {
     fn default() -> Self {
         NopEventDecorator {
             _phantom: PhantomData,
+            _phantom_lifetime: PhantomData,
         }
     }
 }
 
-impl<Event: Clone> EventDecorator for NopEventDecorator<Event>
+impl<'a, Event: 'a> EventDecorator for NopEventDecorator<'a, Event>
 {
     type Event = Event;
     type DecoratedEvent = Event;
 
     #[inline]
-    fn decorate(&self, event: &Self::Event) -> Self::DecoratedEvent {
-        event.clone()
+    fn decorate(&self, event: Self::Event) -> Self::DecoratedEvent {
+        event
     }
 }
 

@@ -13,10 +13,11 @@ use cqrs::{Precondition, Since, VersionedEvent, VersionedSnapshot, EventAppend};
 use cqrs::domain::command::{DecoratedAggregateCommand, PersistAndSnapshotAggregateCommander};
 use cqrs::domain::query::QueryableSnapshotAggregate;
 use cqrs::domain::HydratedAggregate;
-use cqrs::error::{AppendEventsError, Never};
+use cqrs::error::{AppendEventsError, Never, CommandAggregateError};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
 use std::borrow::Borrow;
+use std::io::Read;
 use std::error::Error as StdError;
 use std::time::{Instant, Duration};
 use std::sync::Arc;
@@ -225,17 +226,22 @@ fn main() {
         get "/todo/:id" => |req, mut res| {
             match req.param("id").unwrap().parse::<usize>() {
                 Ok(id) => {
-                    let x: HydratedAggregate<TodoAggregate> = get_view.rehydrate(&id).unwrap();
-                    if let TodoState::Created(ref data) = *x.inspect_aggregate().inspect_state() {
-                        let ret = TodoDto {
-                            description: Borrow::<str>::borrow(&data.description),
-                            reminder: data.reminder.map(|_| "yes"),
-                            is_complete: data.status == TodoStatus::Completed,
-                        };
-                        res.set(MediaType::Json);
-                        let h = nickel::hyper::header::Link::new(vec![nickel::hyper::header::LinkValue::new(x.get_version().to_string())]);
-                        res.headers_mut().set(h);
-                        serde_json::to_string(&ret).unwrap()
+                    let agg_opt: Option<HydratedAggregate<TodoAggregate>> = get_view.rehydrate(&id).unwrap();
+                    if let Some(agg) = agg_opt {
+                        if let TodoState::Created(ref data) = *agg.inspect_aggregate().inspect_state() {
+                            let ret = TodoDto {
+                                description: Borrow::<str>::borrow(&data.description),
+                                reminder: data.reminder.map(|_| "yes"),
+                                is_complete: data.status == TodoStatus::Completed,
+                            };
+                            res.set(MediaType::Json);
+                            let h = nickel::hyper::header::Link::new(vec![nickel::hyper::header::LinkValue::new(agg.get_version().to_string())]);
+                            res.headers_mut().set(h);
+                            serde_json::to_string(&ret).unwrap()
+                        } else {
+                            res.set(StatusCode::InternalServerError);
+                            format!("Somehow you got an uninitialized todo.")
+                        }
                     } else {
                         res.set(StatusCode::NotFound);
                         format!("Nice try with {}, but it wasn't there.", req.param("id").unwrap())
@@ -247,23 +253,38 @@ fn main() {
                 }
             }
         }
-        get "/todo/:id/:description" => |req, mut res| {
+        post "/todo/:id/update_description" => |req, mut res| {
             match req.param("id").unwrap().parse::<usize>() {
                 Ok(id) => {
-                    match domain::Description::new(req.param("description").unwrap()) {
-                        Ok(desc) => {
-                            let r = command.execute_with_decorator(&id, Command::UpdateText(desc), NopEventDecorator::<Event>::default());
-                            match r {
-                                Ok(event_count) => format!("Generated {} new events", event_count),
+                    let mut buf = Vec::new();
+                    req.origin.read_to_end(&mut buf).unwrap();
+                    let desc_str_res: Result<String,_> = serde_json::from_slice(&buf);
+                    match desc_str_res {
+                        Ok(desc_str) => {
+                            match domain::Description::new(desc_str) {
+                                Ok(desc) => {
+                                    let r = command.execute_with_decorator(&id, Command::UpdateText(desc), NopEventDecorator::<Event>::default());
+                                    match r {
+                                        Ok(event_count) => format!("Generated {} new events", event_count),
+                                        Err(CommandAggregateError::AggregateNotFound) => {
+                                            res.set(StatusCode::NotFound);
+                                            "Nope, not here".to_owned()
+                                        }
+                                        Err(e) => {
+                                            res.set(StatusCode::BadRequest);
+                                            format!("Error: {}", e)
+                                        }
+                                    }
+                                }
                                 Err(e) => {
                                     res.set(StatusCode::BadRequest);
                                     format!("Error: {}", e)
                                 }
                             }
                         }
-                        Err(_) => {
+                        Err(e) => {
                             res.set(StatusCode::BadRequest);
-                            "Invalid description".to_owned()
+                            format!("Deserialization Error: {}", e)
                         }
                     }
                 }
@@ -275,7 +296,7 @@ fn main() {
         }
     });
 
-    server.listen("127.0.0.1:2777").unwrap();
+    server.listen("0.0.0.0:2777").unwrap();
 
     println!("---DONE---");
 }

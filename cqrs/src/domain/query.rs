@@ -1,6 +1,6 @@
 use super::{Aggregate, RestoreAggregate, HydratedAggregate};
 use super::super::{Since, EventSource, SnapshotSource, VersionedEvent};
-use error::LoadAggregateError;
+use error::{LoadAggregateError, ExecuteError};
 use std::borrow::Borrow;
 use std::error;
 use std::marker::PhantomData;
@@ -63,19 +63,19 @@ impl<Agg, ESource> EventsView<Agg, ESource>
         ESource: EventSource<Event=Agg::Event>,
         ESource::Events: Borrow<[VersionedEvent<Agg::Event>]> + IntoIterator<Item=VersionedEvent<Agg::Event>>,
 {
-    pub fn rehydrate(&self, agg_id: &ESource::AggregateId) -> Result<HydratedAggregate<Agg>, ESource::Error> {
+    pub fn rehydrate(&self, agg_id: &ESource::AggregateId) -> Result<Option<HydratedAggregate<Agg>>, ESource::Error> {
         let events =
             self.event_source.read_events(agg_id, Since::BeginningOfStream)?;
 
-        let mut snapshot = HydratedAggregate::default();
-
         if let Some(evts) = events {
+            let mut snapshot = HydratedAggregate::default();
             for event in evts.into_iter() {
                 snapshot.apply(event);
             }
+            Ok(Some(snapshot))
+        } else {
+            Ok(None)
         }
-
-        Ok(snapshot)
     }
 }
 
@@ -94,8 +94,10 @@ impl<Agg, SSource> SnapshotView<Agg, SSource>
         Agg: RestoreAggregate,
         SSource: SnapshotSource<Snapshot=Agg::Snapshot>,
 {
-    pub fn rehydrate(&self, agg_id: &SSource::AggregateId) -> Result<HydratedAggregate<Agg>, SSource::Error> {
-        let aggregate = HydratedAggregate::restore(self.snapshot_source.get_snapshot(agg_id)?);
+    pub fn rehydrate(&self, agg_id: &SSource::AggregateId) -> Result<Option<HydratedAggregate<Agg>>, SSource::Error> {
+        let aggregate =
+            self.snapshot_source.get_snapshot(agg_id)?
+                .map(|s| s.into());
         Ok(aggregate)
     }
 }
@@ -120,30 +122,46 @@ impl<Agg, ESource, SSource> SnapshotAndEventsView<Agg, ESource, SSource>
         ESource::Events: Borrow<[VersionedEvent<Agg::Event>]> + IntoIterator<Item=VersionedEvent<Agg::Event>>,
         SSource: SnapshotSource<Snapshot=Agg::Snapshot, AggregateId=ESource::AggregateId>,
 {
-    pub fn rehydrate(&self, agg_id: &ESource::AggregateId) -> Result<HydratedAggregate<Agg>, LoadAggregateError<ESource::Error, SSource::Error>> {
-        let mut snapshot =
+    pub fn rehydrate(&self, agg_id: &ESource::AggregateId) -> Result<Option<HydratedAggregate<Agg>>, LoadAggregateError<ESource::Error, SSource::Error>> {
+        let snapshot_opt =
             self.snapshot_source.rehydrate(agg_id)
                 .map_err(LoadAggregateError::Snapshot)?;
 
-        let events =
-            self.event_source.read_events(agg_id, snapshot.version.into())
+        let since =
+            if let Some(ref s) = snapshot_opt {
+                s.version.into()
+            } else {
+                Since::BeginningOfStream
+            };
+
+        let events_opt =
+            self.event_source.read_events(agg_id, since)
                 .map_err(LoadAggregateError::Events)?;
 
-        if let Some(evts) = events {
-            for event in evts.into_iter() {
-                snapshot.apply(event);
-            }
-        }
+        if snapshot_opt.is_none() && events_opt.is_none() {
+            Ok(None)
+        } else {
+            let mut aggregate = snapshot_opt.unwrap_or_default();
 
-        Ok(snapshot)
+            if let Some(events) = events_opt {
+                for event in events.into_iter() {
+                    aggregate.apply(event);
+                }
+            }
+
+            Ok(Some(aggregate))
+        }
     }
 }
 
-pub trait AggregateQuery<Agg: Aggregate> {
+pub trait AggregateQuery<Agg: Aggregate>: Sized {
     type AggregateId;
     type Error: error::Error;
 
-    fn rehydrate(&self, agg_id: &Self::AggregateId) -> Result<HydratedAggregate<Agg>, Self::Error>;
+    fn rehydrate(&self, agg_id: &Self::AggregateId) -> Result<Option<HydratedAggregate<Agg>>, Self::Error>;
+    fn to_executor(self) -> ::domain::command::CommandExecutor<Agg, Self> {
+        ::domain::command::CommandExecutor::from_view(self)
+    }
 }
 
 impl<Agg, ESource> AggregateQuery<Agg> for EventsView<Agg, ESource>
@@ -155,7 +173,7 @@ impl<Agg, ESource> AggregateQuery<Agg> for EventsView<Agg, ESource>
     type AggregateId = ESource::AggregateId;
     type Error = ESource::Error;
 
-    fn rehydrate(&self, agg_id: &Self::AggregateId) -> Result<HydratedAggregate<Agg>, Self::Error> {
+    fn rehydrate(&self, agg_id: &Self::AggregateId) -> Result<Option<HydratedAggregate<Agg>>, Self::Error> {
         EventsView::rehydrate(&self, agg_id)
     }
 }
@@ -169,7 +187,7 @@ impl<Agg, SSource> AggregateQuery<Agg> for SnapshotView<Agg, SSource>
     type AggregateId = SSource::AggregateId;
     type Error = SSource::Error;
 
-    fn rehydrate(&self, agg_id: &Self::AggregateId) -> Result<HydratedAggregate<Agg>, Self::Error> {
+    fn rehydrate(&self, agg_id: &Self::AggregateId) -> Result<Option<HydratedAggregate<Agg>>, Self::Error> {
         SnapshotView::rehydrate(&self, agg_id)
     }
 }
@@ -185,7 +203,7 @@ impl<Agg, ESource, SSource> AggregateQuery<Agg> for SnapshotAndEventsView<Agg, E
     type AggregateId = ESource::AggregateId;
     type Error = LoadAggregateError<ESource::Error, SSource::Error>;
 
-    fn rehydrate(&self, agg_id: &Self::AggregateId) -> Result<HydratedAggregate<Agg>, Self::Error> {
+    fn rehydrate(&self, agg_id: &Self::AggregateId) -> Result<Option<HydratedAggregate<Agg>>, Self::Error> {
         SnapshotAndEventsView::rehydrate(&self, agg_id)
     }
 }

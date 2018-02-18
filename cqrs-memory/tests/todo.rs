@@ -46,8 +46,8 @@ fn main_test() {
 
     let decorator = NopEventDecorator::<Event>::default();
 
-    command.execute_with_decorator(&agg_1, Command::Create(other_creation_description.clone(), Some(future_reminder)), decorator).unwrap();
-    command.execute_with_decorator(&agg_2, Command::Create(creation_description.clone(), None), decorator).unwrap();
+    command.execute_new_with_decorator(&agg_1, Command::Create(other_creation_description.clone(), Some(future_reminder)), decorator).unwrap();
+    command.execute_new_with_decorator(&agg_2, Command::Create(creation_description.clone(), None), decorator).unwrap();
     println!("0: {:#?}\n", view);
     command.execute_with_decorator(&agg_2, Command::SetReminder(future_reminder), decorator).unwrap();
     println!("1: {:#?}\n", view);
@@ -72,7 +72,7 @@ fn main_test() {
         TodoStatus::NotCompleted,
     ));
     let actual_aggregate_1: HydratedAggregate<TodoAggregate> =
-        view.rehydrate(&agg_1).unwrap();
+        view.rehydrate(&agg_1).unwrap().unwrap();
 
     assert_eq!(actual_aggregate_1.get_version(), AggregateVersion::Version(Version::new(1)));
     assert_eq!(actual_aggregate_1.inspect_aggregate().inspect_state(), &expected_state_1);

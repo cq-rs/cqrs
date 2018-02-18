@@ -291,9 +291,9 @@ pub trait EventDecorator {
     type Event;
     type DecoratedEvent;
 
-    fn decorate(&self, event: &Self::Event) -> Self::DecoratedEvent;
-    fn decorate_events(&self, events: &[Self::Event]) -> Vec<Self::DecoratedEvent> {
-        events.iter()
+    fn decorate(&self, event: Self::Event) -> Self::DecoratedEvent;
+    fn decorate_events<Events: IntoIterator<Item=Self::Event>>(&self, events: Events) -> Vec<Self::DecoratedEvent> {
+        events.into_iter()
             .map(|e| self.decorate(e))
             .collect()
     }
