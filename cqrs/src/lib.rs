@@ -64,6 +64,12 @@ impl AddAssign<usize> for Version {
     }
 }
 
+impl From<usize> for Version {
+    fn from(v: usize) -> Self {
+        Self::new(v)
+    }
+}
+
 impl ::std::borrow::Borrow<usize> for Version {
     #[inline]
     fn borrow(&self) -> &usize {

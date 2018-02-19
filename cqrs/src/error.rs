@@ -1,5 +1,5 @@
 use super::Precondition;
-use domain::AggregatePrecondition;
+use domain::{AggregatePrecondition, AggregateVersion};
 use std::error;
 use std::fmt;
 
@@ -83,7 +83,7 @@ impl<EErr, SErr> error::Error for PersistAggregateError<EErr, SErr>
 
 #[derive(Debug, Clone, Hash, PartialEq)]
 pub enum ExecuteError<CErr, LErr> {
-    AggregateNotFound,
+    PreconditionFailed(AggregatePrecondition),
     Command(CErr),
     Load(LErr),
 }
@@ -94,12 +94,22 @@ impl<CErr, LErr> fmt::Display for ExecuteError<CErr, LErr>
         LErr: error::Error,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let err = self as &error::Error;
-        f.write_str(err.description())?;
-        if let Some(cause) = err.cause() {
-            write!(f, ": {}", cause)
+        if let ExecuteError::PreconditionFailed(ref precondition) = *self {
+            f.write_str("precondition failed: ")?;
+            match *precondition {
+                AggregatePrecondition::Exists => f.write_str("aggregate does not exist (expected existing)"),
+                AggregatePrecondition::New => f.write_str("aggregate already exists (expected new)"),
+                AggregatePrecondition::ExpectedVersion(AggregateVersion::Initial) => f.write_str("aggregate version does not match (expected default)"),
+                AggregatePrecondition::ExpectedVersion(AggregateVersion::Version(v)) => write!(f, "aggregate version does not match (expected version {})", v),
+            }
         } else {
-            Ok(())
+            let err = self as &error::Error;
+            f.write_str(err.description())?;
+            if let Some(cause) = err.cause() {
+                write!(f, ": {}", cause)
+            } else {
+                Ok(())
+            }
         }
     }
 }
@@ -111,7 +121,7 @@ impl<CErr, LErr> error::Error for ExecuteError<CErr, LErr>
 {
     fn description(&self) -> &str {
         match *self {
-            ExecuteError::AggregateNotFound => "aggregate not found",
+            ExecuteError::PreconditionFailed(_) => "precondition failed",
             ExecuteError::Command(_) => "invalid command",
             ExecuteError::Load(_) => "loading aggregate",
         }
@@ -119,26 +129,33 @@ impl<CErr, LErr> error::Error for ExecuteError<CErr, LErr>
 
     fn cause(&self) -> Option<&error::Error> {
         match *self {
-            ExecuteError::AggregateNotFound => None,
+            ExecuteError::PreconditionFailed(_) => None,
             ExecuteError::Command(ref e) => Some(e),
             ExecuteError::Load(ref e) => Some(e),
         }
     }
 }
 
+impl<CErr, EErr, SErr> From<LoadAggregateError<EErr, SErr>> for ExecuteError<CErr, LoadAggregateError<EErr, SErr>>
+    where
+        CErr: error::Error,
+        EErr: error::Error,
+        SErr: error::Error,
+{
+    fn from(e: LoadAggregateError<EErr, SErr>) -> Self {
+        ExecuteError::Load(e)
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq)]
-pub enum CommandAggregateError<CErr, LErr, PErr> {
-    AggregateNotFound,
-    PreconditionFailed(AggregatePrecondition),
-    Command(CErr),
-    Load(LErr),
+pub enum ExecuteAndPersistError<EErr, PErr> {
+    Execute(EErr),
     Persist(PErr),
 }
 
-impl<CErr, LErr, PErr> fmt::Display for CommandAggregateError<CErr, LErr, PErr>
+impl<EErr, PErr> fmt::Display for ExecuteAndPersistError<EErr, PErr>
     where
-        CErr: error::Error,
-        LErr: error::Error,
+        EErr: error::Error,
         PErr: error::Error,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -152,43 +169,45 @@ impl<CErr, LErr, PErr> fmt::Display for CommandAggregateError<CErr, LErr, PErr>
     }
 }
 
-impl<CErr, LErr, PErr> error::Error for CommandAggregateError<CErr, LErr, PErr>
+impl<EErr, PErr> error::Error for ExecuteAndPersistError<EErr, PErr>
     where
-        CErr: error::Error,
-        LErr: error::Error,
+        EErr: error::Error,
         PErr: error::Error,
 {
     fn description(&self) -> &str {
         match *self {
-            CommandAggregateError::AggregateNotFound => "aggregate not found",
-            CommandAggregateError::PreconditionFailed(AggregatePrecondition::New) => "precondition failed: aggregate not expected",
-            CommandAggregateError::PreconditionFailed(AggregatePrecondition::ExpectedVersion(_)) => "precondition failed: aggregate version",
-            CommandAggregateError::Command(_) => "executing command",
-            CommandAggregateError::Load(_) => "loading aggregate",
-            CommandAggregateError::Persist(_) => "persisting aggregate",
+            ExecuteAndPersistError::Execute(_) => "executing command",
+            ExecuteAndPersistError::Persist(_) => "persisting aggregate",
         }
     }
 
     fn cause(&self) -> Option<&error::Error> {
         match *self {
-            CommandAggregateError::AggregateNotFound => None,
-            CommandAggregateError::PreconditionFailed(_) => None,
-            CommandAggregateError::Command(ref e) => Some(e),
-            CommandAggregateError::Load(ref e) => Some(e),
-            CommandAggregateError::Persist(ref e) => Some(e),
+            ExecuteAndPersistError::Execute(ref e) => Some(e),
+            ExecuteAndPersistError::Persist(ref e) => Some(e),
         }
     }
 }
 
-impl<CErr, PErr, EErr, SErr> From<LoadAggregateError<EErr, SErr>> for CommandAggregateError<CErr, LoadAggregateError<EErr, SErr>, PErr>
+impl<XErr, EErr, SErr> From<PersistAggregateError<EErr, SErr>> for ExecuteAndPersistError<XErr, PersistAggregateError<EErr, SErr>>
     where
-        CErr: error::Error,
+        XErr: error::Error,
         EErr: error::Error,
         SErr: error::Error,
+{
+    fn from(err: PersistAggregateError<EErr, SErr>) -> Self {
+        ExecuteAndPersistError::Persist(err)
+    }
+}
+
+impl<CErr, LErr, PErr> From<ExecuteError<CErr, LErr>> for ExecuteAndPersistError<ExecuteError<CErr, LErr>, PErr>
+    where
+        CErr: error::Error,
+        LErr: error::Error,
         PErr: error::Error,
 {
-    fn from(err: LoadAggregateError<EErr, SErr>) -> Self {
-        CommandAggregateError::Load(err)
+    fn from(err: ExecuteError<CErr, LErr>) -> Self {
+        ExecuteAndPersistError::Execute(err)
     }
 }
 

@@ -3,16 +3,17 @@ use super::{VersionedEvent, VersionedSnapshot};
 use std::borrow::Borrow;
 use std::ops;
 use std::fmt;
+use std::error;
 
 pub mod query;
-pub mod command;
+pub mod execute;
 pub mod persist;
 
 pub trait Aggregate: Default {
     type Events;//: Borrow<[Self::Event]> + IntoIterator<Item=Self::Event>;
     type Event;
     type Command;
-    type CommandError;
+    type CommandError: error::Error;
 
     fn apply(&mut self, event: Self::Event);
     fn execute(&self, command: Self::Command) -> Result<Self::Events, Self::CommandError>;
@@ -106,6 +107,7 @@ impl From<AggregateVersion> for Precondition {
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum AggregatePrecondition {
     New,
+    Exists,
     ExpectedVersion(AggregateVersion),
 }
 

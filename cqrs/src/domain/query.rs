@@ -1,6 +1,6 @@
 use super::{Aggregate, RestoreAggregate, HydratedAggregate};
 use super::super::{Since, EventSource, SnapshotSource, VersionedEvent};
-use error::{LoadAggregateError, ExecuteError};
+use error::{LoadAggregateError};
 use std::borrow::Borrow;
 use std::error;
 use std::marker::PhantomData;
@@ -159,9 +159,6 @@ pub trait AggregateQuery<Agg: Aggregate>: Sized {
     type Error: error::Error;
 
     fn rehydrate(&self, agg_id: &Self::AggregateId) -> Result<Option<HydratedAggregate<Agg>>, Self::Error>;
-    fn to_executor(self) -> ::domain::command::CommandExecutor<Agg, Self> {
-        ::domain::command::CommandExecutor::from_view(self)
-    }
 }
 
 impl<Agg, ESource> AggregateQuery<Agg> for EventsView<Agg, ESource>

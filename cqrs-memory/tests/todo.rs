@@ -5,10 +5,11 @@ extern crate cqrs_todo_core;
 
 use cqrs::trivial::NopEventDecorator;
 use cqrs::{Since, VersionedEvent, Version};
-use cqrs::domain::{AggregateVersion, HydratedAggregate};
-use cqrs::domain::command::{DecoratedAggregateCommand, PersistAndSnapshotAggregateCommander};
+use cqrs::domain::{AggregateVersion, HydratedAggregate, AggregatePrecondition};
 use cqrs::domain::query::QueryableSnapshotAggregate;
-use cqrs::error::{CommandAggregateError, LoadAggregateError, PersistAggregateError, AppendEventsError, Never};
+use cqrs::domain::execute::ViewExecutor;
+use cqrs::domain::persist::PersistableSnapshotAggregate;
+use cqrs::error::{LoadAggregateError, PersistAggregateError, AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
 use std::time::{Instant, Duration};
@@ -26,10 +27,7 @@ fn main_test() {
 
     let view = TodoAggregate::snapshot_with_events_view(&es, &ss);
     let command_view = TodoAggregate::snapshot_with_events_view(&es, &ss);
-    let command = PersistAndSnapshotAggregateCommander::new(command_view, &es, &ss);
-
-    let command =
-        &command as &DecoratedAggregateCommand<TodoAggregate, NopEventDecorator<Event>, AggregateId=usize, Error=CommandAggregateError<error::CommandError, LoadAggregateError<Never, Never>, PersistAggregateError<AppendEventsError<Never>, Never>>>;
+    let command = TodoAggregate::persist_events_and_snapshot(ViewExecutor::new(command_view), &es, &ss);
 
     let agg_1 = 0;
     let agg_2 = 34;
@@ -46,24 +44,24 @@ fn main_test() {
 
     let decorator = NopEventDecorator::<Event>::default();
 
-    command.execute_new_with_decorator(&agg_1, Command::Create(other_creation_description.clone(), Some(future_reminder)), decorator).unwrap();
-    command.execute_new_with_decorator(&agg_2, Command::Create(creation_description.clone(), None), decorator).unwrap();
+    command.execute_and_persist_with_decorator(&agg_1, Command::Create(other_creation_description.clone(), Some(future_reminder)), Some(AggregatePrecondition::New), decorator).unwrap();
+    command.execute_and_persist_with_decorator(&agg_2, Command::Create(creation_description.clone(), None), Some(AggregatePrecondition::New), decorator).unwrap();
     println!("0: {:#?}\n", view);
-    command.execute_with_decorator(&agg_2, Command::SetReminder(future_reminder), decorator).unwrap();
+    command.execute_and_persist_with_decorator(&agg_2, Command::SetReminder(future_reminder), Some(AggregatePrecondition::Exists), decorator).unwrap();
     println!("1: {:#?}\n", view);
-    command.execute_with_decorator(&agg_2, Command::ToggleCompletion, decorator).unwrap();
+    command.execute_and_persist_with_decorator(&agg_2, Command::ToggleCompletion, Some(AggregatePrecondition::ExpectedVersion(AggregateVersion::Version(1.into()))), decorator).unwrap();
     println!("2: {:#?}\n", view);
-    command.execute_with_decorator(&agg_2, Command::MarkCompleted, decorator).unwrap();
+    command.execute_and_persist_with_decorator(&agg_2, Command::MarkCompleted, Some(AggregatePrecondition::Exists), decorator).unwrap();
     println!("3: {:#?}\n", view);
-    command.execute_with_decorator(&agg_2, Command::ResetCompleted, decorator).unwrap();
+    command.execute_and_persist_with_decorator(&agg_2, Command::ResetCompleted, Some(AggregatePrecondition::Exists), decorator).unwrap();
     println!("4: {:#?}\n", view);
-    command.execute_with_decorator(&agg_2, Command::CancelReminder, decorator).unwrap();
+    command.execute_and_persist_with_decorator(&agg_2, Command::CancelReminder, Some(AggregatePrecondition::Exists), decorator).unwrap();
     println!("5: {:#?}\n", view);
-    command.execute_with_decorator(&agg_2, Command::UpdateText(updated_description.clone()), decorator).unwrap();
+    command.execute_and_persist_with_decorator(&agg_2, Command::UpdateText(updated_description.clone()), Some(AggregatePrecondition::Exists), decorator).unwrap();
     println!("6: {:#?}\n", view);
-    command.execute_with_decorator(&agg_2, Command::MarkCompleted, decorator).unwrap();
+    command.execute_and_persist_with_decorator(&agg_2, Command::MarkCompleted, Some(AggregatePrecondition::Exists), decorator).unwrap();
     println!("7: {:#?}\n", view);
-    command.execute_with_decorator(&agg_2, Command::MarkCompleted, decorator).unwrap();
+    command.execute_and_persist_with_decorator(&agg_2, Command::MarkCompleted, Some(AggregatePrecondition::Exists), decorator).unwrap();
     println!("8: {:#?}\n", view);
 
     let expected_state_1 = TodoState::Created(TodoData::new(
