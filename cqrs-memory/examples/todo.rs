@@ -2,11 +2,12 @@ extern crate cqrs;
 extern crate cqrs_memory;
 extern crate cqrs_todo_core;
 extern crate fnv;
-#[macro_use] extern crate nickel;
+//#[macro_use] extern crate nickel;
+extern crate iron;
+#[macro_use] extern crate juniper;
+extern crate juniper_iron;
+extern crate mount;
 extern crate clap;
-extern crate serde;
-#[macro_use] extern crate serde_derive;
-extern crate serde_json;
 
 use cqrs::trivial::{NullEventStore, NullSnapshotStore, NopEventDecorator};
 use cqrs::{Precondition, Since, VersionedEvent, VersionedSnapshot, EventAppend, SnapshotPersist};
@@ -26,55 +27,12 @@ use std::sync::Arc;
 use cqrs_todo_core::{Event, TodoAggregate, TodoState, TodoData, TodoStatus, Command};
 use cqrs_todo_core::domain;
 
-use nickel::{Nickel, HttpRouter};
-use nickel::status::StatusCode;
-use nickel::MediaType;
+use mount::Mount;
+use juniper::{FieldResult, Value};
+use juniper::EmptyMutation;
+use juniper_iron::GraphQLHandler;
+
 use clap::{App, Arg};
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
-struct TodoDto<'a> {
-    description: &'a str,
-    reminder: Option<&'a str>,
-    is_complete: bool,
-}
-
-trait EventStore {
-    type Event;
-    type AggregateId;
-    type ReadError: StdError;
-    type AppendError: StdError;
-}
-
-impl<T, Event, AggId> EventStore for T
-    where
-        T: cqrs::EventSource<Event=Event, AggregateId=AggId> + cqrs::EventAppend<Event=Event, AggregateId=AggId> + Sized,
-        <T as cqrs::EventSource>::Error: StdError,
-        <T as cqrs::EventAppend>::Error: StdError,
-{
-    type Event = Event;
-    type AggregateId = AggId;
-    type ReadError = <T as cqrs::EventSource>::Error;
-    type AppendError = <T as cqrs::EventAppend>::Error;
-}
-
-trait SnapshotStore {
-    type Snapshot;
-    type AggregateId;
-    type ReadError: StdError;
-    type PersistError: StdError;
-}
-
-impl<T, Snapshot, AggId> SnapshotStore for T
-    where
-        T: cqrs::SnapshotSource<Snapshot=Snapshot, AggregateId=AggId> + cqrs::SnapshotPersist<Snapshot=Snapshot, AggregateId=AggId>,
-        <T as cqrs::SnapshotSource>::Error: StdError,
-        <T as cqrs::SnapshotPersist>::Error: StdError,
-{
-    type Snapshot = Snapshot;
-    type AggregateId = AggId;
-    type ReadError = <T as cqrs::SnapshotSource>::Error;
-    type PersistError = <T as cqrs::SnapshotPersist>::Error;
-}
 
 pub enum MemoryOrNullEventStore<E, I, H = fnv::FnvBuildHasher>
     where
@@ -169,6 +127,126 @@ impl<S, I, H> cqrs::SnapshotPersist for MemoryOrNullSnapshotStore<S, I, H>
     }
 }
 
+type View =
+    cqrs::domain::query::SnapshotAndEventsView<
+        TodoAggregate,
+        Arc<MemoryOrNullEventStore<
+            Event,
+            usize,
+            fnv::FnvBuildHasher,
+        >>,
+        Arc<MemoryOrNullSnapshotStore<
+            TodoState,
+            usize,
+            fnv::FnvBuildHasher,
+        >>,
+    >;
+
+type Commander =
+    cqrs::domain::persist::EventsAndSnapshotWithDecorator<
+        TodoAggregate,
+        cqrs::domain::execute::ViewExecutor<
+            TodoAggregate,
+            View,
+        >,
+        Arc<MemoryOrNullEventStore<
+            Event,
+            usize,
+            fnv::FnvBuildHasher,
+        >>,
+        Arc<MemoryOrNullSnapshotStore<
+            TodoState,
+            usize,
+            fnv::FnvBuildHasher,
+        >>,
+        cqrs::trivial::NopEventDecorator<Event>,
+    >;
+
+struct Context {
+    query: Arc<View>,
+    command: Arc<Commander>,
+}
+
+impl juniper::Context for Context {}
+
+struct Query;
+
+graphql_object!(Query: Context |&self| {
+    field apiVersion() -> &str {
+        "1.0"
+    }
+
+    field todo(&executor, id: i32) -> FieldResult<TodoQL> {
+        let context = executor.context();
+
+        let value = context.query.rehydrate(&(id as usize))?;
+
+        let hydro = value.ok_or("not found")?;
+
+        Ok(TodoQL(hydro))
+    }
+});
+
+struct TodoQL(HydratedAggregate<TodoAggregate>);
+
+graphql_object!(TodoQL: Context |&self| {
+    field description() -> FieldResult<&str> {
+        Ok(self.0.inspect_aggregate().inspect_state().get_data()?.description.as_str())
+    }
+
+    field reminder() -> FieldResult<Option<ReminderQL>> {
+        Ok(self.0.inspect_aggregate().inspect_state().get_data()?.reminder.map(|r| ReminderQL(r)))
+    }
+
+    field completed() -> FieldResult<bool> {
+        Ok(self.0.inspect_aggregate().inspect_state().get_data()?.status == TodoStatus::Completed)
+    }
+
+    field version() -> FieldResult<String> {
+        Ok(self.0.get_version().to_string())
+    }
+});
+
+struct ReminderQL(cqrs_todo_core::domain::Reminder);
+
+graphql_scalar!(ReminderQL {
+    description: "A reminder"
+
+    resolve(&self) -> Value {
+        Value::string("a reminder")
+    }
+
+    from_input_value(v: &InputValue) -> Option<ReminderQL> {
+        if v.as_string_value() == Some("now") {
+            Some(ReminderQL(cqrs_todo_core::domain::Reminder::new(Instant::now(), Instant::now() + Duration::from_secs(100)).unwrap()))
+        } else {
+            None
+        }
+    }
+});
+
+struct Mutations;
+
+graphql_object!(Mutations: Context |&self| {
+    field todo(id: i32) -> FieldResult<TodoMutQL> {
+        Ok(TodoMutQL(id as usize))
+    }
+});
+
+struct TodoMutQL(usize);
+
+graphql_object!(TodoMutQL: Context |&self| {
+    field set_description(&executor, text: String) -> FieldResult<&str> {
+        let description = domain::Description::new(text)?;
+
+        let command = Command::UpdateText(description);
+
+        executor.context().command.execute_and_persist_with_decorator(&self.0, command, Some(AggregatePrecondition::Exists), Default::default())?;
+
+        Ok("Done.")
+    }
+});
+
 fn main() {
     let app = App::new("todo")
         .arg(Arg::with_name("null-event-store")
@@ -226,127 +304,30 @@ fn main() {
         TodoAggregate::persist_events_and_snapshot(executor, Arc::clone(&es), Arc::clone(&ss))
             .without_decorator();
 
-    type View =
-        cqrs::domain::query::SnapshotAndEventsView<
-            TodoAggregate,
-            Arc<MemoryOrNullEventStore<
-                Event,
-                usize,
-                fnv::FnvBuildHasher,
-            >>,
-            Arc<MemoryOrNullSnapshotStore<
-                TodoState,
-                usize,
-                fnv::FnvBuildHasher,
-            >>,
-        >;
-    type Commander =
-        cqrs::domain::persist::EventsAndSnapshotWithDecorator<
-            TodoAggregate,
-            cqrs::domain::execute::ViewExecutor<
-                TodoAggregate,
-                View,
-            >,
-            Arc<MemoryOrNullEventStore<
-                Event,
-                usize,
-                fnv::FnvBuildHasher,
-            >>,
-            Arc<MemoryOrNullSnapshotStore<
-                TodoState,
-                usize,
-                fnv::FnvBuildHasher,
-            >>,
-            cqrs::trivial::NopEventDecorator<Event>,
-        >;
 
-    struct ServerData {
-        query: Arc<View>,
-        command: Arc<Commander>,
+    let query = Arc::new(view);
+    let command = Arc::new(command);
+
+    let context_factory = move |_: &mut iron::Request| {
+        Context {
+            query: Arc::clone(&query),
+            command: Arc::clone(&command),
+        }
     };
 
-    let data = ServerData {
-        query: Arc::new(view),
-        command: Arc::new(command),
-    };
+    let mut mount = Mount::new();
 
-    let mut server = Nickel::with_data(data);
+    let graphql_endpoint = GraphQLHandler::new(
+        context_factory,
+        Query,
+        Mutations,
+    );
 
-    server.get("/todo/:id", middleware! { |req, mut res| <ServerData> {
-        match req.param("id").unwrap().parse::<usize>() {
-            Ok(id) => {
-                let agg_opt: Option<HydratedAggregate<TodoAggregate>> = req.server_data().query.rehydrate(&id).unwrap();
-                if let Some(agg) = agg_opt {
-                    if let TodoState::Created(ref data) = *agg.inspect_aggregate().inspect_state() {
-                        let ret = TodoDto {
-                            description: Borrow::<str>::borrow(&data.description),
-                            reminder: data.reminder.map(|_| "yes"),
-                            is_complete: data.status == TodoStatus::Completed,
-                        };
-                        res.set(MediaType::Json);
-                        let h = nickel::hyper::header::Link::new(vec![nickel::hyper::header::LinkValue::new(agg.get_version().to_string())]);
-                        res.headers_mut().set(h);
-                        serde_json::to_string(&ret).unwrap()
-                    } else {
-                        res.set(StatusCode::InternalServerError);
-                        format!("Somehow you got an uninitialized todo.")
-                    }
-                } else {
-                    res.set(StatusCode::NotFound);
-                    format!("Nice try with {}, but it wasn't there.", req.param("id").unwrap())
-                }
-            }
-            Err(_) => {
-                res.set(StatusCode::NotFound);
-                "That wasn't a valid identifier".to_owned()
-            }
-        }
-    }});
+    mount.mount("/graphql", graphql_endpoint);
 
-    server.post("/todo/:id/update_description", middleware! { |req, mut res| <ServerData> {
-            match req.param("id").unwrap().parse::<usize>() {
-                Ok(id) => {
-                    let mut buf = Vec::new();
-                    req.origin.read_to_end(&mut buf).unwrap();
-                    let desc_str_res: Result<String,_> = serde_json::from_slice(&buf);
-                    match desc_str_res {
-                        Ok(desc_str) => {
-                            match domain::Description::new(desc_str) {
-                                Ok(desc) => {
-                                    let r = req.server_data().command.execute_and_persist_with_decorator(&id, Command::UpdateText(desc), Some(AggregatePrecondition::Exists), NopEventDecorator::<Event>::default());
-                                    match r {
-                                        Ok(()) => format!("Generated some new events"),
-                                        Err(ExecuteAndPersistError::Execute(ExecuteError::PreconditionFailed(_))) => {
-                                            res.set(StatusCode::NotFound);
-                                            "Nope, not here".to_owned()
-                                        }
-                                        Err(e) => {
-                                            res.set(StatusCode::BadRequest);
-                                            format!("Error: {}", e)
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    res.set(StatusCode::BadRequest);
-                                    format!("Error: {}", e)
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            res.set(StatusCode::BadRequest);
-                            format!("Deserialization Error: {}", e)
-                        }
-                    }
-                }
-                Err(_) => {
-                    res.set(StatusCode::NotFound);
-                    "I don't know that one".to_owned()
-                }
-            }
-        }
-    });
+    let chain = iron::Chain::new(mount);
 
-    server.listen("0.0.0.0:2777").unwrap();
+    iron::Iron::new(chain).http("0.0.0.0:2777").unwrap();
 
     println!("---DONE---");
 }

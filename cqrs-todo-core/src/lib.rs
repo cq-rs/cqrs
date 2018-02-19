@@ -46,6 +46,10 @@ pub mod domain {
                 })
             }
         }
+
+        pub fn as_str(&self) -> &str {
+            self.text.as_str()
+        }
     }
 
     impl Borrow<str> for Description {
@@ -296,6 +300,13 @@ impl TodoState {
                 Ok(events)
             }
             _ => Err(error::CommandError::NotInitialized),
+        }
+    }
+
+    pub fn get_data(&self) -> Result<&TodoData, &'static str> {
+        match *self {
+            TodoState::Uninitialized => Err("uninitialized"),
+            TodoState::Created(ref x) => Ok(x),
         }
     }
 }
