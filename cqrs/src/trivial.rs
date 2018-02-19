@@ -35,7 +35,7 @@ impl<Event, AggregateId> EventAppend for NullEventStore<Event, AggregateId> {
     type Error = AppendEventsError<Never>;
 
     #[inline]
-    fn append_events(&self, _aggregate_id: &Self::AggregateId, _events: &[Self::Event], _condition: Precondition) -> Result<(), Self::Error> {
+    fn append_events(&self, _aggregate_id: &Self::AggregateId, _events: &[Self::Event], _precondition: Option<Precondition>) -> Result<(), Self::Error> {
         Ok(())
     }
 }

@@ -1,4 +1,5 @@
 use super::Precondition;
+use domain::AggregatePrecondition;
 use std::error;
 use std::fmt;
 
@@ -128,6 +129,7 @@ impl<CErr, LErr> error::Error for ExecuteError<CErr, LErr>
 #[derive(Debug, Clone, Hash, PartialEq)]
 pub enum CommandAggregateError<CErr, LErr, PErr> {
     AggregateNotFound,
+    PreconditionFailed(AggregatePrecondition),
     Command(CErr),
     Load(LErr),
     Persist(PErr),
@@ -159,6 +161,8 @@ impl<CErr, LErr, PErr> error::Error for CommandAggregateError<CErr, LErr, PErr>
     fn description(&self) -> &str {
         match *self {
             CommandAggregateError::AggregateNotFound => "aggregate not found",
+            CommandAggregateError::PreconditionFailed(AggregatePrecondition::New) => "precondition failed: aggregate not expected",
+            CommandAggregateError::PreconditionFailed(AggregatePrecondition::ExpectedVersion(_)) => "precondition failed: aggregate version",
             CommandAggregateError::Command(_) => "executing command",
             CommandAggregateError::Load(_) => "loading aggregate",
             CommandAggregateError::Persist(_) => "persisting aggregate",
@@ -168,6 +172,7 @@ impl<CErr, LErr, PErr> error::Error for CommandAggregateError<CErr, LErr, PErr>
     fn cause(&self) -> Option<&error::Error> {
         match *self {
             CommandAggregateError::AggregateNotFound => None,
+            CommandAggregateError::PreconditionFailed(_) => None,
             CommandAggregateError::Command(ref e) => Some(e),
             CommandAggregateError::Load(ref e) => Some(e),
             CommandAggregateError::Persist(ref e) => Some(e),
@@ -203,7 +208,6 @@ impl<Err> fmt::Display for AppendEventsError<Err>
         f.write_str(": ")?;
         match *self {
             AppendEventsError::WriteError(ref e) => write!(f, "{}", e),
-            AppendEventsError::PreconditionFailed(Precondition::Always) => f.write_str("absurd"),
             AppendEventsError::PreconditionFailed(Precondition::LastVersion(v)) => write!(f, "expected version {}", v),
             AppendEventsError::PreconditionFailed(Precondition::NewStream) => f.write_str("new stream"),
             AppendEventsError::PreconditionFailed(Precondition::EmptyStream) => f.write_str("empty stream"),

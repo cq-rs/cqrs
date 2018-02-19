@@ -1,4 +1,4 @@
-use super::super::{EventAppend, SnapshotPersist, EventDecorator};
+use super::super::{EventAppend, SnapshotPersist, EventDecorator, Precondition};
 use super::{Aggregate, HydratedAggregate, SnapshotAggregate};
 use super::query::AggregateQuery;
 use error::{CommandAggregateError, ExecuteError, PersistAggregateError};
@@ -180,7 +180,7 @@ impl<Agg, Query, EAppend, SPersist, Decorator> DecoratedAggregateCommand<Agg, De
         let decorated_events =
             decorator.decorate_events(command_events);
 
-        self.appender.append_events(agg_id, &decorated_events, state.version.into())
+        self.appender.append_events(agg_id, &decorated_events, Some(Precondition::NewStream))
             .map_err(PersistAggregateError::Events)
             .map_err(CommandAggregateError::Persist)?;
 
@@ -213,7 +213,7 @@ impl<Agg, Query, EAppend, SPersist, Decorator> DecoratedAggregateCommand<Agg, De
             let decorated_events =
                 decorator.decorate_events(command_events);
 
-            self.appender.append_events(agg_id, &decorated_events, state.version.into())
+            self.appender.append_events(agg_id, &decorated_events, Some(state.version.into()))
                 .map_err(PersistAggregateError::Events)
                 .map_err(CommandAggregateError::Persist)?;
 

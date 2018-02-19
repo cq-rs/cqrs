@@ -12,6 +12,7 @@ use cqrs::trivial::{NullEventStore, NullSnapshotStore, NopEventDecorator};
 use cqrs::{Precondition, Since, VersionedEvent, VersionedSnapshot, EventAppend};
 use cqrs::domain::command::{DecoratedAggregateCommand, PersistAndSnapshotAggregateCommander};
 use cqrs::domain::query::QueryableSnapshotAggregate;
+use cqrs::domain::persist::PersistableSnapshotAggregate;
 use cqrs::domain::HydratedAggregate;
 use cqrs::error::{AppendEventsError, Never, CommandAggregateError};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
@@ -114,7 +115,7 @@ impl<E, I, H> cqrs::EventAppend for MemoryOrNullEventStore<E, I, H>
     type Event = E;
     type Error = AppendEventsError<Never>;
 
-    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], precondition: Precondition) -> Result<(), Self::Error> {
+    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], precondition: Option<Precondition>) -> Result<(), Self::Error> {
         match *self {
             MemoryOrNullEventStore::Memory(ref mem) => mem.append_events(agg_id, events, precondition),
             MemoryOrNullEventStore::Null(ref nil) => nil.append_events(agg_id, events, precondition),
@@ -207,13 +208,13 @@ fn main() {
     events.push(Event::Created(domain::Description::new("Ignored!").unwrap()));
     events.push(Event::ReminderUpdated(None));
 
-    es.append_events(&0, &events, Precondition::Always).unwrap();
+    es.append_events(&0, &events, None).unwrap();
 
     let view = TodoAggregate::snapshot_with_events_view(Arc::clone(&es), Arc::clone(&ss));
 
     //let view = SnapshotPlusEventsAggregateView::new(Arc::clone(&es), Arc::clone(&ss));
     let command_view = TodoAggregate::snapshot_with_events_view(Arc::clone(&es), Arc::clone(&ss));
-    let command  : PersistAndSnapshotAggregateCommander<TodoAggregate, _, _, _> = PersistAndSnapshotAggregateCommander::new(command_view, Arc::clone(&es), Arc::clone(&ss));
+    let command = TodoAggregate::persist_events_and_snapshot(command_view, Arc::clone(&es), Arc::clone(&ss));
 
     let view = Arc::new(view);
     let command = Arc::new(command);
@@ -263,9 +264,9 @@ fn main() {
                         Ok(desc_str) => {
                             match domain::Description::new(desc_str) {
                                 Ok(desc) => {
-                                    let r = command.execute_with_decorator(&id, Command::UpdateText(desc), NopEventDecorator::<Event>::default());
+                                    let r = command.execute_and_persist_with_decorator(&id, Command::UpdateText(desc), None, NopEventDecorator::<Event>::default());
                                     match r {
-                                        Ok(event_count) => format!("Generated {} new events", event_count),
+                                        Ok(()) => format!("Generated some new events"),
                                         Err(CommandAggregateError::AggregateNotFound) => {
                                             res.set(StatusCode::NotFound);
                                             "Nope, not here".to_owned()

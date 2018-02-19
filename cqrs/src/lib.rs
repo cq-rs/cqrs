@@ -86,17 +86,9 @@ impl From<Version> for Since {
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Precondition {
-    Always,
     LastVersion(Version),
     NewStream,
     EmptyStream,
-}
-
-impl Default for Precondition {
-    #[inline]
-    fn default() -> Self {
-        Precondition::Always
-    }
 }
 
 impl From<Version> for Precondition {
@@ -119,13 +111,34 @@ pub struct VersionedSnapshot<Snapshot> {
     pub snapshot: Snapshot,
 }
 
-pub trait EventSource {
+pub mod exp {
+    use super::*;
+
+    pub struct MappedEventSource<'a, ES, E, F>
+        where
+            ES: EventSource + 'a,
+            F: Fn(ES::Event) -> E,
+    {
+        pub backend: &'a ES,
+        pub f: F,
+        pub _phantom: ::std::marker::PhantomData<E>,
+    }
+}
+
+pub trait EventSource: Sized {
     type AggregateId;
     type Event;
     type Events;
     type Error: StdError;
 
     fn read_events(&self, agg_id: &Self::AggregateId, since: Since) -> Result<Option<Self::Events>, Self::Error>;
+    fn map<'a, E, F: Fn(Self::Event) -> E>(&'a self, f: F) -> exp::MappedEventSource<'a, Self, E, F> {
+        exp::MappedEventSource {
+            backend: &self,
+            f,
+            _phantom: ::std::marker::PhantomData,
+        }
+    }
 }
 
 impl<'a, T: EventSource + 'a> EventSource for &'a T {
@@ -169,7 +182,7 @@ pub trait EventAppend {
     type Event;
     type Error: StdError;
 
-    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], condition: Precondition) -> Result<(), Self::Error>;
+    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], precondition: Option<Precondition>) -> Result<(), Self::Error>;
 }
 
 impl<'a, T: EventAppend + 'a> EventAppend for &'a T {
@@ -178,8 +191,8 @@ impl<'a, T: EventAppend + 'a> EventAppend for &'a T {
     type Error = T::Error;
 
     #[inline]
-    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], condition: Precondition) -> Result<(), Self::Error> {
-        (**self).append_events(agg_id, events, condition)
+    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], precondition: Option<Precondition>) -> Result<(), Self::Error> {
+        (**self).append_events(agg_id, events, precondition)
     }
 }
 
@@ -189,8 +202,8 @@ impl<T: EventAppend> EventAppend for Rc<T> {
     type Error = T::Error;
 
     #[inline]
-    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], condition: Precondition) -> Result<(), Self::Error> {
-        (**self).append_events(agg_id, events, condition)
+    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], precondition: Option<Precondition>) -> Result<(), Self::Error> {
+        (**self).append_events(agg_id, events, precondition)
     }
 }
 
@@ -200,8 +213,8 @@ impl<T: EventAppend> EventAppend for Arc<T> {
     type Error = T::Error;
 
     #[inline]
-    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], condition: Precondition) -> Result<(), Self::Error> {
-        (**self).append_events(agg_id, events, condition)
+    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], precondition: Option<Precondition>) -> Result<(), Self::Error> {
+        (**self).append_events(agg_id, events, precondition)
     }
 }
 

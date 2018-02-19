@@ -2,6 +2,7 @@ pub use super::*;
 use trivial::{NullEventStore, NullSnapshotStore, NopEventDecorator};
 use domain::query::QueryableSnapshotAggregate;
 use domain::command::{PersistAndSnapshotAggregateCommander, DecoratedAggregateCommand};
+use domain::persist::{PersistableAggregate, PersistableSnapshotAggregate};
 use error::Never;
 use smallvec::SmallVec;
 
@@ -57,11 +58,16 @@ fn maybe_this_works() {
 
     let view = CoolAggregate::snapshot_with_events_view(&es, &ss);
     let command_view = CoolAggregate::snapshot_with_events_view(&es, &ss);
-    let command: PersistAndSnapshotAggregateCommander<CoolAggregate, _, _, _> = PersistAndSnapshotAggregateCommander::new(command_view, &es, &ss);
 
-    let err = command.execute_with_decorator(&0, MyCommand::Much, NopEventDecorator::default()).unwrap_err();
+    let x = CoolAggregate::persist_events_and_snapshot(command_view, &es, &ss);
 
-    assert_eq!(err, ::error::CommandAggregateError::AggregateNotFound);
+    x.execute_and_persist_with_decorator(&0, MyCommand::Much, Some(AggregatePrecondition::New), NopEventDecorator::default()).unwrap();
+
+    //let command: PersistAndSnapshotAggregateCommander<CoolAggregate, _, _, _> = PersistAndSnapshotAggregateCommander::new(command_view, &es, &ss);
+
+    //let err = command.execute_with_decorator(&0, MyCommand::Much, NopEventDecorator::default()).unwrap_err();
+
+    //assert_eq!(err, ::error::CommandAggregateError::AggregateNotFound);
 
     let agg: Option<HydratedAggregate<CoolAggregate>> = view.rehydrate(&0).unwrap();
 

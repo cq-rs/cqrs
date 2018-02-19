@@ -82,16 +82,19 @@ impl<Event, AggId, Hasher> EventAppend for MemoryEventStore<Event, AggId, Hasher
     type Event = Event;
     type Error = AppendEventsError<Never>;
 
-    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], condition: Precondition) -> Result<(), Self::Error> {
+    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], precondition: Option<Precondition>) -> Result<(), Self::Error> {
         if let Some(stream) = self.try_get_stream(&agg_id) {
-            stream.append_events(events, condition)
+            stream.append_events(events, precondition)
         } else {
-            if condition == Precondition::Always || condition == Precondition::NewStream || condition == Precondition::EmptyStream {
-                let stream = self.create_stream(&agg_id);
-                stream.append_events(events, Precondition::Always)
-            } else {
-                Err(AppendEventsError::PreconditionFailed(condition))
+            if let Some(precondition) = precondition {
+                match precondition {
+                    Precondition::EmptyStream | Precondition::LastVersion(_) => return Err(AppendEventsError::PreconditionFailed(precondition)),
+                    _ => {}
+                }
             }
+
+            let stream = self.create_stream(&agg_id);
+            stream.append_events(events, None)
         }
     }
 }

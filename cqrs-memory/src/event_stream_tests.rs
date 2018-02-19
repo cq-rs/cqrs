@@ -16,7 +16,7 @@ fn can_create_default() {
 fn can_add_events_with_event_stream_trait() {
     let es = TestMemoryEventStream::default();
     let events = Vec::new();
-    es.append_events(&events, Precondition::Always).unwrap();
+    es.append_events(&events, None).unwrap();
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn can_add_events_and_read_them_back_out() {
         .map(|pe| pe.event.clone())
         .collect();
 
-    es.append_events(&decorated_events, Precondition::Always).unwrap();
+    es.append_events(&decorated_events, None).unwrap();
     let actual_events = es.read(Since::BeginningOfStream);
     assert_eq!(all_events, actual_events);
 }
@@ -58,7 +58,7 @@ fn can_add_events_and_read_from_middle() {
         .map(|pe| pe.event.clone())
         .collect();
 
-    es.append_events(&decorated_events, Precondition::Always).unwrap();
+    es.append_events(&decorated_events, None).unwrap();
     let actual_events = es.read(Since::Version(Version::new(0)));
     assert_eq!(expected_events, actual_events);
 }
@@ -75,7 +75,7 @@ fn reading_with_version_one_past_end_gives_empty_set() {
         .map(|pe| pe.event.clone())
         .collect();
 
-    es.append_events(&decorated_events, Precondition::Always).unwrap();
+    es.append_events(&decorated_events, None).unwrap();
     let expected_events = Vec::<VersionedEvent<TestEvent>>::default();
     let actual_events = es.read(Since::Version(Version::new(1)));
     assert_eq!(expected_events, actual_events);
@@ -93,7 +93,7 @@ fn reading_with_version_more_than_one_past_end_gives_empty_stream() {
         .map(|pe| pe.event.clone())
         .collect();
 
-    es.append_events(&decorated_events, Precondition::Always).unwrap();
+    es.append_events(&decorated_events, None).unwrap();
     let expected_events = Vec::<VersionedEvent<TestEvent>>::default();
     let actual_events = es.read(Since::Version(Version::new(2)));
     assert_eq!(expected_events, actual_events);

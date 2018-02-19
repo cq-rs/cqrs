@@ -52,6 +52,16 @@ impl Default for AggregateVersion {
     }
 }
 
+impl PartialEq<Version> for AggregateVersion {
+    fn eq(&self, rhs: &Version) -> bool {
+        if let AggregateVersion::Version(ref v) = *self {
+            v == rhs
+        } else {
+            false
+        }
+    }
+}
+
 impl ops::AddAssign<usize> for AggregateVersion {
     #[inline]
     fn add_assign(&mut self, rhs: usize) {
@@ -90,6 +100,19 @@ impl From<AggregateVersion> for Precondition {
         } else {
             Precondition::EmptyStream
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum AggregatePrecondition {
+    New,
+    ExpectedVersion(AggregateVersion),
+}
+
+impl From<AggregateVersion> for AggregatePrecondition {
+    #[inline]
+    fn from(v: AggregateVersion) -> Self {
+        AggregatePrecondition::ExpectedVersion(v)
     }
 }
 

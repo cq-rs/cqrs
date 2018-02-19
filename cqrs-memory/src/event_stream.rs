@@ -28,15 +28,14 @@ impl<Event> MemoryEventStream<Event>
     where
         Event: Clone,
 {
-    pub(crate) fn append_events(&self, events: &[Event], condition: Precondition) -> Result<(), AppendEventsError<Never>> {
+    pub(crate) fn append_events(&self, events: &[Event], precondition: Option<Precondition>) -> Result<(), AppendEventsError<Never>> {
         let mut stream = self.events.write().unwrap();
 
-        match condition {
-            Precondition::Always => {}
-            Precondition::LastVersion(i) if !stream.is_empty() && stream.len() == i + 1 => {}
-            Precondition::EmptyStream if stream.is_empty() => {}
-            Precondition::NewStream | Precondition::EmptyStream | Precondition::LastVersion(_) =>
-                return Err(AppendEventsError::PreconditionFailed(condition)),
+        match precondition {
+            None => {}
+            Some(Precondition::LastVersion(i)) if !stream.is_empty() && stream.len() == i + 1 => {}
+            Some(Precondition::EmptyStream) if stream.is_empty() => {}
+            Some(precondition) => return Err(AppendEventsError::PreconditionFailed(precondition)),
         }
 
         stream.extend_from_slice(events);
