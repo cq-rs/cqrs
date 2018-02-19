@@ -221,9 +221,10 @@ fn main() {
 
     let view = TodoAggregate::snapshot_with_events_view(Arc::clone(&es), Arc::clone(&ss));
 
-    //let view = SnapshotPlusEventsAggregateView::new(Arc::clone(&es), Arc::clone(&ss));
     let executor = ViewExecutor::new(TodoAggregate::snapshot_with_events_view(Arc::clone(&es), Arc::clone(&ss)));
-    let command = TodoAggregate::persist_events_and_snapshot(executor, Arc::clone(&es), Arc::clone(&ss)).without_decorator();
+    let command =
+        TodoAggregate::persist_events_and_snapshot(executor, Arc::clone(&es), Arc::clone(&ss))
+            .without_decorator();
 
     type View =
         cqrs::domain::query::SnapshotAndEventsView<
