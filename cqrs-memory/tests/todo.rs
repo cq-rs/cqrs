@@ -1,5 +1,6 @@
 extern crate cqrs;
 extern crate cqrs_memory;
+extern crate chrono;
 extern crate fnv;
 extern crate cqrs_todo_core;
 
@@ -12,7 +13,8 @@ use cqrs::domain::persist::PersistableSnapshotAggregate;
 use cqrs::error::{LoadAggregateError, PersistAggregateError, AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
-use std::time::{Instant, Duration};
+use chrono::prelude::*;
+use chrono::Duration;
 
 use cqrs_todo_core::{Event, TodoAggregate, TodoState, TodoData, TodoStatus, Command};
 use cqrs_todo_core::domain;
@@ -32,8 +34,8 @@ fn main_test() {
     let agg_1 = 0;
     let agg_2 = 34;
 
-    let now = Instant::now();
-    let duration = Duration::from_secs(1000);
+    let now = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
+    let duration = Duration::seconds(1000);
     //let past_time = now - duration;
     let future_time = now + duration;
 

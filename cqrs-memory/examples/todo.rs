@@ -3,6 +3,7 @@ extern crate cqrs_memory;
 extern crate cqrs_todo_core;
 extern crate fnv;
 //#[macro_use] extern crate nickel;
+extern crate chrono;
 extern crate iron;
 #[macro_use] extern crate juniper;
 extern crate juniper_iron;
@@ -14,14 +15,13 @@ use cqrs::{Precondition, Since, VersionedEvent, VersionedSnapshot, EventAppend, 
 use cqrs::domain::query::QueryableSnapshotAggregate;
 use cqrs::domain::execute::ViewExecutor;
 use cqrs::domain::persist::{PersistableSnapshotAggregate, AggregateCommand};
-use cqrs::domain::{HydratedAggregate, AggregatePrecondition};
+use cqrs::domain::{HydratedAggregate, AggregatePrecondition, AggregateVersion};
 use cqrs::error::{ExecuteError, ExecuteAndPersistError, AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
 use std::borrow::Borrow;
 use std::io::Read;
 use std::error::Error as StdError;
-use std::time::{Instant, Duration};
 use std::sync::Arc;
 
 use cqrs_todo_core::{Event, TodoAggregate, TodoState, TodoData, TodoStatus, Command};
@@ -31,6 +31,8 @@ use mount::Mount;
 use juniper::{FieldResult, Value};
 use juniper::EmptyMutation;
 use juniper_iron::GraphQLHandler;
+use chrono::prelude::*;
+use chrono::Duration;
 
 use clap::{App, Arg};
 
@@ -194,8 +196,8 @@ graphql_object!(TodoQL: Context |&self| {
         Ok(self.0.inspect_aggregate().inspect_state().get_data()?.description.as_str())
     }
 
-    field reminder() -> FieldResult<Option<ReminderQL>> {
-        Ok(self.0.inspect_aggregate().inspect_state().get_data()?.reminder.map(|r| ReminderQL(r)))
+    field reminder() -> FieldResult<Option<DateTime<Utc>>> {
+        Ok(self.0.inspect_aggregate().inspect_state().get_data()?.reminder.map(|r| r.time()))
     }
 
     field completed() -> FieldResult<bool> {
@@ -204,24 +206,6 @@ graphql_object!(TodoQL: Context |&self| {
 
     field version() -> FieldResult<String> {
         Ok(self.0.get_version().to_string())
-    }
-});
-
-struct ReminderQL(cqrs_todo_core::domain::Reminder);
-
-graphql_scalar!(ReminderQL {
-    description: "A reminder"
-
-    resolve(&self) -> Value {
-        Value::string("a reminder")
-    }
-
-    from_input_value(v: &InputValue) -> Option<ReminderQL> {
-        if v.as_string_value() == Some("now") {
-            Some(ReminderQL(cqrs_todo_core::domain::Reminder::new(Instant::now(), Instant::now() + Duration::from_secs(100)).unwrap()))
-        } else {
-            None
-        }
     }
 });
 
@@ -236,14 +220,41 @@ graphql_object!(Mutations: Context |&self| {
 struct TodoMutQL(usize);
 
 graphql_object!(TodoMutQL: Context |&self| {
-    field set_description(&executor, text: String) -> FieldResult<&str> {
+    field set_description(&executor, text: String, expected_version: Option<i32>) -> FieldResult<&str> {
         let description = domain::Description::new(text)?;
 
         let command = Command::UpdateText(description);
 
-        executor.context().command.execute_and_persist_with_decorator(&self.0, command, Some(AggregatePrecondition::Exists), Default::default())?;
+        let expectation =
+            if let Some(v) = expected_version {
+                AggregatePrecondition::ExpectedVersion(AggregateVersion::Version((v as usize).into()))
+            } else {
+                AggregatePrecondition::Exists
+            };
+
+        executor.context().command.execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
 
         Ok("Done.")
+    }
+
+    field set_reminder(&executor, time: DateTime<Utc>) -> FieldResult<&str> {
+        let reminder = domain::Reminder::new(time, Utc::now())?;
+
+        let command = Command::SetReminder(reminder);
+
+        executor.context().command
+            .execute_and_persist_with_decorator(&self.0, command, Some(AggregatePrecondition::Exists), Default::default())?;
+
+        Ok("Reminder set.")
+    }
+
+    field cancel_reminder(&executor) -> FieldResult<&str> {
+        let command = Command::CancelReminder;
+
+        executor.context().command
+            .execute_and_persist_with_decorator(&self.0, command, Some(AggregatePrecondition::Exists), Default::default())?;
+
+        Ok("Reminder cancelled.")
     }
 });
 
@@ -276,12 +287,12 @@ fn main() {
             Arc::new(MemoryOrNullSnapshotStore::Memory(MemoryStateStore::<TodoState, usize, fnv::FnvBuildHasher>::default()))
         };
 
-    let time_0 = Instant::now();
-    let time_1 = time_0 + Duration::from_secs(10000);
+    let epoch = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
+    let reminder_time = epoch + Duration::seconds(10000);
     let mut events = Vec::new();
     events.push(Event::Completed);
     events.push(Event::Created(domain::Description::new("Hello!").unwrap()));
-    events.push(Event::ReminderUpdated(Some(domain::Reminder::new(time_1, time_0).unwrap())));
+    events.push(Event::ReminderUpdated(Some(domain::Reminder::new(reminder_time, epoch).unwrap())));
     events.push(Event::TextUpdated(domain::Description::new("New text").unwrap()));
     events.push(Event::Created(domain::Description::new("Ignored!").unwrap()));
     events.push(Event::ReminderUpdated(None));

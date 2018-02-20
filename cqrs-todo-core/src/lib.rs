@@ -1,21 +1,23 @@
 extern crate cqrs;
+extern crate chrono;
 extern crate smallvec;
 
 use smallvec::SmallVec;
+use chrono::{TimeZone,Utc};
 use cqrs::domain::{Aggregate, RestoreAggregate, SnapshotAggregate};
 
 pub mod domain {
-    use std::time::Instant;
+    use chrono::{DateTime,Utc};
     use error::{InvalidDescription, InvalidReminderTime};
     use std::borrow::Borrow;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct Reminder {
-        time: Instant,
+        time: DateTime<Utc>,
     }
 
     impl Reminder {
-        pub fn new(reminder_time: Instant, current_time: Instant) -> Result<Reminder, InvalidReminderTime> {
+        pub fn new(reminder_time: DateTime<Utc>, current_time: DateTime<Utc>) -> Result<Reminder, InvalidReminderTime> {
             if reminder_time <= current_time {
                 Err(InvalidReminderTime)
             } else {
@@ -25,7 +27,7 @@ pub mod domain {
             }
         }
 
-        pub fn time(&self) -> Instant {
+        pub fn time(&self) -> DateTime<Utc> {
             self.time
         }
     }
@@ -367,16 +369,16 @@ impl SnapshotAggregate for TodoAggregate {
 #[cfg(test)]
 mod tests {
     pub use super::*;
-    use std::time::{Duration, Instant};
+    use chrono::Duration;
 
     fn create_basic_aggregate() -> TodoAggregate {
-        let time_0 = Instant::now();
-        let time_1 = time_0 + Duration::from_secs(10000);
+        let now = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
+        let reminder = now + Duration::seconds(10000);
 
         let mut events = SmallVec::<[Event;6]>::new();
         events.push(Event::Completed);
         events.push(Event::Created(domain::Description::new("Hello!").unwrap()));
-        events.push(Event::ReminderUpdated(Some(domain::Reminder::new(time_1, time_0).unwrap())));
+        events.push(Event::ReminderUpdated(Some(domain::Reminder::new(reminder, now).unwrap())));
         events.push(Event::TextUpdated(domain::Description::new("New text").unwrap()));
         events.push(Event::Created(domain::Description::new("Ignored!").unwrap()));
         events.push(Event::ReminderUpdated(None));
@@ -428,9 +430,9 @@ mod tests {
     fn set_reminder_on_basic_aggregate() {
         let agg = create_basic_aggregate();
 
-        let time_0 = Instant::now();
-        let time_1 = time_0 + Duration::from_secs(20000);
-        let reminder = domain::Reminder::new(time_1, time_0).unwrap();
+        let now = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
+        let reminder_time = now + Duration::seconds(20000);
+        let reminder = domain::Reminder::new(reminder_time, now).unwrap();
         let cmd = Command::SetReminder(reminder);
 
         let result = agg.execute(cmd).unwrap();
