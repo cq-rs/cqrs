@@ -11,7 +11,7 @@ extern crate mount;
 extern crate clap;
 
 use cqrs::trivial::{NullEventStore, NullSnapshotStore};
-use cqrs::{Precondition, Since, VersionedEvent, VersionedSnapshot, EventAppend, SnapshotPersist};
+use cqrs::{Precondition, Since, VersionedEvent, VersionedSnapshot, EventAppend, SnapshotPersist, Version};
 use cqrs::domain::query::QueryableSnapshotAggregate;
 use cqrs::domain::execute::ViewExecutor;
 use cqrs::domain::persist::{PersistableSnapshotAggregate, AggregateCommand};
@@ -20,6 +20,8 @@ use cqrs::error::{AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
 use std::sync::Arc;
+use std::boxed::Box;
+use std::sync::atomic::{AtomicUsize,Ordering};
 
 use cqrs_todo_core::{Event, TodoAggregate, TodoState, TodoData, TodoStatus, Command};
 use cqrs_todo_core::domain;
@@ -29,6 +31,9 @@ use juniper::FieldResult;
 use juniper_iron::GraphQLHandler;
 use chrono::prelude::*;
 use chrono::Duration;
+
+use iron::headers::ContentType;
+use iron::mime::{Mime, TopLevel, SubLevel};
 
 use clap::{App, Arg};
 
@@ -163,9 +168,14 @@ type Commander =
 struct Context {
     query: Arc<View>,
     command: Arc<Commander>,
+    next_id: AtomicUsize,
 }
 
 impl juniper::Context for Context {}
+
+fn parse_id(id: juniper::ID) -> Result<usize,::std::num::ParseIntError> {
+    Ok(id.parse()?)
+}
 
 struct Query;
 
@@ -174,84 +184,155 @@ graphql_object!(Query: Context |&self| {
         "1.0"
     }
 
-    field todo(&executor, id: i32) -> FieldResult<TodoQL> {
+    field todo(&executor, id: juniper::ID) -> FieldResult<Option<TodoQL>> {
         let context = executor.context();
+        let int_id = parse_id(id)?;
 
-        let value = context.query.rehydrate(&(id as usize))?;
+        let rehydrate_result = context.query.rehydrate(&int_id)?;
 
-        let hydro = value.ok_or("not found")?;
-
-        Ok(TodoQL(hydro))
+        Ok(rehydrate_result.map(|agg| TodoQL(int_id, agg)))
     }
 });
 
-struct TodoQL(HydratedAggregate<TodoAggregate>);
+struct TodoQL(usize, HydratedAggregate<TodoAggregate>);
 
 graphql_object!(TodoQL: Context |&self| {
+    field id() -> FieldResult<juniper::ID> {
+        Ok(self.0.to_string().into())
+    }
+
     field description() -> FieldResult<&str> {
-        Ok(self.0.inspect_aggregate().inspect_state().get_data()?.description.as_str())
+        Ok(self.1.inspect_aggregate().inspect_state().get_data()?.description.as_str())
     }
 
     field reminder() -> FieldResult<Option<DateTime<Utc>>> {
-        Ok(self.0.inspect_aggregate().inspect_state().get_data()?.reminder.map(|r| r.get_time()))
+        Ok(self.1.inspect_aggregate().inspect_state().get_data()?.reminder.map(|r| r.get_time()))
     }
 
     field completed() -> FieldResult<bool> {
-        Ok(self.0.inspect_aggregate().inspect_state().get_data()?.status == TodoStatus::Completed)
+        Ok(self.1.inspect_aggregate().inspect_state().get_data()?.status == TodoStatus::Completed)
     }
 
     field version() -> FieldResult<String> {
-        Ok(self.0.get_version().to_string())
+        Ok(self.1.get_version().to_string())
     }
 });
 
 struct Mutations;
 
 graphql_object!(Mutations: Context |&self| {
-    field todo(id: i32) -> FieldResult<TodoMutQL> {
-        Ok(TodoMutQL(id as usize))
+    field todo(id: juniper::ID) -> FieldResult<TodoMutQL> {
+        Ok(TodoMutQL(parse_id(id)?))
     }
+
+    field new_todo(&executor, text: String, reminder_time: Option<DateTime<Utc>>) -> FieldResult<juniper::ID> {
+        let context = executor.context();
+
+        let new_id = context.next_id.fetch_add(1, Ordering::SeqCst);
+
+        let description = domain::Description::new(text)?;
+        let reminder =
+            if let Some(time) = reminder_time {
+                Some(domain::Reminder::new(time, Utc::now())?)
+            } else { None };
+
+
+        let command = Command::Create(description, reminder);
+
+        context.command.execute_and_persist_with_decorator(&new_id, command, Some(AggregatePrecondition::New), Default::default())?;
+
+        Ok(new_id.to_string().into())
+    }
+
 });
 
 struct TodoMutQL(usize);
 
+fn i32_as_aggregate_version(version_int: i32) -> AggregateVersion {
+    if version_int < 0 {
+        AggregateVersion::Initial
+    } else {
+        AggregateVersion::Version(Version::new(version_int as usize))
+    }
+}
+
+fn expect_exists_or(expected_version: Option<i32>) -> AggregatePrecondition {
+    expected_version
+        .map(i32_as_aggregate_version)
+        .map(AggregatePrecondition::ExpectedVersion)
+        .unwrap_or(AggregatePrecondition::Exists)
+}
+
 graphql_object!(TodoMutQL: Context |&self| {
     field set_description(&executor, text: String, expected_version: Option<i32>) -> FieldResult<&str> {
+        let expectation = expect_exists_or(expected_version);
+
         let description = domain::Description::new(text)?;
 
         let command = Command::UpdateText(description);
-
-        let expectation =
-            if let Some(v) = expected_version {
-                AggregatePrecondition::ExpectedVersion(AggregateVersion::Version((v as usize).into()))
-            } else {
-                AggregatePrecondition::Exists
-            };
 
         executor.context().command.execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
 
         Ok("Done.")
     }
 
-    field set_reminder(&executor, time: DateTime<Utc>) -> FieldResult<&str> {
+    field set_reminder(&executor, time: DateTime<Utc>, expected_version: Option<i32>) -> FieldResult<&str> {
+        let expectation = expect_exists_or(expected_version);
+
         let reminder = domain::Reminder::new(time, Utc::now())?;
 
         let command = Command::SetReminder(reminder);
 
         executor.context().command
-            .execute_and_persist_with_decorator(&self.0, command, Some(AggregatePrecondition::Exists), Default::default())?;
+            .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
 
         Ok("Reminder set.")
     }
 
-    field cancel_reminder(&executor) -> FieldResult<&str> {
+    field cancel_reminder(&executor, expected_version: Option<i32>) -> FieldResult<&str> {
+        let expectation = expect_exists_or(expected_version);
+
         let command = Command::CancelReminder;
 
         executor.context().command
-            .execute_and_persist_with_decorator(&self.0, command, Some(AggregatePrecondition::Exists), Default::default())?;
+            .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
 
         Ok("Reminder cancelled.")
     }
+
+    field toggle(&executor, expected_version: Option<i32>) -> FieldResult<&str> {
+        let expectation = expect_exists_or(expected_version);
+
+        let command = Command::ToggleCompletion;
+
+        executor.context().command
+            .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
+
+        Ok("Toggled.")
+    }
+
+    field reset(&executor, expected_version: Option<i32>) -> FieldResult<&str> {
+        let expectation = expect_exists_or(expected_version);
+
+        let command = Command::ResetCompleted;
+
+        executor.context().command
+            .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
+
+        Ok("Reset.")
+    }
+
+    field complete(&executor, expected_version: Option<i32>) -> FieldResult<&str> {
+        let expectation = expect_exists_or(expected_version);
+
+        let command = Command::MarkCompleted;
+
+        executor.context().command
+            .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
+
+        Ok("Completed.")
+    }
+
 });
 
 fn main() {
@@ -319,6 +400,7 @@ fn main() {
         Context {
             query: Arc::clone(&query),
             command: Arc::clone(&command),
+            next_id: AtomicUsize::new(1),
         }
     };
 
@@ -331,6 +413,13 @@ fn main() {
     );
 
     mount.mount("/graphql", graphql_endpoint);
+    mount.mount("/graphiql", |_req: &mut iron::Request| {
+        let mut res = iron::Response::new();
+        res.body = Some(Box::new(
+        juniper::http::graphiql::graphiql_source("http://127.0.0.1:2777/graphql")));
+        res.headers.set(ContentType(Mime(TopLevel::Text, SubLevel::Html, Vec::default())));
+        Ok(res)
+    });
 
     let chain = iron::Chain::new(mount);
 
