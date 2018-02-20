@@ -24,7 +24,7 @@ pub trait Aggregate: Default {
 pub trait SnapshotAggregate: Aggregate {
     type Snapshot;
 
-    fn to_snapshot(self) -> Self::Snapshot;
+    fn as_snapshot(&self) -> Self::Snapshot;
 }
 
 pub trait RestoreAggregate: Aggregate {
@@ -167,11 +167,11 @@ impl<Agg: RestoreAggregate> From<VersionedSnapshot<Agg::Snapshot>> for HydratedA
 }
 
 impl<Agg: SnapshotAggregate> HydratedAggregate<Agg> {
-    fn to_snapshot(self) -> Option<VersionedSnapshot<Agg::Snapshot>> {
+    fn as_snapshot(&self) -> Option<VersionedSnapshot<Agg::Snapshot>> {
         if let AggregateVersion::Version(v) = self.version {
             Some(VersionedSnapshot {
                 version: v,
-                snapshot: self.aggregate.to_snapshot(),
+                snapshot: self.aggregate.as_snapshot(),
             })
         } else {
             None

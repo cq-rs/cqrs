@@ -360,8 +360,8 @@ impl RestoreAggregate for TodoAggregate {
 impl SnapshotAggregate for TodoAggregate {
     type Snapshot = TodoState;
 
-    fn to_snapshot(self) -> Self::Snapshot {
-        self.state
+    fn as_snapshot(&self) -> Self::Snapshot {
+        self.state.clone()
     }
 }
 
