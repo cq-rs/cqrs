@@ -10,26 +10,22 @@ extern crate juniper_iron;
 extern crate mount;
 extern crate clap;
 
-use cqrs::trivial::{NullEventStore, NullSnapshotStore, NopEventDecorator};
+use cqrs::trivial::{NullEventStore, NullSnapshotStore};
 use cqrs::{Precondition, Since, VersionedEvent, VersionedSnapshot, EventAppend, SnapshotPersist};
 use cqrs::domain::query::QueryableSnapshotAggregate;
 use cqrs::domain::execute::ViewExecutor;
 use cqrs::domain::persist::{PersistableSnapshotAggregate, AggregateCommand};
 use cqrs::domain::{HydratedAggregate, AggregatePrecondition, AggregateVersion};
-use cqrs::error::{ExecuteError, ExecuteAndPersistError, AppendEventsError, Never};
+use cqrs::error::{AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
-use std::borrow::Borrow;
-use std::io::Read;
-use std::error::Error as StdError;
 use std::sync::Arc;
 
 use cqrs_todo_core::{Event, TodoAggregate, TodoState, TodoData, TodoStatus, Command};
 use cqrs_todo_core::domain;
 
 use mount::Mount;
-use juniper::{FieldResult, Value};
-use juniper::EmptyMutation;
+use juniper::FieldResult;
 use juniper_iron::GraphQLHandler;
 use chrono::prelude::*;
 use chrono::Duration;
@@ -197,7 +193,7 @@ graphql_object!(TodoQL: Context |&self| {
     }
 
     field reminder() -> FieldResult<Option<DateTime<Utc>>> {
-        Ok(self.0.inspect_aggregate().inspect_state().get_data()?.reminder.map(|r| r.time()))
+        Ok(self.0.inspect_aggregate().inspect_state().get_data()?.reminder.map(|r| r.get_time()))
     }
 
     field completed() -> FieldResult<bool> {

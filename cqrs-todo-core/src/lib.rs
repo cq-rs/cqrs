@@ -3,7 +3,6 @@ extern crate chrono;
 extern crate smallvec;
 
 use smallvec::SmallVec;
-use chrono::{TimeZone,Utc};
 use cqrs::domain::{Aggregate, RestoreAggregate, SnapshotAggregate};
 
 pub mod domain {
@@ -27,7 +26,7 @@ pub mod domain {
             }
         }
 
-        pub fn time(&self) -> DateTime<Utc> {
+        pub fn get_time(&self) -> DateTime<Utc> {
             self.time
         }
     }
@@ -369,7 +368,7 @@ impl SnapshotAggregate for TodoAggregate {
 #[cfg(test)]
 mod tests {
     pub use super::*;
-    use chrono::Duration;
+    use chrono::{Utc,TimeZone,Duration};
 
     fn create_basic_aggregate() -> TodoAggregate {
         let now = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);

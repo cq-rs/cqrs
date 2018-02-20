@@ -10,7 +10,6 @@ use cqrs::domain::{AggregateVersion, HydratedAggregate, AggregatePrecondition};
 use cqrs::domain::query::QueryableSnapshotAggregate;
 use cqrs::domain::execute::ViewExecutor;
 use cqrs::domain::persist::PersistableSnapshotAggregate;
-use cqrs::error::{LoadAggregateError, PersistAggregateError, AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
 use chrono::prelude::*;
@@ -18,7 +17,6 @@ use chrono::Duration;
 
 use cqrs_todo_core::{Event, TodoAggregate, TodoState, TodoData, TodoStatus, Command};
 use cqrs_todo_core::domain;
-use cqrs_todo_core::error;
 
 #[test]
 fn main_test() {
