@@ -168,7 +168,7 @@ type Commander =
 struct Context {
     query: Arc<View>,
     command: Arc<Commander>,
-    next_id: AtomicUsize,
+    next_id: Arc<AtomicUsize>,
 }
 
 impl juniper::Context for Context {}
@@ -225,7 +225,7 @@ graphql_object!(Mutations: Context |&self| {
         Ok(TodoMutQL(parse_id(id)?))
     }
 
-    field new_todo(&executor, text: String, reminder_time: Option<DateTime<Utc>>) -> FieldResult<juniper::ID> {
+    field new_todo(&executor, text: String, reminder_time: Option<DateTime<Utc>>) -> FieldResult<TodoQL> {
         let context = executor.context();
 
         let new_id = context.next_id.fetch_add(1, Ordering::SeqCst);
@@ -239,9 +239,10 @@ graphql_object!(Mutations: Context |&self| {
 
         let command = Command::Create(description, reminder);
 
-        context.command.execute_and_persist_with_decorator(&new_id, command, Some(AggregatePrecondition::New), Default::default())?;
+        let agg = context.command
+            .execute_and_persist_with_decorator(&new_id, command, Some(AggregatePrecondition::New), Default::default())?;
 
-        Ok(new_id.to_string().into())
+        Ok(TodoQL(new_id, agg))
     }
 
 });
@@ -264,75 +265,75 @@ fn expect_exists_or(expected_version: Option<i32>) -> AggregatePrecondition {
 }
 
 graphql_object!(TodoMutQL: Context |&self| {
-    field set_description(&executor, text: String, expected_version: Option<i32>) -> FieldResult<&str> {
+    field set_description(&executor, text: String, expected_version: Option<i32>) -> FieldResult<TodoQL> {
         let expectation = expect_exists_or(expected_version);
 
         let description = domain::Description::new(text)?;
 
         let command = Command::UpdateText(description);
 
-        executor.context().command.execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
+        let agg = executor.context().command
+            .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
 
-        Ok("Done.")
+        Ok(TodoQL(self.0, agg))
     }
 
-    field set_reminder(&executor, time: DateTime<Utc>, expected_version: Option<i32>) -> FieldResult<&str> {
+    field set_reminder(&executor, time: DateTime<Utc>, expected_version: Option<i32>) -> FieldResult<TodoQL> {
         let expectation = expect_exists_or(expected_version);
 
         let reminder = domain::Reminder::new(time, Utc::now())?;
 
         let command = Command::SetReminder(reminder);
 
-        executor.context().command
+        let agg = executor.context().command
             .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
 
-        Ok("Reminder set.")
+        Ok(TodoQL(self.0, agg))
     }
 
-    field cancel_reminder(&executor, expected_version: Option<i32>) -> FieldResult<&str> {
+    field cancel_reminder(&executor, expected_version: Option<i32>) -> FieldResult<TodoQL> {
         let expectation = expect_exists_or(expected_version);
 
         let command = Command::CancelReminder;
 
-        executor.context().command
+        let agg = executor.context().command
             .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
 
-        Ok("Reminder cancelled.")
+        Ok(TodoQL(self.0, agg))
     }
 
-    field toggle(&executor, expected_version: Option<i32>) -> FieldResult<&str> {
+    field toggle(&executor, expected_version: Option<i32>) -> FieldResult<TodoQL> {
         let expectation = expect_exists_or(expected_version);
 
         let command = Command::ToggleCompletion;
 
-        executor.context().command
+        let agg = executor.context().command
             .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
 
-        Ok("Toggled.")
+        Ok(TodoQL(self.0, agg))
     }
 
-    field reset(&executor, expected_version: Option<i32>) -> FieldResult<&str> {
+    field reset(&executor, expected_version: Option<i32>) -> FieldResult<TodoQL> {
         let expectation = expect_exists_or(expected_version);
 
         let command = Command::ResetCompleted;
 
-        executor.context().command
+        let agg = executor.context().command
             .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
 
-        Ok("Reset.")
+        Ok(TodoQL(self.0, agg))
     }
 
-    field complete(&executor, expected_version: Option<i32>) -> FieldResult<&str> {
+    field complete(&executor, expected_version: Option<i32>) -> FieldResult<TodoQL> {
         let expectation = expect_exists_or(expected_version);
 
         let command = Command::MarkCompleted;
 
-        executor.context().command
+        let agg = executor.context().command
             .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
 
-        Ok("Completed.")
+        Ok(TodoQL(self.0, agg))
     }
-
 });
 
 fn main() {
@@ -395,12 +396,13 @@ fn main() {
 
     let query = Arc::new(view);
     let command = Arc::new(command);
+    let next_id = Arc::new(AtomicUsize::new(1));
 
     let context_factory = move |_: &mut iron::Request| {
         Context {
             query: Arc::clone(&query),
             command: Arc::clone(&command),
-            next_id: AtomicUsize::new(1),
+            next_id: Arc::clone(&next_id),
         }
     };
 
