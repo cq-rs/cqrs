@@ -6,7 +6,6 @@ authors = ["Marcus Griep <marcus@griep.us>"]
 [dependencies]
 
 [dev-dependencies]
-#clippy = "*"
 smallvec = "*"
 
 [build-dependencies]
