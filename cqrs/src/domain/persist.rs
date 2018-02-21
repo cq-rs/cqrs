@@ -164,7 +164,7 @@ impl<Agg, Exec, EAppend, SPersist> EventsAndSnapshot<Agg, Exec, EAppend, SPersis
         EAppend: EventAppend<AggregateId=Exec::AggregateId, Event=Agg::Event>,
         SPersist: SnapshotPersist<Snapshot=Agg::Snapshot, AggregateId=Exec::AggregateId>,
 {
-    pub fn execute_and_persist_with_decorator<D: EventDecorator<Event=Agg::Event, DecoratedEvent=EAppend::Event>>(&self, agg_id: &Exec::AggregateId, command: Agg::Command, precondition: Option<AggregatePrecondition>, decorator: D) -> Result<(), ExecuteAndPersistError<ExecuteError<Agg::CommandError, Exec::Error>, PersistAggregateError<EAppend::Error, SPersist::Error>>> {
+    pub fn execute_and_persist_with_decorator<D: EventDecorator<Event=Agg::Event, DecoratedEvent=EAppend::Event>>(&self, agg_id: &Exec::AggregateId, command: Agg::Command, precondition: Option<AggregatePrecondition>, decorator: D) -> Result<HydratedAggregate<Agg>, ExecuteAndPersistError<ExecuteError<Agg::CommandError, Exec::Error>, PersistAggregateError<EAppend::Error, SPersist::Error>>> {
         let execute_result =
             self.executor.execute(agg_id, command, precondition)?;
 
@@ -193,12 +193,12 @@ impl<Agg, Exec, EAppend, SPersist> EventsAndSnapshot<Agg, Exec, EAppend, SPersis
             new_aggregate.version += 1;
         }
 
-        if let Some(snapshot) = new_aggregate.to_snapshot() {
+        if let Some(snapshot) = new_aggregate.as_snapshot() {
             self.persister.persist_snapshot(agg_id, snapshot)
                 .map_err(PersistAggregateError::Snapshot)?;
         }
 
-        Ok(())
+        Ok(new_aggregate)
     }
 }
 
@@ -211,7 +211,7 @@ impl<Agg, Exec, EAppend, SPersist> EventsAndSnapshot<Agg, Exec, EAppend, SPersis
         EAppend: EventAppend<AggregateId=Exec::AggregateId>,
         SPersist: SnapshotPersist<Snapshot=Agg::Snapshot, AggregateId=Exec::AggregateId>,
 {
-    pub fn execute_and_persist_with_type_changing_decorator<D: EventDecorator<Event=Agg::Event, DecoratedEvent=EAppend::Event>>(&self, agg_id: &Exec::AggregateId, command: Agg::Command, precondition: Option<AggregatePrecondition>, decorator: D) -> Result<(), ExecuteAndPersistError<ExecuteError<Agg::CommandError, Exec::Error>, PersistAggregateError<EAppend::Error, SPersist::Error>>> {
+    pub fn execute_and_persist_with_type_changing_decorator<D: EventDecorator<Event=Agg::Event, DecoratedEvent=EAppend::Event>>(&self, agg_id: &Exec::AggregateId, command: Agg::Command, precondition: Option<AggregatePrecondition>, decorator: D) -> Result<HydratedAggregate<Agg>, ExecuteAndPersistError<ExecuteError<Agg::CommandError, Exec::Error>, PersistAggregateError<EAppend::Error, SPersist::Error>>> {
         let execute_result =
             self.executor.execute(agg_id, command, precondition)?;
 
@@ -245,12 +245,12 @@ impl<Agg, Exec, EAppend, SPersist> EventsAndSnapshot<Agg, Exec, EAppend, SPersis
             new_aggregate.version += 1;
         }
 
-        if let Some(snapshot) = new_aggregate.to_snapshot() {
+        if let Some(snapshot) = new_aggregate.as_snapshot() {
             self.persister.persist_snapshot(agg_id, snapshot)
                 .map_err(PersistAggregateError::Snapshot)?;
         }
 
-        Ok(())
+        Ok(new_aggregate)
     }
 }
 
@@ -286,7 +286,7 @@ pub trait AggregateCommand<Agg, Decorator>
     type AggregateId;
     type Error: error::Error;
 
-    fn execute_and_persist_with_decorator(&self, agg_id: &Self::AggregateId, command: Agg::Command, precondition: Option<AggregatePrecondition>, decorator: Decorator) -> Result<(), Self::Error>;
+    fn execute_and_persist_with_decorator(&self, agg_id: &Self::AggregateId, command: Agg::Command, precondition: Option<AggregatePrecondition>, decorator: Decorator) -> Result<HydratedAggregate<Agg>, Self::Error>;
 }
 
 impl<Agg, Exec, EAppend, SPersist, Decorator> AggregateCommand<Agg, Decorator> for EventsAndSnapshotWithTypeChangingDecorator<Agg, Exec, EAppend, SPersist, Decorator>
@@ -302,7 +302,7 @@ impl<Agg, Exec, EAppend, SPersist, Decorator> AggregateCommand<Agg, Decorator> f
     type AggregateId = Exec::AggregateId;
     type Error = ExecuteAndPersistError<ExecuteError<Agg::CommandError, Exec::Error>, PersistAggregateError<EAppend::Error, SPersist::Error>>;
 
-    fn execute_and_persist_with_decorator(&self, agg_id: &Self::AggregateId, command: Agg::Command, precondition: Option<AggregatePrecondition>, decorator: Decorator) -> Result<(), Self::Error> {
+    fn execute_and_persist_with_decorator(&self, agg_id: &Self::AggregateId, command: Agg::Command, precondition: Option<AggregatePrecondition>, decorator: Decorator) -> Result<HydratedAggregate<Agg>, Self::Error> {
         self.inner.execute_and_persist_with_decorator(agg_id, command, precondition, decorator)
     }
 }
@@ -319,7 +319,7 @@ impl<Agg, Exec, EAppend, SPersist, Decorator> AggregateCommand<Agg, Decorator> f
     type AggregateId = Exec::AggregateId;
     type Error = ExecuteAndPersistError<ExecuteError<Agg::CommandError, Exec::Error>, PersistAggregateError<EAppend::Error, SPersist::Error>>;
 
-    fn execute_and_persist_with_decorator(&self, agg_id: &Self::AggregateId, command: Agg::Command, precondition: Option<AggregatePrecondition>, decorator: Decorator) -> Result<(), Self::Error> {
+    fn execute_and_persist_with_decorator(&self, agg_id: &Self::AggregateId, command: Agg::Command, precondition: Option<AggregatePrecondition>, decorator: Decorator) -> Result<HydratedAggregate<Agg>, Self::Error> {
         self.inner.execute_and_persist_with_decorator(agg_id, command, precondition, decorator)
     }
 }

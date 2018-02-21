@@ -3,11 +3,14 @@ use super::{VersionedEvent, VersionedSnapshot};
 use std::borrow::Borrow;
 use std::ops;
 use std::fmt;
+use std::str::FromStr;
+use std::num::ParseIntError;
 use std::error;
 
 pub mod query;
 pub mod execute;
 pub mod persist;
+pub mod ident;
 
 pub trait Aggregate: Default {
     type Events;//: Borrow<[Self::Event]> + IntoIterator<Item=Self::Event>;
@@ -22,7 +25,7 @@ pub trait Aggregate: Default {
 pub trait SnapshotAggregate: Aggregate {
     type Snapshot;
 
-    fn to_snapshot(self) -> Self::Snapshot;
+    fn as_snapshot(&self) -> Self::Snapshot;
 }
 
 pub trait RestoreAggregate: Aggregate {
@@ -111,6 +114,16 @@ pub enum AggregatePrecondition {
     ExpectedVersion(AggregateVersion),
 }
 
+impl AggregatePrecondition {
+    fn expect_or_exists(version_opt: Option<AggregateVersion>) -> AggregatePrecondition {
+        if let Some(version) = version_opt {
+            AggregatePrecondition::ExpectedVersion(version)
+        } else {
+            AggregatePrecondition::Exists
+        }
+    }
+}
+
 impl From<AggregateVersion> for AggregatePrecondition {
     #[inline]
     fn from(v: AggregateVersion) -> Self {
@@ -155,11 +168,11 @@ impl<Agg: RestoreAggregate> From<VersionedSnapshot<Agg::Snapshot>> for HydratedA
 }
 
 impl<Agg: SnapshotAggregate> HydratedAggregate<Agg> {
-    fn to_snapshot(self) -> Option<VersionedSnapshot<Agg::Snapshot>> {
+    fn as_snapshot(&self) -> Option<VersionedSnapshot<Agg::Snapshot>> {
         if let AggregateVersion::Version(v) = self.version {
             Some(VersionedSnapshot {
                 version: v,
-                snapshot: self.aggregate.to_snapshot(),
+                snapshot: self.aggregate.as_snapshot(),
             })
         } else {
             None
@@ -182,6 +195,7 @@ impl<Agg: Aggregate> Borrow<Agg> for HydratedAggregate<Agg> {
         &self.aggregate
     }
 }
+
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]

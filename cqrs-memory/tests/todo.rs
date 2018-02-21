@@ -1,5 +1,6 @@
 extern crate cqrs;
 extern crate cqrs_memory;
+extern crate chrono;
 extern crate fnv;
 extern crate cqrs_todo_core;
 
@@ -9,14 +10,14 @@ use cqrs::domain::{AggregateVersion, HydratedAggregate, AggregatePrecondition};
 use cqrs::domain::query::QueryableSnapshotAggregate;
 use cqrs::domain::execute::ViewExecutor;
 use cqrs::domain::persist::PersistableSnapshotAggregate;
-use cqrs::error::{LoadAggregateError, PersistAggregateError, AppendEventsError, Never};
+use cqrs::domain::ident::{AggregateIdProvider, UsizeIdProvider};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
-use std::time::{Instant, Duration};
+use chrono::prelude::*;
+use chrono::Duration;
 
 use cqrs_todo_core::{Event, TodoAggregate, TodoState, TodoData, TodoStatus, Command};
 use cqrs_todo_core::domain;
-use cqrs_todo_core::error;
 
 #[test]
 fn main_test() {
@@ -29,11 +30,12 @@ fn main_test() {
     let command_view = TodoAggregate::snapshot_with_events_view(&es, &ss);
     let command = TodoAggregate::persist_events_and_snapshot(ViewExecutor::new(command_view), &es, &ss);
 
-    let agg_1 = 0;
-    let agg_2 = 34;
+    let id_provider = UsizeIdProvider::default();
+    let agg_1 = id_provider.new_id();
+    let agg_2 = id_provider.new_id();
 
-    let now = Instant::now();
-    let duration = Duration::from_secs(1000);
+    let now = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
+    let duration = Duration::seconds(1000);
     //let past_time = now - duration;
     let future_time = now + duration;
 

@@ -38,8 +38,8 @@ impl Aggregate for CoolAggregate {
 impl SnapshotAggregate for CoolAggregate {
     type Snapshot = Self;
 
-    fn to_snapshot(self) -> Self::Snapshot {
-        self
+    fn as_snapshot(&self) -> Self::Snapshot {
+        self.clone()
     }
 }
 

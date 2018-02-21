@@ -1,6 +1,3 @@
-#![cfg_attr(all(nightly, test), feature(plugin))]
-#![cfg_attr(all(nightly, test), plugin(clippy))]
-
 #[cfg(test)]
 extern crate smallvec;
 
