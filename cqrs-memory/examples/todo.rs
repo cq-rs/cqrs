@@ -20,7 +20,7 @@ use cqrs::domain::{HydratedAggregate, AggregatePrecondition, AggregateVersion};
 use cqrs::error::{AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
-use std::sync::Arc;
+use std::sync::{Arc,RwLock};
 use std::boxed::Box;
 
 use cqrs_todo_core::{Event, TodoAggregate, TodoState, TodoData, TodoStatus, Command};
@@ -166,6 +166,7 @@ type Commander =
     >;
 
 struct Context {
+    stream_index: Arc<RwLock<Vec<usize>>>,
     query: Arc<View>,
     command: Arc<Commander>,
     id_provider: Arc<UsizeIdProvider>,
@@ -182,6 +183,15 @@ struct Query;
 graphql_object!(Query: Context |&self| {
     field apiVersion() -> &str {
         "1.0"
+    }
+
+    field allTodos(&executor) -> FieldResult<Vec<TodoQL>> {
+        let context = executor.context();
+        let mut items = Vec::default();
+        for i in context.stream_index.read().unwrap().iter() {
+            items.push(context.query.rehydrate(i)?.map(|agg| TodoQL(*i, agg)).unwrap());
+        }
+        Ok(items)
     }
 
     field todo(&executor, id: juniper::ID) -> FieldResult<Option<TodoQL>> {
@@ -228,8 +238,6 @@ graphql_object!(Mutations: Context |&self| {
     field new_todo(&executor, text: String, reminder_time: Option<DateTime<Utc>>) -> FieldResult<TodoQL> {
         let context = executor.context();
 
-        let new_id = context.id_provider.new_id();
-
         let description = domain::Description::new(text)?;
         let reminder =
             if let Some(time) = reminder_time {
@@ -239,8 +247,11 @@ graphql_object!(Mutations: Context |&self| {
 
         let command = Command::Create(description, reminder);
 
+        let new_id = context.id_provider.new_id();
         let agg = context.command
             .execute_and_persist_with_decorator(&new_id, command, Some(AggregatePrecondition::New), Default::default())?;
+
+        context.stream_index.write().unwrap().push(new_id);
 
         Ok(TodoQL(new_id, agg))
     }
@@ -396,11 +407,13 @@ fn main() {
         TodoAggregate::persist_events_and_snapshot(executor, Arc::clone(&es), Arc::clone(&ss))
             .without_decorator();
 
+    let stream_index = Arc::new(RwLock::new(vec![id]));
     let query = Arc::new(view);
     let command = Arc::new(command);
 
     let context_factory = move |_: &mut iron::Request| {
         Context {
+            stream_index: Arc::clone(&stream_index),
             query: Arc::clone(&query),
             command: Arc::clone(&command),
             id_provider: Arc::clone(&id_provider),
