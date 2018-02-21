@@ -168,7 +168,7 @@ type Commander =
 struct Context {
     query: Arc<View>,
     command: Arc<Commander>,
-    next_id: Arc<AtomicUsize>,
+    next_id: &'static AtomicUsize,
 }
 
 impl juniper::Context for Context {}
@@ -336,6 +336,8 @@ graphql_object!(TodoMutQL: Context |&self| {
     }
 });
 
+static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
+
 fn main() {
     let app = App::new("todo")
         .arg(Arg::with_name("null-event-store")
@@ -378,7 +380,7 @@ fn main() {
     es.append_events(&0, &events, None).unwrap();
 
     ss.persist_snapshot(&0, VersionedSnapshot {
-        version: 1.into(),
+        version: Version::from(1),
         snapshot: TodoState::Created(TodoData {
             description: domain::Description::new("Hello!").unwrap(),
             reminder: None,
@@ -396,13 +398,12 @@ fn main() {
 
     let query = Arc::new(view);
     let command = Arc::new(command);
-    let next_id = Arc::new(AtomicUsize::new(1));
 
     let context_factory = move |_: &mut iron::Request| {
         Context {
             query: Arc::clone(&query),
             command: Arc::clone(&command),
-            next_id: Arc::clone(&next_id),
+            next_id: &NEXT_ID,
         }
     };
 
