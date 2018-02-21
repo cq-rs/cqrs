@@ -15,13 +15,13 @@ use cqrs::{Precondition, Since, VersionedEvent, VersionedSnapshot, EventAppend, 
 use cqrs::domain::query::QueryableSnapshotAggregate;
 use cqrs::domain::execute::ViewExecutor;
 use cqrs::domain::persist::{PersistableSnapshotAggregate, AggregateCommand};
+use cqrs::domain::ident::{AggregateIdProvider, UsizeIdProvider};
 use cqrs::domain::{HydratedAggregate, AggregatePrecondition, AggregateVersion};
 use cqrs::error::{AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
 use std::sync::Arc;
 use std::boxed::Box;
-use std::sync::atomic::{AtomicUsize,Ordering};
 
 use cqrs_todo_core::{Event, TodoAggregate, TodoState, TodoData, TodoStatus, Command};
 use cqrs_todo_core::domain;
@@ -168,7 +168,7 @@ type Commander =
 struct Context {
     query: Arc<View>,
     command: Arc<Commander>,
-    next_id: &'static AtomicUsize,
+    id_provider: Arc<UsizeIdProvider>,
 }
 
 impl juniper::Context for Context {}
@@ -228,7 +228,7 @@ graphql_object!(Mutations: Context |&self| {
     field new_todo(&executor, text: String, reminder_time: Option<DateTime<Utc>>) -> FieldResult<TodoQL> {
         let context = executor.context();
 
-        let new_id = context.next_id.fetch_add(1, Ordering::SeqCst);
+        let new_id = context.id_provider.new_id();
 
         let description = domain::Description::new(text)?;
         let reminder =
@@ -336,8 +336,6 @@ graphql_object!(TodoMutQL: Context |&self| {
     }
 });
 
-static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
-
 fn main() {
     let app = App::new("todo")
         .arg(Arg::with_name("null-event-store")
@@ -366,6 +364,7 @@ fn main() {
         } else {
             Arc::new(MemoryOrNullSnapshotStore::Memory(MemoryStateStore::<TodoState, usize, fnv::FnvBuildHasher>::default()))
         };
+    let id_provider = Arc::new(UsizeIdProvider::default());
 
     let epoch = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
     let reminder_time = epoch + Duration::seconds(10000);
@@ -377,9 +376,11 @@ fn main() {
     events.push(Event::Created(domain::Description::new("Ignored!").unwrap()));
     events.push(Event::ReminderUpdated(None));
 
-    es.append_events(&0, &events, None).unwrap();
+    let id = id_provider.new_id();
 
-    ss.persist_snapshot(&0, VersionedSnapshot {
+    es.append_events(&id, &events, None).unwrap();
+
+    ss.persist_snapshot(&id, VersionedSnapshot {
         version: Version::from(1),
         snapshot: TodoState::Created(TodoData {
             description: domain::Description::new("Hello!").unwrap(),
@@ -395,7 +396,6 @@ fn main() {
         TodoAggregate::persist_events_and_snapshot(executor, Arc::clone(&es), Arc::clone(&ss))
             .without_decorator();
 
-
     let query = Arc::new(view);
     let command = Arc::new(command);
 
@@ -403,7 +403,7 @@ fn main() {
         Context {
             query: Arc::clone(&query),
             command: Arc::clone(&command),
-            next_id: &NEXT_ID,
+            id_provider: Arc::clone(&id_provider),
         }
     };
 

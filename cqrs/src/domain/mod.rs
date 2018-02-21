@@ -10,6 +10,7 @@ use std::error;
 pub mod query;
 pub mod execute;
 pub mod persist;
+pub mod ident;
 
 pub trait Aggregate: Default {
     type Events;//: Borrow<[Self::Event]> + IntoIterator<Item=Self::Event>;
@@ -194,6 +195,7 @@ impl<Agg: Aggregate> Borrow<Agg> for HydratedAggregate<Agg> {
         &self.aggregate
     }
 }
+
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]
