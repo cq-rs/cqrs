@@ -1,0 +1,18 @@
+[package]
+name = "cqrs-todoql"
+version = "0.1.0"
+authors = ["Marcus Griep <marcus@griep.us>"]
+
+[dependencies]
+fnv = "*"
+base64 = "*"
+cqrs = { path = "../cqrs" }
+cqrs-memory = { path = "../cqrs-memory" }
+cqrs-todo-core = { path = "../cqrs-todo-core" }
+clap = "*"
+chrono = "*"
+iron = "*"
+juniper = "0.9"
+juniper_codegen = "*"
+juniper_iron = "*"
+mount = "*"

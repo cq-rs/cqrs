@@ -3,8 +3,6 @@ use super::{VersionedEvent, VersionedSnapshot};
 use std::borrow::Borrow;
 use std::ops;
 use std::fmt;
-use std::str::FromStr;
-use std::num::ParseIntError;
 use std::error;
 
 pub mod query;
@@ -112,16 +110,6 @@ pub enum AggregatePrecondition {
     New,
     Exists,
     ExpectedVersion(AggregateVersion),
-}
-
-impl AggregatePrecondition {
-    fn expect_or_exists(version_opt: Option<AggregateVersion>) -> AggregatePrecondition {
-        if let Some(version) = version_opt {
-            AggregatePrecondition::ExpectedVersion(version)
-        } else {
-            AggregatePrecondition::Exists
-        }
-    }
 }
 
 impl From<AggregateVersion> for AggregatePrecondition {
