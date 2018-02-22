@@ -84,17 +84,10 @@ dependencies = [
 name = "cqrs-memory"
 version = "0.1.0"
 dependencies = [
- "base64 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "clap 2.30.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "cqrs 0.1.0",
  "cqrs-todo-core 0.1.0",
  "fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "iron 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "juniper 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "juniper_codegen 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "juniper_iron 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "mount 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -104,6 +97,24 @@ dependencies = [
  "chrono 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "cqrs 0.1.0",
  "smallvec 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "cqrs-todoql"
+version = "0.1.0"
+dependencies = [
+ "base64 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chrono 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.30.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cqrs 0.1.0",
+ "cqrs-memory 0.1.0",
+ "cqrs-todo-core 0.1.0",
+ "fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "iron 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "juniper 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "juniper_codegen 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "juniper_iron 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mount 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

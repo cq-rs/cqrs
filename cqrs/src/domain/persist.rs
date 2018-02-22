@@ -1,11 +1,9 @@
 use super::{Aggregate, SnapshotAggregate, HydratedAggregate, AggregateVersion, AggregatePrecondition};
-use super::query::AggregateQuery;
 use super::execute::Executor;
 use error::{PersistAggregateError, ExecuteAndPersistError, ExecuteError};
 use super::super::{EventAppend, EventDecorator, SnapshotPersist, Precondition};
 use trivial::{NullEventStore};
 
-use std::borrow::Borrow;
 use std::error;
 use std::marker::PhantomData;
 
@@ -100,8 +98,6 @@ impl<Agg, Exec, EAppend> EventsOnly<Agg, Exec, EAppend>
         Ok(())
     }
 }
-
-struct PseudoSnapshotAggregate<Agg: Aggregate>(Agg);
 
 type SnapshotOnly<Agg: SnapshotAggregate, Exec: Executor<Agg>, SPersist: SnapshotPersist<Snapshot=Agg::Snapshot, AggregateId=Exec::AggregateId>> = EventsAndSnapshot<Agg, Exec, NullEventStore<Agg::Event, SPersist::AggregateId>, SPersist>;
 

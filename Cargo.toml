@@ -3,4 +3,5 @@ members = [
     "cqrs",
     "cqrs-memory",
     "cqrs-todo-core",
+    "cqrs-todoql",
 ]

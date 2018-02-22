@@ -8,12 +8,5 @@ cqrs = { path = "../cqrs" }
 
 [dev-dependencies]
 fnv = "*"
-base64 = "*"
 cqrs-todo-core = { path = "../cqrs-todo-core" }
-clap = "*"
 chrono = "*"
-iron = "*"
-juniper = "0.9"
-juniper_codegen = "*"
-juniper_iron = "*"
-mount = "*"
