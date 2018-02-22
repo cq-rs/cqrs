@@ -1,11 +1,13 @@
 extern crate cqrs;
 extern crate cqrs_memory;
 extern crate cqrs_todo_core;
+extern crate base64;
 extern crate fnv;
 //#[macro_use] extern crate nickel;
 extern crate chrono;
 extern crate iron;
 #[macro_use] extern crate juniper;
+#[macro_use] extern crate juniper_codegen;
 extern crate juniper_iron;
 extern crate mount;
 extern crate clap;
@@ -20,14 +22,14 @@ use cqrs::domain::{HydratedAggregate, AggregatePrecondition, AggregateVersion};
 use cqrs::error::{AppendEventsError, Never};
 use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 
-use std::sync::Arc;
+use std::sync::{Arc,RwLock};
 use std::boxed::Box;
 
 use cqrs_todo_core::{Event, TodoAggregate, TodoState, TodoData, TodoStatus, Command};
 use cqrs_todo_core::domain;
 
 use mount::Mount;
-use juniper::FieldResult;
+use juniper::{Value, FieldResult};
 use juniper_iron::GraphQLHandler;
 use chrono::prelude::*;
 use chrono::Duration;
@@ -166,6 +168,7 @@ type Commander =
     >;
 
 struct Context {
+    stream_index: Arc<RwLock<Vec<usize>>>,
     query: Arc<View>,
     command: Arc<Commander>,
     id_provider: Arc<UsizeIdProvider>,
@@ -182,6 +185,39 @@ struct Query;
 graphql_object!(Query: Context |&self| {
     field apiVersion() -> &str {
         "1.0"
+    }
+
+    field allTodos(&executor, first: Option<juniper::ID>, after: Option<Cursor>) -> FieldResult<TodoPage> {
+        let context = executor.context();
+
+        let first_idx =
+            if let Some(Cursor(idx)) = after {
+                idx + 1
+            } else if let Some(id) = first {
+                parse_id(id)?
+            } else { 0 };
+
+        let reader = context.stream_index.read().unwrap();
+        let len = reader.len();
+
+        let mut items = Vec::default();
+        let mut end_cursor = None;
+        for agg_id in reader.iter().skip(first_idx).take(5) {
+            let cursor = Cursor(*agg_id);
+            items.push(TodoEdge {
+                agg_id: *agg_id,
+                cursor,
+            });
+            end_cursor = Some(cursor);
+        }
+        Ok(TodoPage {
+            total_count: len,
+            page_info: PageInfo {
+                has_next_page: items.len() != 0,
+                end_cursor,
+            },
+            edges: items,
+        })
     }
 
     field todo(&executor, id: juniper::ID) -> FieldResult<Option<TodoQL>> {
@@ -218,6 +254,73 @@ graphql_object!(TodoQL: Context |&self| {
     }
 });
 
+struct TodoPage {
+    total_count: usize,
+    edges: Vec<TodoEdge>,
+    page_info: PageInfo,
+}
+
+graphql_object!(TodoPage: Context |&self| {
+    field total_count() -> FieldResult<i32> {
+        Ok(self.total_count as i32)
+    }
+
+    field edges() -> FieldResult<&[TodoEdge]> {
+        Ok(&*self.edges)
+    }
+
+    field page_info() -> FieldResult<&PageInfo> {
+        Ok(&self.page_info)
+    }
+});
+
+struct TodoEdge {
+    agg_id: usize,
+    cursor: Cursor,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Cursor(usize);
+
+impl ToString for Cursor {
+    fn to_string(&self) -> String {
+        base64::encode(&self.0.to_string())
+    }
+}
+
+graphql_scalar!(Cursor {
+    description: "An opaque identifier, represented as a location in an enumeration"
+
+    resolve(&self) -> Value {
+        Value::string(self.to_string())
+    }
+
+    from_input_value(v: &InputValue) -> Option<Cursor> {
+        v.as_string_value()
+            .and_then(|v| base64::decode(v).ok())
+            .and_then(|v| String::from_utf8_lossy(&v).parse::<usize>().ok())
+            .map(Cursor)
+    }
+});
+
+graphql_object!(TodoEdge: Context |&self| {
+    field node(&executor) -> FieldResult<Option<TodoQL>> {
+        let rehydrate_result = executor.context().query.rehydrate(&self.agg_id)?;
+
+        Ok(rehydrate_result.map(|agg| TodoQL(self.agg_id, agg)))
+    }
+
+    field cursor() -> FieldResult<Cursor> {
+        Ok(self.cursor)
+    }
+});
+
+#[derive(GraphQLObject)]
+struct PageInfo {
+    has_next_page: bool,
+    end_cursor: Option<Cursor>,
+}
+
 struct Mutations;
 
 graphql_object!(Mutations: Context |&self| {
@@ -228,8 +331,6 @@ graphql_object!(Mutations: Context |&self| {
     field new_todo(&executor, text: String, reminder_time: Option<DateTime<Utc>>) -> FieldResult<TodoQL> {
         let context = executor.context();
 
-        let new_id = context.id_provider.new_id();
-
         let description = domain::Description::new(text)?;
         let reminder =
             if let Some(time) = reminder_time {
@@ -239,8 +340,11 @@ graphql_object!(Mutations: Context |&self| {
 
         let command = Command::Create(description, reminder);
 
+        let new_id = context.id_provider.new_id();
         let agg = context.command
             .execute_and_persist_with_decorator(&new_id, command, Some(AggregatePrecondition::New), Default::default())?;
+
+        context.stream_index.write().unwrap().push(new_id);
 
         Ok(TodoQL(new_id, agg))
     }
@@ -396,11 +500,13 @@ fn main() {
         TodoAggregate::persist_events_and_snapshot(executor, Arc::clone(&es), Arc::clone(&ss))
             .without_decorator();
 
+    let stream_index = Arc::new(RwLock::new(vec![id]));
     let query = Arc::new(view);
     let command = Arc::new(command);
 
     let context_factory = move |_: &mut iron::Request| {
         Context {
+            stream_index: Arc::clone(&stream_index),
             query: Arc::clone(&query),
             command: Arc::clone(&command),
             id_provider: Arc::clone(&id_provider),
