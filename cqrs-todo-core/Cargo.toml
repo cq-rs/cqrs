@@ -6,4 +6,6 @@ authors = ["Marcus Griep <marcus@griep.us>"]
 [dependencies]
 cqrs = { path = "../cqrs" }
 smallvec = "*"
-chrono = "*"
+chrono = { version = "*", features = ["serde"] }
+serde = "*"
+serde_derive = "*"

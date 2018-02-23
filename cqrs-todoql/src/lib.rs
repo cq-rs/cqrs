@@ -1,5 +1,6 @@
 extern crate cqrs;
 extern crate cqrs_memory;
+extern crate cqrs_redis;
 extern crate cqrs_todo_core;
 
 #[macro_use] extern crate juniper;
@@ -10,6 +11,13 @@ extern crate base64;
 extern crate fnv;
 extern crate iron;
 extern crate mount;
+extern crate hashids;
+
+extern crate redis;
+extern crate r2d2_redis;
+extern crate r2d2;
+extern crate serde;
+extern crate serde_json;
 
 mod graphql;
 mod store;
@@ -22,11 +30,10 @@ use cqrs::domain::execute::ViewExecutor;
 use cqrs::domain::persist::{PersistableSnapshotAggregate, EventsAndSnapshotWithDecorator};
 use cqrs::domain::ident::{AggregateIdProvider, UsizeIdProvider};
 
-type AggregateId = usize;
-type Hasher = fnv::FnvBuildHasher;
+type AggregateId = String;
 
-type EventStore = store::MemoryOrNullEventStore<Event, AggregateId, Hasher>;
-type SnapshotStore = store::MemoryOrNullSnapshotStore<TodoState, AggregateId, Hasher>;
+type EventStore = store::MemoryOrNullEventStore;
+type SnapshotStore = store::MemoryOrNullSnapshotStore;
 
 type View =
     SnapshotAndEventsView<
@@ -82,11 +89,27 @@ pub fn start_todo_server(event_backend: BackendChoice, snapshot_backend: Backend
                 store::MemoryOrNullSnapshotStore::new_memory_store(),
         };
 
-    let id_provider = UsizeIdProvider::default();
+    let connection_info = "redis://127.0.0.1:6379";
+
+    let pool = ::r2d2::Pool::new(::r2d2_redis::RedisConnectionManager::new(connection_info).unwrap()).unwrap();
+
+    let config = ::cqrs_redis::Config::new("mtest");
+
+    let es = store::MemoryOrNullEventStore::new_redis_store(config.clone(), pool.clone());
+    let ss = store::MemoryOrNullSnapshotStore::new_redis_store(config, pool);
+
+    let hashid =
+        if let Ok(hashid) = hashids::HashIds::new_with_salt_and_min_length("cqrs".to_string(), 10) {
+            hashid
+        } else {
+            panic!("Failed to generate hashid")
+        };
+
+    let id_provider = IdProvider(hashid, Default::default());
 
     let id = id_provider.new_id();
 
-    helper::prefill(id, &es, &ss);
+    helper::prefill(&id, &es, &ss);
 
     let stream_index = vec![id];
 
@@ -105,7 +128,19 @@ pub fn start_todo_server(event_backend: BackendChoice, snapshot_backend: Backend
 
     let chain = graphql::endpoint::create_chain(context);
 
-    iron::Iron::new(chain).http("127.0.0.1:2777").unwrap()
+    iron::Iron::new(chain).http("0.0.0.0:2777").unwrap()
+}
+
+pub struct IdProvider(hashids::HashIds,::std::sync::atomic::AtomicUsize);
+
+impl AggregateIdProvider for IdProvider {
+    type AggregateId = String;
+
+    fn new_id(&self) -> Self::AggregateId {
+        let next = self.1.fetch_add(1, ::std::sync::atomic::Ordering::SeqCst);
+        let duration = ::std::time::SystemTime::now().duration_since(::std::time::UNIX_EPOCH).unwrap();
+        self.0.encode(&vec![duration.as_secs() as i64, next as i64])
+    }
 }
 
 mod helper {
@@ -115,7 +150,7 @@ mod helper {
 
     use super::{AggregateId, EventStore, SnapshotStore};
 
-    pub fn prefill(id: AggregateId, es: &EventStore, ss: &SnapshotStore) {
+    pub fn prefill(id: &AggregateId, es: &EventStore, ss: &SnapshotStore) {
         let epoch = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
         let reminder_time = epoch + Duration::seconds(10000);
         let mut events = Vec::new();
@@ -126,8 +161,8 @@ mod helper {
         events.push(Event::Created(domain::Description::new("Ignored!").unwrap()));
         events.push(Event::ReminderUpdated(None));
 
-        es.append_events(&id, &events, None).unwrap();
-        ss.persist_snapshot(&id, VersionedSnapshot {
+        es.append_events(id, &events, None).unwrap();
+        ss.persist_snapshot(id, VersionedSnapshot {
             version: Version::from(1),
             snapshot: TodoState::Created(TodoData {
                 description: domain::Description::new("Hello!").unwrap(),

@@ -1,6 +1,8 @@
 extern crate cqrs;
 extern crate chrono;
 extern crate smallvec;
+extern crate serde;
+#[macro_use] extern crate serde_derive;
 
 use smallvec::SmallVec;
 use cqrs::domain::{Aggregate, RestoreAggregate, SnapshotAggregate};
@@ -10,7 +12,7 @@ pub mod domain {
     use error::{InvalidDescription, InvalidReminderTime};
     use std::borrow::Borrow;
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
     pub struct Reminder {
         time: DateTime<Utc>,
     }
@@ -31,7 +33,7 @@ pub mod domain {
         }
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     pub struct Description {
         text: String,
     }
@@ -119,7 +121,7 @@ pub mod error {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Event {
     Created(domain::Description),
     TextUpdated(domain::Description),
@@ -139,13 +141,13 @@ pub enum Command {
     ResetCompleted,
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TodoStatus {
     Completed,
     NotCompleted,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TodoData {
     pub description: domain::Description,
     pub reminder: Option<domain::Reminder>,
@@ -253,10 +255,10 @@ impl TodoData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TodoState {
-    Uninitialized,
     Created(TodoData),
+    Uninitialized,
 }
 
 impl Default for TodoState {

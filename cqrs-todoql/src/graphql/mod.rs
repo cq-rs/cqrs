@@ -13,11 +13,11 @@ pub struct InnerContext {
     pub stream_index: RwLock<Vec<AggregateId>>,
     pub query: View,
     pub command: Commander,
-    pub id_provider: UsizeIdProvider,
+    pub id_provider: super::IdProvider,
 }
 
 impl InnerContext {
-    pub fn new(stream_index: Vec<AggregateId>, query: View, command: Commander, id_provider: UsizeIdProvider) -> Self {
+    pub fn new(stream_index: Vec<AggregateId>, query: View, command: Commander, id_provider: super::IdProvider) -> Self {
         InnerContext {
             stream_index: RwLock::new(stream_index),
             query,

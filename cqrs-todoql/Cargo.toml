@@ -9,6 +9,7 @@ base64 = "*"
 cqrs = { path = "../cqrs" }
 cqrs-memory = { path = "../cqrs-memory" }
 cqrs-todo-core = { path = "../cqrs-todo-core" }
+cqrs-redis = { path = "../cqrs-redis" }
 clap = "*"
 chrono = "*"
 iron = "*"
@@ -16,3 +17,9 @@ juniper = "0.9"
 juniper_codegen = "*"
 juniper_iron = "*"
 mount = "*"
+redis = "*"
+r2d2_redis = "*"
+r2d2 = "*"
+serde = "*"
+serde_json = "*"
+hashids = { version = "1.0.0", git = "https://github.com/charsyam/hashids_rust.git" }

@@ -2,6 +2,7 @@
 members = [
     "cqrs",
     "cqrs-memory",
+    "cqrs-redis",
     "cqrs-todo-core",
     "cqrs-todoql",
 ]

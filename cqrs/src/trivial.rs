@@ -5,11 +5,11 @@ use error::{AppendEventsError, Never};
 use std::marker::PhantomData;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub struct NullEventStore<Event, AggregateId> {
+pub struct NullEventStore<Event, AggregateId: ?Sized> {
     _phantom: PhantomData<(Event, AggregateId)>,
 }
 
-impl<Event, AggregateId> Default for NullEventStore<Event, AggregateId> {
+impl<Event, AggregateId: ?Sized> Default for NullEventStore<Event, AggregateId> {
     fn default() -> Self {
         NullEventStore {
             _phantom: PhantomData,
@@ -17,7 +17,7 @@ impl<Event, AggregateId> Default for NullEventStore<Event, AggregateId> {
     }
 }
 
-impl<Event, AggregateId> EventSource for NullEventStore<Event, AggregateId> {
+impl<Event, AggregateId: ?Sized> EventSource for NullEventStore<Event, AggregateId> {
     type AggregateId = AggregateId;
     type Event = Event;
     type Events = Vec<VersionedEvent<Self::Event>>;
@@ -29,7 +29,7 @@ impl<Event, AggregateId> EventSource for NullEventStore<Event, AggregateId> {
     }
 }
 
-impl<Event, AggregateId> EventAppend for NullEventStore<Event, AggregateId> {
+impl<Event, AggregateId: ?Sized> EventAppend for NullEventStore<Event, AggregateId> {
     type AggregateId = AggregateId;
     type Event = Event;
     type Error = AppendEventsError<Never>;
@@ -41,11 +41,11 @@ impl<Event, AggregateId> EventAppend for NullEventStore<Event, AggregateId> {
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub struct NullSnapshotStore<Snapshot, AggregateId> {
+pub struct NullSnapshotStore<Snapshot, AggregateId: ?Sized> {
     _phantom: PhantomData<(Snapshot, AggregateId)>,
 }
 
-impl<Snapshot, AggregateId> Default for NullSnapshotStore<Snapshot, AggregateId> {
+impl<Snapshot, AggregateId: ?Sized> Default for NullSnapshotStore<Snapshot, AggregateId> {
     fn default() -> Self {
         NullSnapshotStore {
             _phantom: PhantomData,
@@ -53,7 +53,7 @@ impl<Snapshot, AggregateId> Default for NullSnapshotStore<Snapshot, AggregateId>
     }
 }
 
-impl<Snapshot, AggregateId> SnapshotSource for NullSnapshotStore<Snapshot, AggregateId> {
+impl<Snapshot, AggregateId: ?Sized> SnapshotSource for NullSnapshotStore<Snapshot, AggregateId> {
     type AggregateId = AggregateId;
     type Snapshot = Snapshot;
     type Error = Never;
@@ -64,7 +64,7 @@ impl<Snapshot, AggregateId> SnapshotSource for NullSnapshotStore<Snapshot, Aggre
     }
 }
 
-impl<Snapshot, AggregateId> SnapshotPersist for NullSnapshotStore<Snapshot, AggregateId> {
+impl<Snapshot, AggregateId: ?Sized> SnapshotPersist for NullSnapshotStore<Snapshot, AggregateId> {
     type AggregateId = AggregateId;
     type Snapshot = Snapshot;
     type Error = Never;

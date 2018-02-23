@@ -9,7 +9,7 @@ pub trait QueryableAggregate: Aggregate {
     fn events_view<ESource>(event_source: ESource) -> EventsView<Self, ESource>
         where
             ESource: EventSource<Event=<Self as Aggregate>::Event>,
-            ESource::Events: Borrow<[VersionedEvent<ESource::Event>]> + IntoIterator<Item=VersionedEvent<ESource::Event>>,
+            ESource::Events: IntoIterator<Item=VersionedEvent<ESource::Event>>,
     {
         EventsView {
             event_source,
@@ -32,7 +32,7 @@ pub trait QueryableSnapshotAggregate: RestoreAggregate {
     fn snapshot_with_events_view<ESource, SSource>(event_source: ESource, snapshot_source: SSource) -> SnapshotAndEventsView<Self, ESource, SSource>
         where
             ESource: EventSource<Event=<Self as Aggregate>::Event>,
-            ESource::Events: Borrow<[VersionedEvent<ESource::Event>]> + IntoIterator<Item=VersionedEvent<ESource::Event>>,
+            ESource::Events: IntoIterator<Item=VersionedEvent<ESource::Event>>,
             SSource: SnapshotSource<Snapshot=<Self as RestoreAggregate>::Snapshot, AggregateId=ESource::AggregateId>,
     {
         SnapshotAndEventsView {
@@ -51,7 +51,7 @@ pub struct EventsView<Agg, ESource>
     where
         Agg: Aggregate,
         ESource: EventSource<Event=Agg::Event>,
-        ESource::Events: Borrow<[VersionedEvent<Agg::Event>]> + IntoIterator<Item=VersionedEvent<Agg::Event>>,
+        ESource::Events: IntoIterator<Item=VersionedEvent<Agg::Event>>,
 {
     event_source: ESource,
     _phantom: PhantomData<Agg>
@@ -61,7 +61,7 @@ impl<Agg, ESource> EventsView<Agg, ESource>
     where
         Agg: Aggregate,
         ESource: EventSource<Event=Agg::Event>,
-        ESource::Events: Borrow<[VersionedEvent<Agg::Event>]> + IntoIterator<Item=VersionedEvent<Agg::Event>>,
+        ESource::Events: IntoIterator<Item=VersionedEvent<Agg::Event>>,
 {
     pub fn rehydrate(&self, agg_id: &ESource::AggregateId) -> Result<Option<HydratedAggregate<Agg>>, ESource::Error> {
         let events =
@@ -107,7 +107,7 @@ pub struct SnapshotAndEventsView<Agg, ESource, SSource>
     where
         Agg: RestoreAggregate,
         ESource: EventSource<Event=Agg::Event>,
-        ESource::Events: Borrow<[VersionedEvent<Agg::Event>]> + IntoIterator<Item=VersionedEvent<Agg::Event>>,
+        ESource::Events: IntoIterator<Item=VersionedEvent<Agg::Event>>,
         SSource: SnapshotSource<Snapshot=Agg::Snapshot, AggregateId=ESource::AggregateId>,
 {
     event_source: ESource,
@@ -119,7 +119,7 @@ impl<Agg, ESource, SSource> SnapshotAndEventsView<Agg, ESource, SSource>
     where
         Agg: RestoreAggregate,
         ESource: EventSource<Event=Agg::Event>,
-        ESource::Events: Borrow<[VersionedEvent<Agg::Event>]> + IntoIterator<Item=VersionedEvent<Agg::Event>>,
+        ESource::Events: IntoIterator<Item=VersionedEvent<Agg::Event>>,
         SSource: SnapshotSource<Snapshot=Agg::Snapshot, AggregateId=ESource::AggregateId>,
 {
     pub fn rehydrate(&self, agg_id: &ESource::AggregateId) -> Result<Option<HydratedAggregate<Agg>>, LoadAggregateError<ESource::Error, SSource::Error>> {
@@ -155,7 +155,7 @@ impl<Agg, ESource, SSource> SnapshotAndEventsView<Agg, ESource, SSource>
 }
 
 pub trait AggregateQuery<Agg: Aggregate>: Sized {
-    type AggregateId;
+    type AggregateId: ?Sized;
     type Error: error::Error;
 
     fn rehydrate(&self, agg_id: &Self::AggregateId) -> Result<Option<HydratedAggregate<Agg>>, Self::Error>;
@@ -165,7 +165,7 @@ impl<Agg, ESource> AggregateQuery<Agg> for EventsView<Agg, ESource>
     where
         Agg: Aggregate,
         ESource: EventSource<Event=Agg::Event>,
-        ESource::Events: Borrow<[VersionedEvent<ESource::Event>]> + IntoIterator<Item=VersionedEvent<ESource::Event>>,
+        ESource::Events: IntoIterator<Item=VersionedEvent<ESource::Event>>,
 {
     type AggregateId = ESource::AggregateId;
     type Error = ESource::Error;
@@ -194,7 +194,7 @@ impl<Agg, ESource, SSource> AggregateQuery<Agg> for SnapshotAndEventsView<Agg, E
     where
         Agg: RestoreAggregate,
         ESource: EventSource<Event=Agg::Event>,
-        ESource::Events: Borrow<[VersionedEvent<ESource::Event>]> + IntoIterator<Item=VersionedEvent<ESource::Event>>,
+        ESource::Events: IntoIterator<Item=VersionedEvent<ESource::Event>>,
         SSource: SnapshotSource<Snapshot=Agg::Snapshot, AggregateId=ESource::AggregateId>,
 {
     type AggregateId = ESource::AggregateId;

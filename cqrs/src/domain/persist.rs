@@ -279,7 +279,7 @@ pub trait AggregateCommand<Agg, Decorator>
         Agg: Aggregate,
         Decorator: EventDecorator<Event=Agg::Event>,
 {
-    type AggregateId;
+    type AggregateId: ?Sized;
     type Error: error::Error;
 
     fn execute_and_persist_with_decorator(&self, agg_id: &Self::AggregateId, command: Agg::Command, precondition: Option<AggregatePrecondition>, decorator: Decorator) -> Result<HydratedAggregate<Agg>, Self::Error>;

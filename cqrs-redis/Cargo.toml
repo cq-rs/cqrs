@@ -1,0 +1,8 @@
+[package]
+name = "cqrs-redis"
+version = "0.1.0"
+authors = ["Marcus Griep <marcus@griep.us>"]
+
+[dependencies]
+cqrs = { path = "../cqrs" }
+redis = "*"

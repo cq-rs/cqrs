@@ -9,7 +9,7 @@ pub trait Executor<Agg>
     where
         Agg: Aggregate,
 {
-    type AggregateId;
+    type AggregateId: ?Sized;
     type Error: error::Error;
 
     fn execute(&self, agg_id: &Self::AggregateId, command: Agg::Command, precondition: Option<AggregatePrecondition>) -> Result<AggregateWithNewEvents<Agg>, ExecuteError<Agg::CommandError, Self::Error>>;

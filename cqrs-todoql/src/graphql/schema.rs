@@ -11,10 +11,6 @@ use juniper::{ID, FieldResult, Value};
 
 use super::Context;
 
-fn parse_id(id: ID) -> Result<usize,ParseIntError> {
-    Ok(id.parse()?)
-}
-
 pub struct Query;
 
 graphql_object!(Query: Context |&self| {
@@ -25,30 +21,42 @@ graphql_object!(Query: Context |&self| {
     field allTodos(&executor, first: Option<ID>, after: Option<Cursor>) -> FieldResult<TodoPage> {
         let context = executor.context();
 
-        let first_idx =
-            if let Some(Cursor(idx)) = after {
-                idx + 1
-            } else if let Some(id) = first {
-                parse_id(id)?
-            } else { 0 };
-
         let reader = context.stream_index.read().unwrap();
         let len = reader.len();
 
+        let mut skip =
+            if let Some(Cursor(cursor)) = after {
+                cursor
+            } else { 0 };
+
+        let mut also_skipped = 0;
+        let iterator =
+            reader.iter().skip_while(move |id| {
+                if let Some(ref first_id) = first {
+                    also_skipped += 1;
+                    **id != **first_id
+                } else {
+                    false
+                }
+            }).skip(skip);
+
         let mut items = Vec::default();
         let mut end_cursor = None;
-        for agg_id in reader.iter().skip(first_idx).take(5) {
-            let cursor = Cursor(*agg_id);
+        const MAX_PAGE_SIZE: usize = 10;
+        for agg_id in iterator.take(MAX_PAGE_SIZE) {
+            skip += 1;
+            let cursor = Cursor(skip);
             items.push(TodoEdge {
-                agg_id: *agg_id,
+                agg_id: ID::from(agg_id.clone()),
                 cursor,
             });
             end_cursor = Some(cursor);
         }
+
         Ok(TodoPage {
             total_count: len,
             page_info: PageInfo {
-                has_next_page: items.len() != 0,
+                has_next_page: items.len() != 0 && skip + also_skipped < len,
                 end_cursor,
             },
             edges: items,
@@ -57,19 +65,18 @@ graphql_object!(Query: Context |&self| {
 
     field todo(&executor, id: ID) -> FieldResult<Option<TodoQL>> {
         let context = executor.context();
-        let int_id = parse_id(id)?;
 
-        let rehydrate_result = context.query.rehydrate(&int_id)?;
+        let rehydrate_result = context.query.rehydrate(&id.to_string())?;
 
-        Ok(rehydrate_result.map(|agg| TodoQL(int_id, agg)))
+        Ok(rehydrate_result.map(|agg| TodoQL(id, agg)))
     }
 });
 
-struct TodoQL(usize, HydratedAggregate<TodoAggregate>);
+struct TodoQL(ID, HydratedAggregate<TodoAggregate>);
 
 graphql_object!(TodoQL: Context |&self| {
     field id() -> FieldResult<ID> {
-        Ok(self.0.to_string().into())
+        Ok(self.0.clone().into())
     }
 
     field description() -> FieldResult<&str> {
@@ -110,7 +117,7 @@ graphql_object!(TodoPage: Context |&self| {
 });
 
 struct TodoEdge {
-    agg_id: usize,
+    agg_id: ID,
     cursor: Cursor,
 }
 
@@ -140,9 +147,9 @@ graphql_scalar!(Cursor {
 
 graphql_object!(TodoEdge: Context |&self| {
     field node(&executor) -> FieldResult<Option<TodoQL>> {
-        let rehydrate_result = executor.context().query.rehydrate(&self.agg_id)?;
+        let rehydrate_result = executor.context().query.rehydrate(&self.agg_id.to_string())?;
 
-        Ok(rehydrate_result.map(|agg| TodoQL(self.agg_id, agg)))
+        Ok(rehydrate_result.map(|agg| TodoQL(self.agg_id.clone(), agg)))
     }
 
     field cursor() -> FieldResult<Cursor> {
@@ -160,7 +167,7 @@ pub struct Mutations;
 
 graphql_object!(Mutations: Context |&self| {
     field todo(id: ID) -> FieldResult<TodoMutQL> {
-        Ok(TodoMutQL(parse_id(id)?))
+        Ok(TodoMutQL(id))
     }
 
     field new_todo(&executor, text: String, reminder_time: Option<DateTime<Utc>>) -> FieldResult<TodoQL> {
@@ -179,14 +186,14 @@ graphql_object!(Mutations: Context |&self| {
         let agg = context.command
             .execute_and_persist_with_decorator(&new_id, command, Some(AggregatePrecondition::New), Default::default())?;
 
-        context.stream_index.write().unwrap().push(new_id);
+        context.stream_index.write().unwrap().push(new_id.clone());
 
-        Ok(TodoQL(new_id, agg))
+        Ok(TodoQL(new_id.into(), agg))
     }
 
 });
 
-struct TodoMutQL(usize);
+struct TodoMutQL(ID);
 
 fn i32_as_aggregate_version(version_int: i32) -> AggregateVersion {
     if version_int < 0 {
@@ -212,9 +219,9 @@ graphql_object!(TodoMutQL: Context |&self| {
         let command = Command::UpdateText(description);
 
         let agg = executor.context().command
-            .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
+            .execute_and_persist_with_decorator(&self.0.to_string(), command, Some(expectation), Default::default())?;
 
-        Ok(TodoQL(self.0, agg))
+        Ok(TodoQL(self.0.clone(), agg))
     }
 
     field set_reminder(&executor, time: DateTime<Utc>, expected_version: Option<i32>) -> FieldResult<TodoQL> {
@@ -225,9 +232,9 @@ graphql_object!(TodoMutQL: Context |&self| {
         let command = Command::SetReminder(reminder);
 
         let agg = executor.context().command
-            .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
+            .execute_and_persist_with_decorator(&self.0.to_string(), command, Some(expectation), Default::default())?;
 
-        Ok(TodoQL(self.0, agg))
+        Ok(TodoQL(self.0.clone(), agg))
     }
 
     field cancel_reminder(&executor, expected_version: Option<i32>) -> FieldResult<TodoQL> {
@@ -236,9 +243,9 @@ graphql_object!(TodoMutQL: Context |&self| {
         let command = Command::CancelReminder;
 
         let agg = executor.context().command
-            .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
+            .execute_and_persist_with_decorator(&self.0.to_string(), command, Some(expectation), Default::default())?;
 
-        Ok(TodoQL(self.0, agg))
+        Ok(TodoQL(self.0.clone(), agg))
     }
 
     field toggle(&executor, expected_version: Option<i32>) -> FieldResult<TodoQL> {
@@ -247,9 +254,9 @@ graphql_object!(TodoMutQL: Context |&self| {
         let command = Command::ToggleCompletion;
 
         let agg = executor.context().command
-            .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
+            .execute_and_persist_with_decorator(&self.0.to_string(), command, Some(expectation), Default::default())?;
 
-        Ok(TodoQL(self.0, agg))
+        Ok(TodoQL(self.0.clone(), agg))
     }
 
     field reset(&executor, expected_version: Option<i32>) -> FieldResult<TodoQL> {
@@ -258,9 +265,9 @@ graphql_object!(TodoMutQL: Context |&self| {
         let command = Command::ResetCompleted;
 
         let agg = executor.context().command
-            .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
+            .execute_and_persist_with_decorator(&self.0.to_string(), command, Some(expectation), Default::default())?;
 
-        Ok(TodoQL(self.0, agg))
+        Ok(TodoQL(self.0.clone(), agg))
     }
 
     field complete(&executor, expected_version: Option<i32>) -> FieldResult<TodoQL> {
@@ -269,8 +276,8 @@ graphql_object!(TodoMutQL: Context |&self| {
         let command = Command::MarkCompleted;
 
         let agg = executor.context().command
-            .execute_and_persist_with_decorator(&self.0, command, Some(expectation), Default::default())?;
+            .execute_and_persist_with_decorator(&self.0.to_string(), command, Some(expectation), Default::default())?;
 
-        Ok(TodoQL(self.0, agg))
+        Ok(TodoQL(self.0.clone(), agg))
     }
 });

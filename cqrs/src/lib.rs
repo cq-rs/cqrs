@@ -129,7 +129,7 @@ pub mod exp {
 }
 
 pub trait EventSource: Sized {
-    type AggregateId;
+    type AggregateId: ?Sized;
     type Event;
     type Events;
     type Error: StdError;
@@ -181,7 +181,7 @@ impl<T: EventSource> EventSource for Arc<T> {
 }
 
 pub trait EventAppend {
-    type AggregateId;
+    type AggregateId: ?Sized;
     type Event;
     type Error: StdError;
 
@@ -222,7 +222,7 @@ impl<T: EventAppend> EventAppend for Arc<T> {
 }
 
 pub trait SnapshotSource {
-    type AggregateId;
+    type AggregateId: ?Sized;
     type Snapshot;
     type Error: StdError;
 
@@ -263,7 +263,7 @@ impl<T: SnapshotSource> SnapshotSource for Arc<T> {
 }
 
 pub trait SnapshotPersist {
-    type AggregateId;
+    type AggregateId: ?Sized;
     type Snapshot;
     type Error: StdError;
 
