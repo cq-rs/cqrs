@@ -23,12 +23,14 @@ mod graphql;
 mod store;
 
 use std::sync::Arc;
-use cqrs_todo_core::{Event, TodoState, TodoAggregate};
+use cqrs_todo_core::{Event, TodoAggregate};
 
 use cqrs::domain::query::{QueryableSnapshotAggregate, SnapshotAndEventsView};
 use cqrs::domain::execute::ViewExecutor;
 use cqrs::domain::persist::{PersistableSnapshotAggregate, EventsAndSnapshotWithDecorator};
-use cqrs::domain::ident::{AggregateIdProvider, UsizeIdProvider};
+use cqrs::domain::ident::{AggregateIdProvider};
+
+use r2d2_redis::RedisConnectionManager;
 
 type AggregateId = String;
 
@@ -60,6 +62,7 @@ type Commander =
 pub enum BackendChoice {
     Memory,
     Null,
+    Redis(String)
 }
 
 fn create_view(es: &Arc<EventStore>, ss: &Arc<SnapshotStore>) -> View {
@@ -79,6 +82,11 @@ pub fn start_todo_server(event_backend: BackendChoice, snapshot_backend: Backend
                 store::MemoryOrNullEventStore::new_null_store(),
             BackendChoice::Memory =>
                 store::MemoryOrNullEventStore::new_memory_store(),
+            BackendChoice::Redis(conn_str) => {
+                let pool = r2d2::Pool::new(RedisConnectionManager::new(conn_str.as_ref()).unwrap()).unwrap();
+                let config = cqrs_redis::Config::new("todoql");
+                store::MemoryOrNullEventStore::new_redis_store(config, pool)
+            }
         };
 
     let ss =
@@ -87,16 +95,12 @@ pub fn start_todo_server(event_backend: BackendChoice, snapshot_backend: Backend
                 store::MemoryOrNullSnapshotStore::new_null_store(),
             BackendChoice::Memory =>
                 store::MemoryOrNullSnapshotStore::new_memory_store(),
+            BackendChoice::Redis(conn_str) => {
+                let pool = r2d2::Pool::new(r2d2_redis::RedisConnectionManager::new(conn_str.as_ref()).unwrap()).unwrap();
+                let config = cqrs_redis::Config::new("todoql");
+                store::MemoryOrNullSnapshotStore::new_redis_store(config, pool)
+            }
         };
-
-    let connection_info = "redis://127.0.0.1:6379";
-
-    let pool = ::r2d2::Pool::new(::r2d2_redis::RedisConnectionManager::new(connection_info).unwrap()).unwrap();
-
-    let config = ::cqrs_redis::Config::new("mtest");
-
-    let es = store::MemoryOrNullEventStore::new_redis_store(config.clone(), pool.clone());
-    let ss = store::MemoryOrNullSnapshotStore::new_redis_store(config, pool);
 
     let hashid =
         if let Ok(hashid) = hashids::HashIds::new_with_salt_and_min_length("cqrs".to_string(), 10) {

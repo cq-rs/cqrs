@@ -1,5 +1,3 @@
-use std::hash::{Hash, BuildHasher};
-
 use cqrs::{EventSource, EventAppend, SnapshotSource, SnapshotPersist};
 use cqrs::{Since, Precondition, VersionedEvent, VersionedSnapshot};
 use cqrs::trivial::{NullEventStore,NullSnapshotStore};
@@ -7,18 +5,17 @@ use cqrs_memory::{MemoryEventStore,MemoryStateStore};
 use cqrs::error::{AppendEventsError, Never};
 use fnv::FnvBuildHasher;
 
-use std::ops::Deref;
-
+use cqrs_redis;
 use cqrs_todo_core::{Event, TodoState};
 
-use r2d2::ManageConnection;
+use r2d2;
 use r2d2_redis::RedisConnectionManager;
 
 pub enum MemoryOrNullEventStore
 {
     Memory(MemoryEventStore<Event, String, FnvBuildHasher>),
     Null(NullEventStore<Event, String>),
-    Redis(::cqrs_redis::Config, ::r2d2::Pool<::r2d2_redis::RedisConnectionManager>)
+    Redis(cqrs_redis::Config, r2d2::Pool<RedisConnectionManager>)
 }
 
 impl MemoryOrNullEventStore
@@ -31,7 +28,7 @@ impl MemoryOrNullEventStore
         MemoryOrNullEventStore::Null(NullEventStore::default())
     }
 
-    pub fn new_redis_store(config: ::cqrs_redis::Config, pool: ::r2d2::Pool<::r2d2_redis::RedisConnectionManager>) -> Self {
+    pub fn new_redis_store(config: cqrs_redis::Config, pool: r2d2::Pool<RedisConnectionManager>) -> Self {
         MemoryOrNullEventStore::Redis(config, pool)
     }
 }
@@ -86,7 +83,7 @@ pub enum MemoryOrNullSnapshotStore
 {
     Memory(MemoryStateStore<TodoState, String, FnvBuildHasher>),
     Null(NullSnapshotStore<TodoState, String>),
-    Redis(::cqrs_redis::Config, ::r2d2::Pool<::r2d2_redis::RedisConnectionManager>)
+    Redis(cqrs_redis::Config, r2d2::Pool<RedisConnectionManager>)
 }
 
 impl MemoryOrNullSnapshotStore
@@ -99,7 +96,7 @@ impl MemoryOrNullSnapshotStore
         MemoryOrNullSnapshotStore::Null(NullSnapshotStore::default())
     }
 
-    pub fn new_redis_store(config: ::cqrs_redis::Config, pool: ::r2d2::Pool<::r2d2_redis::RedisConnectionManager>) -> Self {
+    pub fn new_redis_store(config: cqrs_redis::Config, pool: r2d2::Pool<RedisConnectionManager>) -> Self {
         MemoryOrNullSnapshotStore::Redis(config, pool)
     }
 }
@@ -159,7 +156,7 @@ impl<S: ::serde::Serialize + ::serde::de::DeserializeOwned> Default for SerdeSna
     }
 }
 
-impl<S: ::serde::Serialize + ::serde::de::DeserializeOwned> ::cqrs_redis::RedisSerializer for SerdeSnapshotSerializer<S> {
+impl<S: ::serde::Serialize + ::serde::de::DeserializeOwned> cqrs_redis::RedisSerializer for SerdeSnapshotSerializer<S> {
     type Value = S;
     type Output = Vec<u8>;
     type Input = Vec<u8>;

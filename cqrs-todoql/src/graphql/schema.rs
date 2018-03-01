@@ -1,5 +1,3 @@
-use std::num::ParseIntError;
-
 use base64;
 use cqrs::Version;
 use cqrs::domain::ident::AggregateIdProvider;

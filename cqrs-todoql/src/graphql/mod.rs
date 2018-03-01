@@ -1,7 +1,6 @@
 use std::ops;
 use std::sync::{Arc,RwLock};
 
-use cqrs::domain::ident::UsizeIdProvider;
 use juniper;
 
 use super::{AggregateId, View, Commander};
