@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "cqrs",
+    "cqrs-data",
     "cqrs-memory",
     "cqrs-redis",
     "cqrs-todo-core",

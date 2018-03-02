@@ -1,10 +1,10 @@
 [package]
-name = "cqrs"
+name = "cqrs-data"
 version = "0.1.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
 
 [dependencies]
+cqrs = { path = "../cqrs" }
 
 [dev-dependencies]
 static_assertions = "*"
-
