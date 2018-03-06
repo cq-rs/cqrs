@@ -1,0 +1,410 @@
+{
+  "title": "Event stream '$stats-127.0.0.1:2113'",
+  "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113",
+  "updated": "2018-03-02T23:19:10.807837Z",
+  "streamId": "$stats-127.0.0.1:2113",
+  "author": {
+    "name": "EventStore"
+  },
+  "headOfStream": false,
+  "links": [
+    {
+      "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113",
+      "relation": "self"
+    },
+    {
+      "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/head/backward/20",
+      "relation": "first"
+    },
+    {
+      "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/20/forward/20",
+      "relation": "previous"
+    },
+    {
+      "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/metadata",
+      "relation": "metadata"
+    }
+  ],
+  "entries": [
+    {
+      "title": "19@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/19",
+      "updated": "2018-03-06T16:22:47.659212Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/19",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/19",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "18@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/18",
+      "updated": "2018-03-06T16:22:17.591366Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/18",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/18",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "17@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/17",
+      "updated": "2018-03-06T16:21:47.543566Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/17",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/17",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "16@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/16",
+      "updated": "2018-03-06T16:21:17.507155Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/16",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/16",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "15@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/15",
+      "updated": "2018-03-06T16:20:47.489453Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/15",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/15",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "14@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/14",
+      "updated": "2018-03-02T23:26:11.267374Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/14",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/14",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "13@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/13",
+      "updated": "2018-03-02T23:25:41.218375Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/13",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/13",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "12@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/12",
+      "updated": "2018-03-02T23:25:11.172224Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/12",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/12",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "11@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/11",
+      "updated": "2018-03-02T23:24:41.13975Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/11",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/11",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "10@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/10",
+      "updated": "2018-03-02T23:24:11.090757Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/10",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/10",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "9@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/9",
+      "updated": "2018-03-02T23:23:41.051682Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/9",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/9",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "8@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/8",
+      "updated": "2018-03-02T23:23:10.997308Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/8",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/8",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "7@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/7",
+      "updated": "2018-03-02T23:22:40.989051Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/7",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/7",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "6@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/6",
+      "updated": "2018-03-02T23:22:10.966677Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/6",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/6",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "5@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/5",
+      "updated": "2018-03-02T23:21:40.948633Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/5",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/5",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "4@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/4",
+      "updated": "2018-03-02T23:21:10.933155Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/4",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/4",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "3@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/3",
+      "updated": "2018-03-02T23:20:40.910013Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/3",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/3",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "2@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/2",
+      "updated": "2018-03-02T23:20:10.872661Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/2",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/2",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "1@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/1",
+      "updated": "2018-03-02T23:19:40.846785Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/1",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/1",
+          "relation": "alternate"
+        }
+      ]
+    },
+    {
+      "title": "0@$stats-127.0.0.1:2113",
+      "id": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/0",
+      "updated": "2018-03-02T23:19:10.807837Z",
+      "author": {
+        "name": "EventStore"
+      },
+      "summary": "$statsCollected",
+      "links": [
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/0",
+          "relation": "edit"
+        },
+        {
+          "uri": "http://127.0.0.1:2113/streams/%24stats-127.0.0.1%3A2113/0",
+          "relation": "alternate"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+[package]
+name = "cqrs-eventstore"
+version = "0.1.0"
+authors = ["Marcus Griep <marcus@griep.us>"]
+
+[dependencies]
+cqrs = { path = "../cqrs" }
+cqrs-data = { path = "../cqrs-data" }
+hyper = "0.10.13"
+serde = "*"
+serde_derive = "*"
+serde_json = "*"
+uuid = { version = "*", features = ["serde"] }
+
+[dev-dependencies]
+static_assertions = "*"
