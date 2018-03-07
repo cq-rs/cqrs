@@ -69,6 +69,10 @@ fn build_event_url(base_url: &hyper::Url, stream_id: &str, event_num: EventNumbe
     base_url.join(&path).unwrap()
 }
 
+fn build_event_append_url(base_url: &hyper::Url, stream_id: &str) -> hyper::Url {
+    let path = format!("streams/{}", stream_id);
+    base_url.join(&path).unwrap()
+}
 
 impl EventStoreConnection {
     pub fn new(base_url: hyper::Url, username: String, password: String) -> Self {
@@ -101,6 +105,17 @@ impl EventStoreConnection {
             .send()?;
 
         Ok(serde_json::from_reader(result)?)
+    }
+
+    pub fn append_events<D>(&self, stream_id: &str, append_event: dto::AppendEvent<D>) -> Result<(), Error> {
+        let result = self.client.post(build_event_append_url(&self.base_url, stream_id))
+            .body(serde_json::to_string(&append_event)?)
+            .header(self.credentials.clone())
+            .header(hyper::header::ContentType(vec![hyper::header::qitem(
+                mime::Mime(mime::TopLevel::Application, mime::SubLevel::Ext("vnd.eventstore.events+json".to_string()), vec![]))]))
+            .send()?;
+
+        Ok(())
     }
 }
 

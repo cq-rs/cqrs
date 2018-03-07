@@ -47,6 +47,14 @@ pub struct EventEnvelope<D> {
     metadata: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all="camelCase")]
+pub struct AppendEvent<D> {
+    event_id: Uuid,
+    event_type: String,
+    data: D,
+}
+
 #[cfg(test)]
 #[path = "dto_tests.rs"]
 mod tests;
