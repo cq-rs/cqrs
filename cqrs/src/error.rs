@@ -263,6 +263,12 @@ pub enum ExecuteError<Err> {
     Command(Err),
 }
 
+impl<Err> From<Precondition> for ExecuteError<Err> {
+    fn from(precondition: Precondition) -> Self {
+        ExecuteError::PreconditionFailed(precondition)
+    }
+}
+
 impl<Err> fmt::Display for ExecuteError<Err>
     where
         Err: error::Error

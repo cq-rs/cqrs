@@ -1,7 +1,5 @@
-use types::{EventNumber, Precondition, Version, SequencedEvent, VersionedSnapshot};
-use error::ExecuteError;
-use projection::Projection;
-use super::{Aggregate, PersistableAggregate};
+use types::{EventNumber, Version, SequencedEvent, VersionedSnapshot};
+use super::Aggregate;
 
 #[derive(Debug, Default, Clone, PartialEq, Hash)]
 pub struct HydratedAggregate<Agg> {
@@ -45,45 +43,30 @@ impl<Agg> HydratedAggregate<Agg> {
     }
 }
 
-impl<Agg: Aggregate + Default> HydratedAggregate<Agg> {
-    fn verify_precondition(state_opt: Option<Self>, precondition: Precondition) -> Result<Self, ExecuteError<Agg::Error>> {
-        if let Some(state) = state_opt {
-            match precondition {
-                Precondition::Exists => Ok(state),
-                Precondition::ExpectedVersion(v) if v == state.current_version() => Ok(state),
-                Precondition::ExpectedVersion(_) | Precondition::New =>
-                    Err(ExecuteError::PreconditionFailed(precondition)),
-            }
-        } else if precondition == Precondition::New {
-            Ok(Default::default())
-        } else {
-            Err(ExecuteError::PreconditionFailed(precondition))
-        }
-    }
-
-    pub fn execute_if(state_opt: Option<Self>, command: Agg::Command, precondition: Precondition) -> Result<Agg::Events, ExecuteError<Agg::Error>> {
-        let state = Self::verify_precondition(state_opt, precondition)?;
-
-        state.aggregate.execute(command)
-            .map_err(|e| ExecuteError::Command(e))
-    }
-}
-
-impl<Agg: Projection> Projection for HydratedAggregate<Agg> {
-    type Event = SequencedEvent<Agg::Event>;
-
+impl<Agg: Aggregate> HydratedAggregate<Agg> {
     #[inline]
-    fn apply(&mut self, seq_event: Self::Event) {
-        self.aggregate.apply(seq_event.event);
-        self.latest_applied_event_number = Some(seq_event.sequence_number);
+    pub fn apply_raw(&mut self, event: Agg::Event, event_number: Option<EventNumber>) {
+        self.aggregate.apply(event);
         self.applied_event_count += 1;
+        self.latest_applied_event_number =
+            Some(
+                event_number.unwrap_or_else(||
+                    self.latest_applied_event_number
+                        .map(|v| v.incr())
+                        .unwrap_or_default()));
     }
 }
 
 impl<Agg: Aggregate> Aggregate for HydratedAggregate<Agg> {
+    type Event = SequencedEvent<Agg::Event>;
     type Command = Agg::Command;
     type Events = Agg::Events;
     type Error = Agg::Error;
+
+    #[inline]
+    fn apply(&mut self, seq_event: Self::Event) {
+        self.apply_raw(seq_event.event, Some(seq_event.sequence_number));
+    }
 
     #[inline]
     fn execute(&self, command: Self::Command) -> Result<Self::Events, Self::Error> {
@@ -91,28 +74,26 @@ impl<Agg: Aggregate> Aggregate for HydratedAggregate<Agg> {
     }
 }
 
-impl<Agg: PersistableAggregate> PersistableAggregate for HydratedAggregate<Agg> {
-    type Snapshot = VersionedSnapshot<Agg::Snapshot>;
-
+impl<Agg: Aggregate> HydratedAggregate<Agg> {
     #[inline]
-    fn restore(snapshot: Self::Snapshot) -> Self
+    pub fn restore(versioned_snapshot: VersionedSnapshot<Agg>) -> Self
         where Self: Sized,
     {
         HydratedAggregate {
             latest_applied_event_number: None,
             applied_event_count: 0,
-            rehydrated_version: snapshot.version,
-            aggregate: PersistableAggregate::restore(snapshot.snapshot)
+            rehydrated_version: versioned_snapshot.version,
+            aggregate: versioned_snapshot.snapshot,
         }
     }
 
     #[inline]
-    fn into_snapshot(self) -> Self::Snapshot
+    pub fn snapshot(self) -> VersionedSnapshot<Agg>
         where Self: Sized,
     {
         VersionedSnapshot {
             version: self.current_version(),
-            snapshot: self.aggregate.into_snapshot(),
+            snapshot: self.aggregate,
         }
     }
 }

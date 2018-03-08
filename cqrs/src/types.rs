@@ -13,6 +13,11 @@ impl EventNumber {
     pub fn number(&self) -> usize {
         self.0
     }
+
+    #[inline]
+    pub fn incr(&self) -> Self {
+        EventNumber(self.0 + 1)
+    }
 }
 
 impl fmt::Display for EventNumber {
@@ -80,6 +85,27 @@ pub enum Precondition {
     New,
     Exists,
     ExpectedVersion(Version),
+}
+
+impl Precondition {
+    pub fn verify(&self, version_opt: Option<Version>) -> Result<(), Self> {
+        match *self {
+            Precondition::Exists if version_opt.is_some() => Ok(()),
+            Precondition::New if version_opt.is_none() => Ok(()),
+            Precondition::ExpectedVersion(expected_version) if version_opt.is_some() => {
+                if let Some(version) = version_opt {
+                   if version == expected_version {
+                       Ok(())
+                   } else {
+                       Err(*self)
+                   }
+                } else {
+                    unreachable!()
+                }
+            }
+            _ => Err(*self)
+        }
+    }
 }
 
 impl From<Version> for Precondition {

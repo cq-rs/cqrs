@@ -1,11 +1,15 @@
-mod dto;
+pub(crate) mod dto;
 use hyper;
 use hyper::mime;
 use serde_json;
 
 use std::fmt;
 use std::error;
+use std::io;
 use cqrs::EventNumber;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+
 // getStreamPage
 // getEvent
 // appendEvents
@@ -74,10 +78,25 @@ fn build_event_append_url(base_url: &hyper::Url, stream_id: &str) -> hyper::Url 
     base_url.join(&path).unwrap()
 }
 
+fn make_mime(ext: &str) -> mime::Mime {
+    mime::Mime(mime::TopLevel::Application, mime::SubLevel::Ext(ext.to_string()), vec![])
+}
+
+lazy_static! {
+    static ref ES_ATOM_ACCEPT: hyper::header::Accept =
+        hyper::header::Accept(vec![hyper::header::qitem(make_mime("vnd.eventstore.atom+json"))]);
+
+    static ref ES_EVENT_ACCEPT: hyper::header::Accept =
+        hyper::header::Accept(vec![hyper::header::qitem(make_mime("vnd.eventstore.event+json"))]);
+
+    static ref ES_EVENTS_CONTENT: hyper::header::ContentType =
+        hyper::header::ContentType(make_mime("vnd.eventstore.events+json"));
+}
+
 impl EventStoreConnection {
-    pub fn new(base_url: hyper::Url, username: String, password: String) -> Self {
+    pub fn new(client: hyper::Client, base_url: hyper::Url, username: String, password: String) -> Self {
         EventStoreConnection {
-            client: hyper::Client::new(),
+            client,
             credentials:
                 hyper::header::Authorization(hyper::header::Basic {
                     username,
@@ -88,31 +107,44 @@ impl EventStoreConnection {
     }
 
     pub fn get_stream_page(&self, stream_id: &str, offset: EventNumber, limit: usize) -> Result<dto::StreamPage, Error> {
-        let result = self.client.get(build_stream_page_url(&self.base_url, stream_id, offset, limit))
+        let url = build_stream_page_url(&self.base_url, stream_id, offset, limit);
+        self.get_stream_page_with_url(url)
+    }
+
+    pub fn get_stream_page_with_url<U: hyper::client::IntoUrl>(&self, url: U) -> Result<dto::StreamPage, Error> {
+        let result = self.client.get(url)
             .header(self.credentials.clone())
-            .header(hyper::header::Accept(vec![hyper::header::qitem(
-                mime::Mime(mime::TopLevel::Application, mime::SubLevel::Ext("vnd.eventstore.atom+json".to_string()), vec![]))]))
+            .header(ES_ATOM_ACCEPT.clone())
             .send()?;
 
         Ok(serde_json::from_reader(result)?)
     }
 
-    pub fn get_event<T: ::serde::de::DeserializeOwned>(&self, stream_id: &str, event_num: EventNumber) -> Result<dto::EventEnvelope<T>, Error>{
-        let result = self.client.get(build_event_url(&self.base_url, stream_id, event_num))
+    pub fn get_event<D, M, U>(&self, url: U) -> Result<dto::EventEnvelope<D, M>, Error>
+        where
+            D: DeserializeOwned,
+            M: DeserializeOwned,
+            U: hyper::client::IntoUrl,
+    {
+        let result = self.client.get(url)
             .header(self.credentials.clone())
-            .header(hyper::header::Accept(vec![hyper::header::qitem(
-                mime::Mime(mime::TopLevel::Application, mime::SubLevel::Ext("vnd.eventstore.event+json".to_string()), vec![]))]))
+            .header(ES_EVENT_ACCEPT.clone())
             .send()?;
 
         Ok(serde_json::from_reader(result)?)
     }
 
-    pub fn append_events<D>(&self, stream_id: &str, append_event: dto::AppendEvent<D>) -> Result<(), Error> {
-        let result = self.client.post(build_event_append_url(&self.base_url, stream_id))
-            .body(serde_json::to_string(&append_event)?)
+    pub fn append_events<D, M>(&self, stream_id: &str, append_events: &[dto::AppendEvent<D, M>]) -> Result<(), Error>
+        where
+            D: Serialize,
+            M: Serialize,
+    {
+        let serialized_body = serde_json::to_vec(append_events)?;
+        let mut cursor = io::Cursor::new(serialized_body);
+        let _result = self.client.post(build_event_append_url(&self.base_url, stream_id))
+            .body(&mut cursor)
             .header(self.credentials.clone())
-            .header(hyper::header::ContentType(vec![hyper::header::qitem(
-                mime::Mime(mime::TopLevel::Application, mime::SubLevel::Ext("vnd.eventstore.events+json".to_string()), vec![]))]))
+            .header(ES_EVENTS_CONTENT.clone())
             .send()?;
 
         Ok(())

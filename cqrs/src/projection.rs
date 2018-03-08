@@ -1,5 +1,6 @@
 pub trait Projection {
     type Event;
+
     fn apply(&mut self, event: Self::Event);
 }
 

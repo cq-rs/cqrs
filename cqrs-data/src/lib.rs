@@ -11,5 +11,6 @@ pub mod events;
 pub mod snapshots;
 
 mod types;
+mod trivial;
 
-pub use types::{Precondition, Since};
+pub use types::{Since};

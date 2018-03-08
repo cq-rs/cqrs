@@ -6,7 +6,7 @@ use cqrs::error::{AppendEventsError, Never};
 use fnv::FnvBuildHasher;
 
 use cqrs_redis;
-use cqrs_todo_core::{Event, TodoState};
+use cqrs_todo_core::{Event, TodoAggregate};
 
 use r2d2;
 use r2d2_redis::RedisConnectionManager;
@@ -81,8 +81,8 @@ impl EventAppend for MemoryOrNullEventStore
 
 pub enum MemoryOrNullSnapshotStore
 {
-    Memory(MemoryStateStore<TodoState, String, FnvBuildHasher>),
-    Null(NullSnapshotStore<TodoState, String>),
+    Memory(MemoryStateStore<TodoAggregate, String, FnvBuildHasher>),
+    Null(NullSnapshotStore<TodoAggregate, String>),
     Redis(cqrs_redis::Config, r2d2::Pool<RedisConnectionManager>)
 }
 
@@ -104,7 +104,7 @@ impl MemoryOrNullSnapshotStore
 impl SnapshotSource for MemoryOrNullSnapshotStore
 {
     type AggregateId = String;
-    type Snapshot = TodoState;
+    type Snapshot = TodoAggregate;
     type Error = Never;
 
     fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<VersionedSnapshot<Self::Snapshot>>, Self::Error> {
@@ -125,7 +125,7 @@ impl SnapshotSource for MemoryOrNullSnapshotStore
 impl SnapshotPersist for MemoryOrNullSnapshotStore
 {
     type AggregateId = String;
-    type Snapshot = TodoState;
+    type Snapshot = TodoAggregate;
     type Error = Never;
 
     fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: VersionedSnapshot<Self::Snapshot>) -> Result<(), Self::Error> {

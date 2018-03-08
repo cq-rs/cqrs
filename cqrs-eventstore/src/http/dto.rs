@@ -39,21 +39,25 @@ pub struct StreamPage {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all="camelCase")]
-pub struct EventEnvelope<D> {
-    event_number: usize,
-    event_type: String,
-    event_id: Uuid,
-    data: D,
-    metadata: String,
+pub struct EventEnvelope<D, M> {
+    pub event_number: usize,
+    pub event_type: String,
+    pub event_id: Uuid,
+    pub data: D,
+    pub metadata: M,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all="camelCase")]
-pub struct AppendEvent<D> {
-    event_id: Uuid,
-    event_type: String,
-    data: D,
+pub struct AppendEvent<D, M> {
+    pub event_id: Uuid,
+    pub event_type: String,
+    pub data: D,
+    pub metadata: M,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NoMetadata;
 
 #[cfg(test)]
 #[path = "dto_tests.rs"]

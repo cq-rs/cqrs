@@ -11,6 +11,8 @@ serde = "*"
 serde_derive = "*"
 serde_json = "*"
 uuid = { version = "*", features = ["serde"] }
+lazy_static = "*"
+"rayon" = "*"
 
 [dev-dependencies]
 static_assertions = "*"

@@ -16,14 +16,14 @@ use cqrs_memory::{MemoryEventStore, MemoryStateStore};
 use chrono::prelude::*;
 use chrono::Duration;
 
-use cqrs_todo_core::{Event, TodoAggregate, TodoState, TodoData, TodoStatus, Command};
+use cqrs_todo_core::{Event, TodoAggregate, TodoAggregate, TodoData, TodoStatus, Command};
 use cqrs_todo_core::domain;
 
 #[test]
 fn main_test() {
     let es = MemoryEventStore::<Event, usize, fnv::FnvBuildHasher>::default();
     //let es = okazis::NullEventStore::<Event, usize>::default();
-    let ss = MemoryStateStore::<TodoState, usize, fnv::FnvBuildHasher>::default();
+    let ss = MemoryStateStore::<TodoAggregate, usize, fnv::FnvBuildHasher>::default();
     //let ss = okazis::NullStateStore::<TodoState, usize>::default();
 
     let view = TodoAggregate::snapshot_with_events_view(&es, &ss);
@@ -66,7 +66,7 @@ fn main_test() {
     command.execute_and_persist_with_decorator(&agg_2, Command::MarkCompleted, Some(AggregatePrecondition::Exists), decorator).unwrap();
     println!("8: {:#?}\n", view);
 
-    let expected_state_1 = TodoState::Created(TodoData::new(
+    let expected_state_1 = TodoAggregate::Created(TodoData::new(
         other_creation_description.clone(),
         Some(future_reminder),
         TodoStatus::NotCompleted,

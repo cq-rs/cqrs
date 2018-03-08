@@ -8,3 +8,4 @@ cqrs = { path = "../cqrs" }
 
 [dev-dependencies]
 static_assertions = "*"
+cqrs-todo-core = { path = "../cqrs-todo-core" }
