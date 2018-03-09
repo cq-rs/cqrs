@@ -145,6 +145,30 @@ impl<'a, D, M> cqrs_data::events::Source for EventStore<'a, D, M>
     }
 }
 
+impl<'a, D, M> cqrs_data::events::Store for EventStore<'a, D, M>
+    where
+        D: Serialize,
+        M: Serialize,
+{
+    type AggregateId = str;
+    type Event = EventEnvelope<D, M>;
+    type Result = Result<(), http::Error>;
+
+    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], precondition: Option<cqrs::Precondition>) -> Self::Result {
+        let events: Vec<_> = events.iter().map(|e| {
+                http::dto::AppendEvent {
+                    event_id: e.event_id,
+                    event_type: &e.event_type,
+                    data: &e.data,
+                    metadata: &e.metadata,
+                }
+            })
+            .collect();
+        self.conn.append_events(agg_id, &events, precondition)
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     #[test]

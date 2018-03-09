@@ -10,9 +10,12 @@ hyper = "0.10.13"
 serde = "*"
 serde_derive = "*"
 serde_json = "*"
-uuid = { version = "*", features = ["serde"] }
+uuid = { version = "*", features = ["serde", "v4"] }
 lazy_static = "*"
-"rayon" = "*"
+rayon = "*"
 
 [dev-dependencies]
 static_assertions = "*"
+hyper-sync-rustls = "*"
+env_logger = "*"
+hyper-native-tls = "*"

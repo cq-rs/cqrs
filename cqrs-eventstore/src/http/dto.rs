@@ -49,11 +49,11 @@ pub struct EventEnvelope<D, M> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all="camelCase")]
-pub struct AppendEvent<D, M> {
+pub struct AppendEvent<'a, D: 'a, M: 'a> {
     pub event_id: Uuid,
-    pub event_type: String,
-    pub data: D,
-    pub metadata: M,
+    pub event_type: &'a str,
+    pub data: &'a D,
+    pub metadata: &'a M,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

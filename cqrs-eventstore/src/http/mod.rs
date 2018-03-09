@@ -3,10 +3,11 @@ use hyper;
 use hyper::mime;
 use serde_json;
 
-use std::fmt;
+use std::fmt::{self, Display};
 use std::error;
-use std::io;
-use cqrs::EventNumber;
+use std::io::Read;
+use std::borrow::Borrow;
+use cqrs::{EventNumber, Version, Precondition};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -79,7 +80,7 @@ fn build_event_append_url(base_url: &hyper::Url, stream_id: &str) -> hyper::Url 
 }
 
 fn make_mime(ext: &str) -> mime::Mime {
-    mime::Mime(mime::TopLevel::Application, mime::SubLevel::Ext(ext.to_string()), vec![])
+    mime::Mime(mime::TopLevel::Application, mime::SubLevel::Ext(ext.to_string()), vec![(mime::Attr::Charset, mime::Value::Utf8)])
 }
 
 lazy_static! {
@@ -91,6 +92,35 @@ lazy_static! {
 
     static ref ES_EVENTS_CONTENT: hyper::header::ContentType =
         hyper::header::ContentType(make_mime("vnd.eventstore.events+json"));
+}
+
+#[derive(Clone, Debug, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+enum ExpectedVersion {
+    Any,
+    CreateNew,
+    Empty,
+    LastEvent(EventNumber),
+}
+
+impl hyper::header::Header for ExpectedVersion {
+    fn header_name() -> &'static str {
+        "ES-ExpectedVersion"
+    }
+
+    fn parse_header(_raw: &[Vec<u8>]) -> hyper::Result<ExpectedVersion> {
+        unimplemented!()
+    }
+}
+
+impl hyper::header::HeaderFormat for ExpectedVersion {
+    fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ExpectedVersion::Empty => f.write_str("0"),
+            ExpectedVersion::CreateNew => f.write_str("-1"),
+            ExpectedVersion::Any => f.write_str("-2"),
+            ExpectedVersion::LastEvent(evt_nbr) => evt_nbr.fmt(f),
+        }
+    }
 }
 
 impl EventStoreConnection {
@@ -134,20 +164,42 @@ impl EventStoreConnection {
         Ok(serde_json::from_reader(result)?)
     }
 
-    pub fn append_events<D, M>(&self, stream_id: &str, append_events: &[dto::AppendEvent<D, M>]) -> Result<(), Error>
+    pub fn append_events<D, M>(&self, stream_id: &str, append_events: &[dto::AppendEvent<D, M>], expected_version: Option<Precondition>) -> Result<(), Error>
         where
             D: Serialize,
             M: Serialize,
     {
         let serialized_body = serde_json::to_vec(append_events)?;
-        let mut cursor = io::Cursor::new(serialized_body);
-        let _result = self.client.post(build_event_append_url(&self.base_url, stream_id))
-            .body(&mut cursor)
+        let borrowed_body: &[u8] = serialized_body.borrow();
+        let mut req = self.client.post(build_event_append_url(&self.base_url, stream_id))
+            .body(borrowed_body)
             .header(self.credentials.clone())
-            .header(ES_EVENTS_CONTENT.clone())
-            .send()?;
+            .header(ES_EVENTS_CONTENT.clone());
 
-        Ok(())
+        req =
+            if let Some(expected_event) = expected_version {
+                match expected_event {
+                    Precondition::Exists => req,
+                    Precondition::New => req.header(ExpectedVersion::CreateNew),
+                    Precondition::ExpectedVersion(Version::Initial) => req.header(ExpectedVersion::Empty),
+                    Precondition::ExpectedVersion(Version::Number(v)) => req.header(ExpectedVersion::LastEvent(v)),
+                }
+            } else {
+                req.header(ExpectedVersion::Any)
+            };
+
+        let mut resp = req.send()?;
+
+        if resp.status != hyper::status::StatusCode::Created {
+            println!("Error: {}\n {:#?}", resp.status, resp.headers);
+            let mut string = String::new();
+            resp.read_to_string(&mut string).unwrap();
+            println!("body: {}", string);
+            Ok(())
+//            Err(Error::Hyper(::hyper::Error::Status))
+        } else {
+            Ok(())
+        }
     }
 }
 
