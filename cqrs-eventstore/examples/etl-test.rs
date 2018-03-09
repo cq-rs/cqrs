@@ -42,27 +42,9 @@ fn main() {
 
     let es = cqrs_eventstore::EventStore::<Data, Metadata>::new(&conn);
 
-    let instant = ::std::time::Instant::now();
+    if false {
+        let instant = ::std::time::Instant::now();
 
-    let data = Data {
-        winter: "spring".to_string(),
-        is_bool: true,
-    };
-    let metadata = Metadata {
-        who: "someone".to_string(),
-        when: instant.elapsed().as_secs() as usize,
-    };
-
-    let event = cqrs_eventstore::EventEnvelope {
-        event_id: uuid::Uuid::new_v4(),
-        event_type: "InitialGeneratedEvent".to_string(),
-        data,
-        metadata,
-    };
-    es.append_events("test-3", &[event], Some(cqrs::Precondition::New)).unwrap();
-
-
-    for i in 0..10 {
         let data = Data {
             winter: "spring".to_string(),
             is_bool: true,
@@ -74,19 +56,39 @@ fn main() {
 
         let event = cqrs_eventstore::EventEnvelope {
             event_id: uuid::Uuid::new_v4(),
-            event_type: "GeneratedEvent".to_string(),
+            event_type: "InitialGeneratedEvent".to_string(),
             data,
             metadata,
         };
-        es.append_events("test-3", &[event], Some(cqrs::Precondition::ExpectedVersion(cqrs::Version::Number(cqrs::EventNumber::new(i))))).unwrap();
-//        print!(".");
-    }
+        es.append_events("test-3", &[event], Some(cqrs::Precondition::New)).unwrap();
 
-    println!("Appended 10 in {:?}", instant.elapsed());
+
+        for i in 0..10 {
+            let data = Data {
+                winter: "spring".to_string(),
+                is_bool: true,
+            };
+            let metadata = Metadata {
+                who: "someone".to_string(),
+                when: instant.elapsed().as_secs() as usize,
+            };
+
+            let event = cqrs_eventstore::EventEnvelope {
+                event_id: uuid::Uuid::new_v4(),
+                event_type: "GeneratedEvent".to_string(),
+                data,
+                metadata,
+            };
+            es.append_events("test-3", &[event], Some(cqrs::Precondition::ExpectedVersion(cqrs::Version::Number(cqrs::EventNumber::new(i))))).unwrap();
+//        print!(".");
+        }
+
+        println!("Appended 10 in {:?}", instant.elapsed());
+    }
 
     let instant = ::std::time::Instant::now();
 
-    let event_iter = es.read_events("test-3", cqrs_data::Since::BeginningOfStream);
+    let event_iter = es.read_events("test-1", cqrs_data::Since::BeginningOfStream);
 
     let mut i = 0;
     for e in event_iter {

@@ -154,8 +154,9 @@ impl EventStoreConnection {
         where
             D: DeserializeOwned,
             M: DeserializeOwned,
-            U: hyper::client::IntoUrl,
+            U: hyper::client::IntoUrl + fmt::Debug,
     {
+        println!("Requesting URL: {:?}", url);
         let result = self.client.get(url)
             .header(self.credentials.clone())
             .header(ES_EVENT_ACCEPT.clone())
