@@ -42,18 +42,18 @@ impl<'a, D, M> EventStore<'a, D, M> {
 #[derive(Debug)]
 pub struct EventIterator<'a, D, M>
     where
-        D: DeserializeOwned,
+        D: DeserializeOwned + EventType,
         M: DeserializeOwned,
 {
     conn: &'a http::EventStoreConnection,
     next_page: Option<String>,
-    buffer: Vec<cqrs::SequencedEvent<EventEnvelope<D, M>>>,
+    buffer: Vec<Result<cqrs::SequencedEvent<EventEnvelope<D, M>>, http::Error>>,
     embed: http::Embedding,
 }
 
 impl<'a, D, M> EventIterator<'a, D, M>
     where
-        D: DeserializeOwned + Send + Sync,
+        D: DeserializeOwned + EventType + Send + Sync,
         M: DeserializeOwned + Send + Sync,
 {
     fn process_event_entries(&mut self, page: http::dto::StreamPage) {
@@ -61,15 +61,22 @@ impl<'a, D, M> EventIterator<'a, D, M>
             .map(|entry| {
                 match entry {
                     http::dto::EventEntry::WithEmbeddedEvent(header) => {
-                        let event = EventEnvelope {
-                            event_id: header.event_id,
-                            event_type: header.event_type,
-                            data: serde_json::from_str(&header.data).unwrap(),
-                            metadata: header.metadata.map(|m| serde_json::from_str(&m).unwrap()),
-                        };
-                        cqrs::SequencedEvent {
-                            sequence_number: cqrs::EventNumber::new(header.event_number),
-                            event,
+                        let data: Result<D,_> = serde_json::from_str(&header.data).context(http::ErrorKind::Deserialization);
+                        match data {
+                            Ok(data) => {
+                                debug_assert_eq!(header.event_type, data.event_type());
+                                let metadata = header.metadata.and_then(|m| serde_json::from_str(&m).ok());
+                                let event = EventEnvelope {
+                                    event_id: header.event_id,
+                                    data,
+                                    metadata,
+                                };
+                                Ok(cqrs::SequencedEvent {
+                                    sequence_number: cqrs::EventNumber::new(header.event_number),
+                                    event,
+                                })
+                            },
+                            Err(err) => Err(err.into()),
                         }
                     },
                     http::dto::EventEntry::Header(header) => {
@@ -81,15 +88,15 @@ impl<'a, D, M> EventIterator<'a, D, M>
                         let event: http::dto::EventEnvelope<D, M> =
                             self.conn.get_event(&event_url)
                                 .expect("Event should always be accessible at URL, otherwise fail");
-                        cqrs::SequencedEvent {
+                        debug_assert_eq!(event.event_type, event.data.event_type());
+                        Ok(cqrs::SequencedEvent {
                             sequence_number: cqrs::EventNumber::new(event.event_number),
                             event: EventEnvelope {
                                 event_id: event.event_id,
-                                event_type: event.event_type,
                                 data: event.data,
                                 metadata: event.metadata,
                             }
-                        }
+                        })
                     }
                 }
             })
@@ -109,24 +116,32 @@ impl<'a, D, M> EventIterator<'a, D, M>
 
 const PAGE_SIZE: usize = 20;
 
+pub trait EventType {
+    fn event_type(&self) -> &'static str;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EventEnvelope<D, M> {
     pub event_id: uuid::Uuid,
-    pub event_type: String,
+    pub data: D,
+    pub metadata: Option<M>,
+}
+
+pub struct WithMetadata<D, M> {
     pub data: D,
     pub metadata: Option<M>,
 }
 
 impl<'a, D, M> Iterator for EventIterator<'a, D, M>
     where
-        D: DeserializeOwned + Send + Sync,
+        D: DeserializeOwned + EventType + Send + Sync,
         M: DeserializeOwned + Send + Sync,
 {
     type Item = Result<cqrs::SequencedEvent<EventEnvelope<D, M>>, failure::Compat<http::Error>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(event) = self.buffer.pop() {
-           Some(Ok(event))
+            Some(event.map_err(|e| e.compat()))
         } else if self.next_page.is_some() {
             let mut url = None;
             ::std::mem::swap(&mut self.next_page, &mut url);
@@ -153,7 +168,7 @@ impl<'a, D, M> Iterator for EventIterator<'a, D, M>
 
 impl<'a, 'id, D, M> cqrs_data::event::Source<'id, EventEnvelope<D, M>> for EventStore<'a, D, M>
     where
-        D: DeserializeOwned + Send + Sync,
+        D: DeserializeOwned + EventType + Send + Sync,
         M: DeserializeOwned + Send + Sync,
 {
     type AggregateId = &'id str;
@@ -183,7 +198,7 @@ impl<'a, 'id, D, M> cqrs_data::event::Source<'id, EventEnvelope<D, M>> for Event
 
 impl<'a, 'id, D, M> cqrs_data::event::Store<'id, EventEnvelope<D, M>> for EventStore<'a, D, M>
     where
-        D: Serialize,
+        D: Serialize + EventType,
         M: Serialize,
 {
     type AggregateId = &'id str;
@@ -193,7 +208,7 @@ impl<'a, 'id, D, M> cqrs_data::event::Store<'id, EventEnvelope<D, M>> for EventS
         let events: Vec<_> = events.iter().map(|e| {
                 http::dto::AppendEvent {
                     event_id: e.event_id,
-                    event_type: &e.event_type,
+                    event_type: e.data.event_type(),
                     data: &e.data,
                     metadata: e.metadata.as_ref(),
                 }
