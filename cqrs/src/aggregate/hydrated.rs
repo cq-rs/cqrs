@@ -1,4 +1,4 @@
-use types::{EventNumber, Version, SequencedEvent, VersionedSnapshot};
+use types::{EventNumber, Version, SequencedEvent, StateSnapshot};
 use super::Aggregate;
 
 #[derive(Debug, Default, Clone, PartialEq, Hash)]
@@ -76,7 +76,7 @@ impl<Agg: Aggregate> Aggregate for HydratedAggregate<Agg> {
 
 impl<Agg: Aggregate> HydratedAggregate<Agg> {
     #[inline]
-    pub fn restore(versioned_snapshot: VersionedSnapshot<Agg>) -> Self
+    pub fn restore(versioned_snapshot: StateSnapshot<Agg>) -> Self
         where Self: Sized,
     {
         HydratedAggregate {
@@ -88,10 +88,10 @@ impl<Agg: Aggregate> HydratedAggregate<Agg> {
     }
 
     #[inline]
-    pub fn snapshot(self) -> VersionedSnapshot<Agg>
+    pub fn snapshot(self) -> StateSnapshot<Agg>
         where Self: Sized,
     {
-        VersionedSnapshot {
+        StateSnapshot {
             version: self.current_version(),
             snapshot: self.aggregate,
         }

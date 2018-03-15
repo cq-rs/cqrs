@@ -107,7 +107,7 @@ mod store {
         type Snapshot = S::Value;
         type Error = redis::RedisError;
 
-        fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: cqrs::VersionedSnapshot<Self::Snapshot>) -> Result<(), Self::Error> {
+        fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: cqrs::StateSnapshot<Self::Snapshot>) -> Result<(), Self::Error> {
             let mut key = String::with_capacity(self.store.config.key_prefix.len() + agg_id.len() + 1);
             key.push_str("snapshot-");
             key.push_str(&self.store.config.key_prefix);
@@ -132,7 +132,7 @@ mod store {
         type Snapshot = S::Value;
         type Error = redis::RedisError;
 
-        fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<cqrs::VersionedSnapshot<Self::Snapshot>>, Self::Error> {
+        fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<cqrs::StateSnapshot<Self::Snapshot>>, Self::Error> {
             let mut key = String::with_capacity(self.store.config.key_prefix.len() + agg_id.len() + 10);
             key.push_str("snapshot-");
             key.push_str(&self.store.config.key_prefix);
@@ -146,7 +146,7 @@ mod store {
                     .query(self.store.conn)?;
             Ok(match result {
                 (Some(version), Some(snapshot)) =>
-                    Some(cqrs::VersionedSnapshot {
+                    Some(cqrs::StateSnapshot {
                         version: cqrs::Version::new(version),
                         snapshot: self.serializer.deserialize(snapshot).expect("the snapshot should have been deserializable"),
                     }),

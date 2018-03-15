@@ -5,6 +5,7 @@ authors = ["Marcus Griep <marcus@griep.us>"]
 
 [dependencies]
 cqrs = { path = "../cqrs" }
+cqrs-data = { path = "../cqrs-data" }
 
 [dev-dependencies]
 fnv = "*"

@@ -1,5 +1,5 @@
 use cqrs::{EventSource, EventAppend, SnapshotSource, SnapshotPersist};
-use cqrs::{Since, Precondition, VersionedEvent, VersionedSnapshot};
+use cqrs::{Since, Precondition, VersionedEvent, StateSnapshot};
 use cqrs::trivial::{NullEventStore,NullSnapshotStore};
 use cqrs_memory::{MemoryEventStore,MemoryStateStore};
 use cqrs::error::{AppendEventsError, Never};
@@ -107,7 +107,7 @@ impl SnapshotSource for MemoryOrNullSnapshotStore
     type Snapshot = TodoAggregate;
     type Error = Never;
 
-    fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<VersionedSnapshot<Self::Snapshot>>, Self::Error> {
+    fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<StateSnapshot<Self::Snapshot>>, Self::Error> {
         match *self {
             MemoryOrNullSnapshotStore::Memory(ref mem) => mem.get_snapshot(agg_id),
             MemoryOrNullSnapshotStore::Null(ref nil) => nil.get_snapshot(agg_id),
@@ -128,7 +128,7 @@ impl SnapshotPersist for MemoryOrNullSnapshotStore
     type Snapshot = TodoAggregate;
     type Error = Never;
 
-    fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: VersionedSnapshot<Self::Snapshot>) -> Result<(), Self::Error> {
+    fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: StateSnapshot<Self::Snapshot>) -> Result<(), Self::Error> {
         match *self {
             MemoryOrNullSnapshotStore::Memory(ref mem) => mem.persist_snapshot(agg_id, snapshot),
             MemoryOrNullSnapshotStore::Null(ref nil) => nil.persist_snapshot(agg_id, snapshot),

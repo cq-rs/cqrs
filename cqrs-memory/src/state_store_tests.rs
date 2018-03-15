@@ -27,7 +27,7 @@ fn can_get_snapshot_from_store() {
 #[test]
 fn can_round_trip_a_value() {
     let ms = TestStateStore::default();
-    let expected = VersionedSnapshot {
+    let expected = StateSnapshot {
         version: Version::new(23),
         snapshot: TestState,
     };
@@ -39,11 +39,11 @@ fn can_round_trip_a_value() {
 #[test]
 fn can_round_trip_multiple_values() {
     let ms = TestStateStore::default();
-    let e0 = VersionedSnapshot {
+    let e0 = StateSnapshot {
         version: Version::new(14),
         snapshot: TestState,
     };
-    let e1 = VersionedSnapshot {
+    let e1 = StateSnapshot {
         version: Version::new(299),
         snapshot: TestState,
     };
@@ -60,11 +60,11 @@ fn can_round_trip_multiple_values() {
 #[test]
 fn can_have_memory_snapshot_store_with_alternate_hasher() {
     let ms = TestStateStore::default();
-    let e0 = VersionedSnapshot {
+    let e0 = StateSnapshot {
         version: Version::new(14),
         snapshot: TestState,
     };
-    let e1 = VersionedSnapshot {
+    let e1 = StateSnapshot {
         version: Version::new(299),
         snapshot: TestState,
     };
@@ -81,11 +81,11 @@ fn can_have_memory_snapshot_store_with_alternate_hasher() {
 #[test]
 fn can_have_memory_snapshot_store_with_alternate_key() {
     let ms = MemoryStateStore::<_, &'static str>::default();
-    let e0 = VersionedSnapshot {
+    let e0 = StateSnapshot {
         version: Version::new(14),
         snapshot: TestState,
     };
-    let e1 = VersionedSnapshot {
+    let e1 = StateSnapshot {
         version: Version::new(299),
         snapshot: TestState,
     };

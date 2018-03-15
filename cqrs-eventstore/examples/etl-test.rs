@@ -9,7 +9,7 @@ extern crate uuid;
 extern crate env_logger;
 #[macro_use] extern crate serde_derive;
 
-use cqrs_data::events::{Source, Store};
+use cqrs_data::event::{Source, Store};
 use hyper::net::HttpsConnector;
 use hyper_sync_rustls::TlsClient;
 use hyper_native_tls::NativeTlsClient;
@@ -29,8 +29,8 @@ struct Metadata {
 fn main() {
     env_logger::init();
 
-    let client = hyper::Client::with_connector(HttpsConnector::new(TlsClient::new()));
-//    let client = hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
+//    let client = hyper::Client::with_connector(HttpsConnector::new(TlsClient::new()));
+    let client = hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
 //    let client = hyper::Client::new();
     let conn = cqrs_eventstore::http::EventStoreConnection::new(
         client,
@@ -41,6 +41,8 @@ fn main() {
     );
 
     let es = cqrs_eventstore::EventStore::<Data, Metadata>::new(&conn);
+
+    let agg_id = ::std::env::var("AGG_ID").unwrap_or("test-5".to_string());
 
     if false {
         let instant = ::std::time::Instant::now();
@@ -58,12 +60,13 @@ fn main() {
             event_id: uuid::Uuid::new_v4(),
             event_type: "InitialGeneratedEvent".to_string(),
             data,
-            metadata,
+            metadata: Some(metadata),
         };
-        es.append_events("test-3", &[event], Some(cqrs::Precondition::New)).unwrap();
+        es.append_events(&agg_id, &[event], cqrs_data::Expectation::New)
+            .unwrap_or_default();
 
 
-        for i in 0..10 {
+        for i in 0..100 {
             let data = Data {
                 winter: "spring".to_string(),
                 is_bool: true,
@@ -77,9 +80,10 @@ fn main() {
                 event_id: uuid::Uuid::new_v4(),
                 event_type: "GeneratedEvent".to_string(),
                 data,
-                metadata,
+                metadata: Some(metadata),
             };
-            es.append_events("test-3", &[event], Some(cqrs::Precondition::ExpectedVersion(cqrs::Version::Number(cqrs::EventNumber::new(i))))).unwrap();
+            es.append_events(&agg_id, &[event], cqrs_data::Expectation::LastEvent(cqrs::EventNumber::new(i)))
+                .unwrap_or_default();
 //        print!(".");
         }
 
@@ -88,12 +92,13 @@ fn main() {
 
     let instant = ::std::time::Instant::now();
 
-    let event_iter = es.read_events("test-1", cqrs_data::Since::BeginningOfStream);
+    let event_iter = es.read_events(&agg_id, cqrs_data::Since::BeginningOfStream).unwrap().unwrap();
 
     let mut i = 0;
     for e in event_iter {
 //        print!(".");
-        //println!("{:#?}", e);
+        assert!(e.is_ok());
+//        println!("{:#?}", e);
         i += 1;
     }
 

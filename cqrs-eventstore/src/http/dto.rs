@@ -21,9 +21,33 @@ pub struct LinkRelation {
     pub relation: Relation,
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+#[serde(untagged)]
+// Ordering is important since this is untagged.
+pub enum EventEntry {
+    WithEmbeddedEvent(EventHeaderWithEmbed),
+    Header(EventHeader)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all="camelCase")]
-pub struct EventEntry {
+pub struct EventHeaderWithEmbed {
+    pub summary: String,
+    pub links: Vec<LinkRelation>,
+    pub id: String,
+    pub data: String,
+    #[serde(default)]
+    #[serde(rename = "metaData")]
+    pub metadata: Option<String>,
+    pub event_number: usize,
+    pub event_type: String,
+    pub event_id: Uuid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+#[serde(rename_all="camelCase")]
+pub struct EventHeader {
     pub summary: String,
     pub links: Vec<LinkRelation>,
     pub id: String,
@@ -44,7 +68,7 @@ pub struct EventEnvelope<D, M> {
     pub event_type: String,
     pub event_id: Uuid,
     pub data: D,
-    pub metadata: M,
+    pub metadata: Option<M>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
@@ -53,11 +77,8 @@ pub struct AppendEvent<'a, D: 'a, M: 'a> {
     pub event_id: Uuid,
     pub event_type: &'a str,
     pub data: &'a D,
-    pub metadata: &'a M,
+    pub metadata: Option<&'a M>,
 }
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct NoMetadata;
 
 #[cfg(test)]
 #[path = "dto_tests.rs"]

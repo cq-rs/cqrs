@@ -4,13 +4,13 @@ extern crate cqrs;
 
 #[cfg(test)] #[macro_use] extern crate static_assertions;
 
-mod aggregate_source;
-mod aggregate_store;
+//mod aggregate_source;
+//mod aggregate_store;
 
-pub mod events;
-pub mod snapshots;
+pub mod event;
+pub mod state;
 
 mod types;
 mod trivial;
 
-pub use types::{Since};
+pub use types::{Expectation, Since};

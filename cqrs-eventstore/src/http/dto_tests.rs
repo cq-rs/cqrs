@@ -58,15 +58,3 @@ fn deserialize_owned_example_event() {
     assert_eq!(result.data.es_queue_index_committer_last_processed_message, "CommitAck");
 }
 
-#[test]
-fn deserialize_no_metadata() {
-    let _: NoMetadata = serde_json::from_str("null").expect("Null");
-//    let _: NoMetadata = serde_json::from_str("{}").expect("Empty Object");
-//    let _: NoMetadata = serde_json::from_str("\"\"").expect("Empty String");
-}
-
-#[test]
-fn serialize_no_metadata() {
-    let result = serde_json::to_string(&NoMetadata).expect("Can serialize");
-    assert_eq!(result, "null");
-}

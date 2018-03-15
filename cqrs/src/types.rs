@@ -82,6 +82,7 @@ impl From<EventNumber> for Version {
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Precondition {
+    None,
     New,
     Exists,
     ExpectedVersion(Version),
@@ -90,6 +91,7 @@ pub enum Precondition {
 impl Precondition {
     pub fn verify(&self, version_opt: Option<Version>) -> Result<(), Self> {
         match *self {
+            Precondition::None => Ok(()),
             Precondition::Exists if version_opt.is_some() => Ok(()),
             Precondition::New if version_opt.is_none() => Ok(()),
             Precondition::ExpectedVersion(expected_version) if version_opt.is_some() => {
@@ -118,6 +120,7 @@ impl From<Version> for Precondition {
 impl fmt::Display for Precondition {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            Precondition::None => f.write_str("no precondition"),
             Precondition::Exists => f.write_str("expect aggregate exists"),
             Precondition::New => f.write_str("expect aggregate does not exist"),
             Precondition::ExpectedVersion(Version::Initial) => f.write_str("expect aggregate to exist in initial state"),
@@ -134,7 +137,7 @@ pub struct SequencedEvent<Event>
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct VersionedSnapshot<Snapshot> {
+pub struct StateSnapshot<State> {
     pub version: Version,
-    pub snapshot: Snapshot,
+    pub snapshot: State,
 }

@@ -149,7 +149,7 @@ impl AggregateIdProvider for IdProvider {
 
 mod helper {
     use chrono::{Duration,Utc,TimeZone};
-    use cqrs::{Version, VersionedSnapshot,EventAppend,SnapshotPersist};
+    use cqrs::{Version, StateSnapshot, EventAppend, SnapshotPersist};
     use cqrs_todo_core::{Event, TodoAggregate, TodoData, TodoStatus, domain};
 
     use super::{AggregateId, EventStore, SnapshotStore};
@@ -166,7 +166,7 @@ mod helper {
         events.push(Event::ReminderUpdated(None));
 
         es.append_events(id, &events, None).unwrap();
-        ss.persist_snapshot(id, VersionedSnapshot {
+        ss.persist_snapshot(id, StateSnapshot {
             version: Version::from(1),
             snapshot: TodoAggregate::Created(TodoData {
                 description: domain::Description::new("Hello!").unwrap(),

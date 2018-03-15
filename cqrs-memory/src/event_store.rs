@@ -1,6 +1,7 @@
-use cqrs::{Precondition, Since, VersionedEvent};
+use cqrs::{Precondition, SequencedEvent};
 use cqrs::error::{AppendEventsError, Never};
-use cqrs::{EventAppend, EventSource};
+use cqrs_data::events;
+use cqrs_data::Since;
 use event_stream::MemoryEventStream;
 use std::sync::RwLock;
 use std::hash::{Hash, BuildHasher};
@@ -53,21 +54,19 @@ impl<Event, AggId, Hasher> Default for MemoryEventStore<Event, AggId, Hasher>
     }
 }
 
-impl<Event, AggId, Hasher> EventSource for MemoryEventStore<Event, AggId, Hasher>
+impl<Event, AggId, Hasher> events::Source for MemoryEventStore<Event, AggId, Hasher>
     where
         AggId: Hash + Eq + Clone,
         Event: Clone,
         Hasher: BuildHasher,
 {
     type AggregateId = AggId;
-    type Event = Event;
-    type Events = Vec<VersionedEvent<Self::Event>>;
-    type Error = Never;
+    type Result = Option<Vec<SequencedEvent<Event>>>;
 
-    fn read_events(&self, agg_id: &Self::AggregateId, since: Since) -> Result<Option<Self::Events>, Self::Error> {
+    fn read_events(&self, agg_id: &Self::AggregateId, since: Since) -> Self::Result {
         match self.try_get_stream(&agg_id) {
-            Some(es) => Ok(Some(es.read(since))),
-            None => Ok(None),
+            Some(es) => Some(es.read(since)),
+            None => None,
         }
     }
 }
