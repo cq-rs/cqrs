@@ -209,53 +209,53 @@ use std::fmt;
 //        ExecuteAndPersistError::Execute(err)
 //    }
 //}
-//
-//#[derive(Debug, Clone, Hash, PartialEq)]
-//pub enum AppendEventsError<Err> {
-//    PreconditionFailed(Precondition),
-//    WriteError(Err),
-//}
-//
-//impl<Err> fmt::Display for AppendEventsError<Err>
-//    where
-//        Err: error::Error,
-//{
-//    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//        let err = self as &error::Error;
-//        f.write_str(err.description())?;
-//        f.write_str(": ")?;
-//        match *self {
-//            AppendEventsError::WriteError(ref e) => write!(f, "{}", e),
-//            AppendEventsError::PreconditionFailed(Precondition::LastVersion(v)) => write!(f, "expected version {}", v),
-//            AppendEventsError::PreconditionFailed(Precondition::NewStream) => f.write_str("new stream"),
-//            AppendEventsError::PreconditionFailed(Precondition::EmptyStream) => f.write_str("empty stream"),
-//        }
-//    }
-//}
-//
-//impl<Err> error::Error for AppendEventsError<Err>
-//    where
-//        Err: error::Error,
-//{
-//    fn description(&self) -> &str {
-//        match *self {
-//            AppendEventsError::PreconditionFailed(_) => "precondition failed",
-//            AppendEventsError::WriteError(_) => "error appending events",
-//        }
-//    }
-//
-//    fn cause(&self) -> Option<&error::Error> {
-//        match *self {
-//            AppendEventsError::WriteError(ref e) => Some(e),
-//            AppendEventsError::PreconditionFailed(_) => None,
-//        }
-//    }
-//}
-//impl<Err> From<Precondition> for AppendEventsError<Err> {
-//    fn from(p: Precondition) -> Self {
-//        AppendEventsError::PreconditionFailed(p)
-//    }
-//}
+
+#[derive(Debug, Clone, Hash, PartialEq)]
+pub enum AppendEventsError<Err> {
+    PreconditionFailed(Precondition),
+    WriteError(Err),
+}
+
+impl<Err> fmt::Display for AppendEventsError<Err>
+    where
+        Err: error::Error,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let err = self as &error::Error;
+        f.write_str(err.description())?;
+        f.write_str(": ")?;
+        match *self {
+            AppendEventsError::WriteError(ref e) => write!(f, "{}", e),
+            AppendEventsError::PreconditionFailed(Precondition::ExpectedVersion(v)) => write!(f, "expected aggregate with version {}", v),
+            AppendEventsError::PreconditionFailed(Precondition::New) => f.write_str("expected to create new aggregate"),
+            AppendEventsError::PreconditionFailed(Precondition::Exists) => f.write_str("expected existing aggregate"),
+        }
+    }
+}
+
+impl<Err> error::Error for AppendEventsError<Err>
+    where
+        Err: error::Error,
+{
+    fn description(&self) -> &str {
+        match *self {
+            AppendEventsError::PreconditionFailed(_) => "precondition failed",
+            AppendEventsError::WriteError(_) => "error appending events",
+        }
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        match *self {
+            AppendEventsError::WriteError(ref e) => Some(e),
+            AppendEventsError::PreconditionFailed(_) => None,
+        }
+    }
+}
+impl<Err> From<Precondition> for AppendEventsError<Err> {
+    fn from(p: Precondition) -> Self {
+        AppendEventsError::PreconditionFailed(p)
+    }
+}
 
 #[derive(Debug, Clone, Hash, PartialEq)]
 pub enum ExecuteError<Err> {
@@ -317,25 +317,3 @@ impl<Err> error::Error for ExecuteError<Err>
         }
     }
 }
-
-#[cfg(not(feature = "never_type"))]
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub enum Never {}
-
-#[cfg(not(feature = "never_type"))]
-impl error::Error for Never {
-    fn description(&self) -> &str {
-        unreachable!()
-    }
-}
-
-impl fmt::Display for Never {
-    fn fmt(&self, _: &mut fmt::Formatter) -> fmt::Result {
-        unreachable!()
-    }
-}
-
-#[cfg(feature = "never_type")]
-type Never = !;
-
-

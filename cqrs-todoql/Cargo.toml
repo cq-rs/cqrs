@@ -7,13 +7,14 @@ authors = ["Marcus Griep <marcus@griep.us>"]
 fnv = "*"
 base64 = "*"
 cqrs = { path = "../cqrs" }
-cqrs-memory = { path = "../cqrs-memory" }
+cqrs-data = { path = "../cqrs-data" }
+#cqrs-memory = { path = "../cqrs-memory" }
 cqrs-todo-core = { path = "../cqrs-todo-core" }
 cqrs-redis = { path = "../cqrs-redis" }
 clap = "*"
 chrono = "*"
 iron = "*"
-juniper = "0.9"
+juniper = "0.10"
 juniper_codegen = "*"
 juniper_iron = "*"
 mount = "*"
@@ -23,3 +24,4 @@ r2d2 = "*"
 serde = "*"
 serde_json = "*"
 hashids = { version = "1.0.0", git = "https://github.com/charsyam/hashids_rust.git" }
+void = "1.0.2"

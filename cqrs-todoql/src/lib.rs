@@ -1,5 +1,6 @@
 extern crate cqrs;
-extern crate cqrs_memory;
+extern crate cqrs_data;
+//extern crate cqrs_memory;
 extern crate cqrs_redis;
 extern crate cqrs_todo_core;
 
@@ -18,17 +19,10 @@ extern crate r2d2_redis;
 extern crate r2d2;
 extern crate serde;
 extern crate serde_json;
+extern crate void;
 
 mod graphql;
 mod store;
-
-use std::sync::Arc;
-use cqrs_todo_core::{Event, TodoAggregate};
-
-use cqrs::domain::query::{QueryableSnapshotAggregate, SnapshotAndEventsView};
-use cqrs::domain::execute::ViewExecutor;
-use cqrs::domain::persist::{PersistableSnapshotAggregate, EventsAndSnapshotWithDecorator};
-use cqrs::domain::ident::{AggregateIdProvider};
 
 use r2d2_redis::RedisConnectionManager;
 
@@ -37,42 +31,10 @@ type AggregateId = String;
 type EventStore = store::MemoryOrNullEventStore;
 type SnapshotStore = store::MemoryOrNullSnapshotStore;
 
-type View =
-    SnapshotAndEventsView<
-        TodoAggregate,
-        Arc<EventStore>,
-        Arc<SnapshotStore>,
-    >;
-
-type Executor =
-    ViewExecutor<
-        TodoAggregate,
-        View,
-    >;
-
-type Commander =
-    EventsAndSnapshotWithDecorator<
-        TodoAggregate,
-        Executor,
-        Arc<EventStore>,
-        Arc<SnapshotStore>,
-        cqrs::trivial::NopEventDecorator<Event>,
-    >;
-
 pub enum BackendChoice {
     Memory,
     Null,
     Redis(String)
-}
-
-fn create_view(es: &Arc<EventStore>, ss: &Arc<SnapshotStore>) -> View {
-    TodoAggregate::snapshot_with_events_view(Arc::clone(&es), Arc::clone(&ss))
-}
-
-fn create_commander(es: &Arc<EventStore>, ss: &Arc<SnapshotStore>) -> Commander {
-    let executor = cqrs::domain::execute::ViewExecutor::new(create_view(es, ss));
-    TodoAggregate::persist_events_and_snapshot(executor, Arc::clone(&es), Arc::clone(&ss))
-        .without_decorator()
 }
 
 pub fn start_todo_server(event_backend: BackendChoice, snapshot_backend: BackendChoice) -> iron::Listening {
@@ -117,16 +79,10 @@ pub fn start_todo_server(event_backend: BackendChoice, snapshot_backend: Backend
 
     let stream_index = vec![id];
 
-    let es = Arc::new(es);
-    let ss = Arc::new(ss);
-
-    let query = create_view(&es, &ss);
-    let command = create_commander(&es, &ss);
-
     let context = graphql::InnerContext::new(
         stream_index,
-        query,
-        command,
+        es,
+        ss,
         id_provider,
     );
 
@@ -137,10 +93,8 @@ pub fn start_todo_server(event_backend: BackendChoice, snapshot_backend: Backend
 
 pub struct IdProvider(hashids::HashIds,::std::sync::atomic::AtomicUsize);
 
-impl AggregateIdProvider for IdProvider {
-    type AggregateId = String;
-
-    fn new_id(&self) -> Self::AggregateId {
+impl IdProvider {
+    fn new_id(&self) -> String {
         let next = self.1.fetch_add(1, ::std::sync::atomic::Ordering::SeqCst);
         let duration = ::std::time::SystemTime::now().duration_since(::std::time::UNIX_EPOCH).unwrap();
         self.0.encode(&vec![duration.as_secs() as i64, next as i64])
@@ -149,7 +103,8 @@ impl AggregateIdProvider for IdProvider {
 
 mod helper {
     use chrono::{Duration,Utc,TimeZone};
-    use cqrs::{Version, StateSnapshot, EventAppend, SnapshotPersist};
+    use cqrs::{Version, StateSnapshot};
+    use cqrs_data::{event::Store as EO, state::Store as SO};
     use cqrs_todo_core::{Event, TodoAggregate, TodoData, TodoStatus, domain};
 
     use super::{AggregateId, EventStore, SnapshotStore};
@@ -167,7 +122,7 @@ mod helper {
 
         es.append_events(id, &events, None).unwrap();
         ss.persist_snapshot(id, StateSnapshot {
-            version: Version::from(1),
+            version: Version::new(1),
             snapshot: TodoAggregate::Created(TodoData {
                 description: domain::Description::new("Hello!").unwrap(),
                 reminder: None,

@@ -6,10 +6,11 @@ pub enum Since {
     Event(cqrs::EventNumber),
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Expectation {
-    None,
-    New,
-    Empty,
-    LastEvent(cqrs::EventNumber),
+impl From<cqrs::Version> for Since {
+    fn from(v: cqrs::Version) -> Self {
+        match v {
+            cqrs::Version::Initial => Since::BeginningOfStream,
+            cqrs::Version::Number(x) => Since::Event(x),
+        }
+    }
 }

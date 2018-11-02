@@ -1,7 +1,10 @@
 extern crate cqrs;
+extern crate cqrs_data;
 extern crate redis;
+extern crate void;
 
 use std::marker::PhantomData;
+use void::Void;
 
 pub use store::{Store, SnapshotStore};
 
@@ -29,7 +32,7 @@ impl<S: redis::ToRedisArgs + redis::FromRedisValue> RedisSerializer for Identity
     type Value = S;
     type Output = S;
     type Input = S;
-    type Error = ::cqrs::error::Never;
+    type Error = Void;
 
     fn serialize(&self, value: Self::Value) -> Self::Output {
         value
@@ -58,8 +61,7 @@ impl Config {
 
 mod store {
     use cqrs;
-    use redis;
-    use redis::{Commands, PipelineCommands};
+    use redis::{self, PipelineCommands};
     use super::RedisSerializer;
 
 
@@ -98,45 +100,45 @@ mod store {
         serializer: S,
     }
 
-    impl<'a, S, C> cqrs::SnapshotPersist for SnapshotStore<'a, C, S>
+    impl<'a, S, C> cqrs_data::state::Store<S::Value> for SnapshotStore<'a, C, S>
         where
             C: redis::ConnectionLike + 'a,
             S: RedisSerializer,
     {
         type AggregateId = str;
-        type Snapshot = S::Value;
         type Error = redis::RedisError;
 
-        fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: cqrs::StateSnapshot<Self::Snapshot>) -> Result<(), Self::Error> {
+        fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: cqrs::StateSnapshot<S::Value>) -> Result<(), Self::Error> {
             let mut key = String::with_capacity(self.store.config.key_prefix.len() + agg_id.len() + 1);
-            key.push_str("snapshot-");
             key.push_str(&self.store.config.key_prefix);
             key.push('-');
+            key.push_str("snapshot-");
             key.push_str(agg_id);
+
+            let snapshot_ver = snapshot.version.get();
 
             let _: () =
                 redis::pipe()
-                    .hset(&key, "version", snapshot.version.number())
+                    .hset(&key, "version", snapshot_ver)
                     .hset(&key, "snapshot", self.serializer.serialize(snapshot.snapshot))
                     .query(self.store.conn)?;
             Ok(())
         }
     }
 
-    impl<'a, S, C> cqrs::SnapshotSource for SnapshotStore<'a, C, S>
+    impl<'a, S, C> cqrs_data::state::Source<S::Value> for SnapshotStore<'a, C, S>
         where
             C: redis::ConnectionLike + 'a,
             S: RedisSerializer,
     {
         type AggregateId = str;
-        type Snapshot = S::Value;
         type Error = redis::RedisError;
 
-        fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<cqrs::StateSnapshot<Self::Snapshot>>, Self::Error> {
+        fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<cqrs::StateSnapshot<S::Value>>, Self::Error> {
             let mut key = String::with_capacity(self.store.config.key_prefix.len() + agg_id.len() + 10);
-            key.push_str("snapshot-");
             key.push_str(&self.store.config.key_prefix);
             key.push('-');
+            key.push_str("snapshot-");
             key.push_str(agg_id);
 
             let result: (Option<usize>, Option<S::Input>) =
@@ -145,11 +147,14 @@ mod store {
                     .hget(&key, "snapshot")
                     .query(self.store.conn)?;
             Ok(match result {
-                (Some(version), Some(snapshot)) =>
+                (Some(snapshot_ver), Some(snapshot)) => {
+                    let version = cqrs::Version::new(snapshot_ver);
+
                     Some(cqrs::StateSnapshot {
-                        version: cqrs::Version::new(version),
+                        version: version,
                         snapshot: self.serializer.deserialize(snapshot).expect("the snapshot should have been deserializable"),
-                    }),
+                    })
+                },
                 _ => None
             })
         }
@@ -159,6 +164,7 @@ mod store {
         where
             C: redis::ConnectionLike + 'a,
             S: RedisSerializer,
+            S::Value: ::std::fmt::Debug,
     {
         conn: &'a C,
         serializer: S,
@@ -175,36 +181,46 @@ mod store {
         where
             C: redis::ConnectionLike + 'a,
             S: RedisSerializer,
+            S::Value: ::std::fmt::Debug,
     {
-        type Item = cqrs::VersionedEvent<S::Value>;
+        type Item = Result<cqrs::SequencedEvent<S::Value>, redis::RedisError>;
 
         fn next(&mut self) -> Option<Self::Item> {
             if let Some(x) = self.buffer.pop() {
-                let event = cqrs::VersionedEvent {
-                    version: cqrs::Version::new(self.cursor + self.index),
+                let event = cqrs::SequencedEvent {
+                    sequence_number: cqrs::EventNumber::new(self.cursor + self.index + 1).unwrap(),
                     event: self.serializer.deserialize(x).unwrap(),
                 };
                 self.index += 1;
-                Some(event)
+                println!("Next event: {:?}", event);
+                Some(Ok(event))
             } else if !self.first_read && self.index + 1 < PAGE_SIZE {
                 None
             } else {
                 self.first_read = false;
                 self.cursor += self.index;
                 self.index = 0;
-                let mut values: Vec<Vec<S::Input>> =
+                let values: Result<Vec<Vec<S::Input>>, _> =
                     redis::pipe()
                         .lrange(&self.key, self.cursor as isize, (self.cursor + PAGE_SIZE - 1) as isize)
-                        .query(self.conn)
-                        .unwrap();
+                        .query(self.conn);
+
+                if let Err(e) = values {
+                    return Some(Err(e));
+                }
+
+                let mut values = values.unwrap();
+
                 self.buffer = values.pop().unwrap();
+                self.buffer.reverse();
                 if let Some(x) = self.buffer.pop() {
-                    let event = cqrs::VersionedEvent {
-                        version: cqrs::Version::new(self.cursor + self.index),
+                    let event = cqrs::SequencedEvent {
+                        sequence_number: cqrs::EventNumber::new(self.cursor + self.index + 1).unwrap(),
                         event: self.serializer.deserialize(x).unwrap(),
                     };
                     self.index += 1;
-                    Some(event)
+                    println!("Next event: {:?}", event);
+                    Some(Ok(event))
                 } else {
                     None
                 }
@@ -212,25 +228,25 @@ mod store {
         }
     }
 
-    impl<'a, S, C> cqrs::EventSource for SnapshotStore<'a, C, S>
+    impl<'a, S, C> cqrs_data::event::Source<S::Value> for SnapshotStore<'a, C, S>
         where
             C: redis::ConnectionLike + 'a,
             S: RedisSerializer + Clone,
+            S::Value: ::std::fmt::Debug,
     {
         type AggregateId = str;
         type Events = RedisEventIterator<'a, S, C>;
-        type Event = S::Value;
         type Error = redis::RedisError;
 
-        fn read_events(&self, agg_id: &Self::AggregateId, since: cqrs::Since) -> Result<Option<Self::Events>, Self::Error> {
+        fn read_events(&self, agg_id: &Self::AggregateId, since: cqrs_data::Since) -> Result<Option<Self::Events>, Self::Error> {
             let mut key = String::with_capacity(self.store.config.key_prefix.len() + agg_id.len() + 1);
             key.push_str(&self.store.config.key_prefix);
             key.push('-');
             key.push_str(agg_id);
 
             let initial =
-                if let cqrs::Since::Version(v) = since {
-                    v.number() + 1
+                if let cqrs_data::Since::Event(x) = since {
+                    x.get()
                 } else {
                     0
                 };
@@ -251,23 +267,23 @@ mod store {
             }
         }
     }
-    impl<'a, S, C> cqrs::EventAppend for SnapshotStore<'a, C, S>
+    impl<'a, S, C> cqrs_data::event::Store<S::Value> for SnapshotStore<'a, C, S>
         where
             C: redis::ConnectionLike + 'a,
             S: RedisSerializer,
-            S::Value: Clone,
+            S::Value: Clone + ::std::fmt::Debug,
     {
         type AggregateId = str;
-        type Event = S::Value;
         type Error = cqrs::error::AppendEventsError<redis::RedisError>;
 
-        fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], precondition: Option<cqrs::Precondition>) -> Result<(), Self::Error> {
-            println!("Appending!");
+        fn append_events(&self, agg_id: &Self::AggregateId, events: &[S::Value], precondition: Option<cqrs::Precondition>) -> Result<cqrs::EventNumber, Self::Error> {
+            println!("Appending {} events!", events.len());
             let mut key = String::with_capacity(self.store.config.key_prefix.len() + agg_id.len() + 1);
             key.push_str(&self.store.config.key_prefix);
             key.push('-');
             key.push_str(agg_id);
 
+            let mut next_event_number = 0;
             if let Some(precondition) = precondition {
                 let result: Option<()> = redis::transaction(self.store.conn, &[&key], |pipe| {
                     let (exists, len): (bool, usize) =
@@ -275,19 +291,22 @@ mod store {
                             .exists(&key)
                             .llen(&key)
                             .query(self.store.conn)?;
+                    next_event_number = len;
 
                     let valid =
                         match precondition {
-                            cqrs::Precondition::NewStream => !exists,
-                            cqrs::Precondition::EmptyStream => !exists || len == 0,
-                            cqrs::Precondition::LastVersion(ver) => len > 0 && len - 1 == ver.number()
+                            cqrs::Precondition::New => !exists,
+                            cqrs::Precondition::Exists => exists,
+                            cqrs::Precondition::ExpectedVersion(cqrs::Version::Initial) => exists && len == 0,
+                            cqrs::Precondition::ExpectedVersion(cqrs::Version::Number(x)) => len == x.get()
                         };
 
                     if !valid {
-                        Ok(None)
+                        Ok(Some(None))
                     } else {
                         for e in events.iter() {
                             let e = e.to_owned();
+                            println!("Appending event: {:?}", e);
                             pipe.rpush(&key, self.serializer.serialize(e));
                         }
                         pipe.query(self.store.conn)
@@ -297,7 +316,13 @@ mod store {
                     return Err(cqrs::error::AppendEventsError::PreconditionFailed(precondition))
                 }
             } else {
-                let result: () = redis::transaction(self.store.conn, &[&key], |pipe| {
+                let _: () = redis::transaction(self.store.conn, &[&key], |pipe| {
+                    let len: (usize,) =
+                        redis::pipe()
+                            .llen(&key)
+                            .query(self.store.conn)?;
+                    next_event_number = len.0;
+
                     for e in events.iter() {
                         let e = e.to_owned();
                         pipe.rpush(&key, self.serializer.serialize(e));
@@ -305,7 +330,7 @@ mod store {
                     pipe.query(self.store.conn)
                 }).map_err(cqrs::error::AppendEventsError::WriteError)?;
             }
-            Ok(())
+            Ok(cqrs::EventNumber::new(next_event_number + 1).unwrap())
         }
     }
 

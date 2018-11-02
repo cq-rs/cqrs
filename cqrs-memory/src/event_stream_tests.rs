@@ -30,8 +30,8 @@ fn no_events_are_in_empty_event_stream() {
 fn can_add_events_and_read_them_back_out() {
     let es = TestMemoryEventStream::default();
     let all_events = vec![
-        VersionedEvent { version: Version::new(0), event: TestEvent { value: 143 } },
-        VersionedEvent { version: Version::new(1), event: TestEvent { value: 554 } },
+        SequencedEvent { sequence_number: EventNumber::new(0), event: TestEvent { value: 143 } },
+        SequencedEvent { sequence_number: EventNumber::new(1), event: TestEvent { value: 554 } },
     ];
 
     let decorated_events: Vec<_> = all_events.iter()
@@ -47,8 +47,8 @@ fn can_add_events_and_read_them_back_out() {
 fn can_add_events_and_read_from_middle() {
     let es = TestMemoryEventStream::default();
     let all_events = vec![
-        VersionedEvent { version: Version::new(0), event: TestEvent { value: 143 } },
-        VersionedEvent { version: Version::new(1), event: TestEvent { value: 554 } },
+        SequencedEvent { sequence_number: EventNumber::new(0), event: TestEvent { value: 143 } },
+        SequencedEvent { sequence_number: EventNumber::new(1), event: TestEvent { value: 554 } },
     ];
     let expected_events = vec![
         all_events[1].clone(),
@@ -59,7 +59,7 @@ fn can_add_events_and_read_from_middle() {
         .collect();
 
     es.append_events(&decorated_events, None).unwrap();
-    let actual_events = es.read(Since::Version(Version::new(0)));
+    let actual_events = es.read(Since::Event(EventNumber::new(0)));
     assert_eq!(expected_events, actual_events);
 }
 
@@ -67,8 +67,8 @@ fn can_add_events_and_read_from_middle() {
 fn reading_with_version_one_past_end_gives_empty_set() {
     let es = TestMemoryEventStream::default();
     let all_events = vec![
-        VersionedEvent { version: Version::new(0), event: TestEvent { value: 143 } },
-        VersionedEvent { version: Version::new(1), event: TestEvent { value: 554 } },
+        SequencedEvent { sequence_number: EventNumber::new(0), event: TestEvent { value: 143 } },
+        SequencedEvent { sequence_number: EventNumber::new(1), event: TestEvent { value: 554 } },
     ];
 
     let decorated_events: Vec<_> = all_events.iter()
@@ -76,8 +76,8 @@ fn reading_with_version_one_past_end_gives_empty_set() {
         .collect();
 
     es.append_events(&decorated_events, None).unwrap();
-    let expected_events = Vec::<VersionedEvent<TestEvent>>::default();
-    let actual_events = es.read(Since::Version(Version::new(1)));
+    let expected_events = Vec::<SequencedEvent<TestEvent>>::default();
+    let actual_events = es.read(Since::Event(EventNumber::new(1)));
     assert_eq!(expected_events, actual_events);
 }
 
@@ -85,8 +85,8 @@ fn reading_with_version_one_past_end_gives_empty_set() {
 fn reading_with_version_more_than_one_past_end_gives_empty_stream() {
     let es = TestMemoryEventStream::default();
     let all_events = vec![
-        VersionedEvent { version: Version::new(0), event: TestEvent { value: 143 } },
-        VersionedEvent { version: Version::new(1), event: TestEvent { value: 554 } },
+        SequencedEvent { sequence_number: EventNumber::new(0), event: TestEvent { value: 143 } },
+        SequencedEvent { sequence_number: EventNumber::new(1), event: TestEvent { value: 554 } },
     ];
 
     let decorated_events: Vec<_> = all_events.iter()
@@ -94,7 +94,7 @@ fn reading_with_version_more_than_one_past_end_gives_empty_stream() {
         .collect();
 
     es.append_events(&decorated_events, None).unwrap();
-    let expected_events = Vec::<VersionedEvent<TestEvent>>::default();
-    let actual_events = es.read(Since::Version(Version::new(2)));
+    let expected_events = Vec::<SequencedEvent<TestEvent>>::default();
+    let actual_events = es.read(Since::Event(EventNumber::new(2)));
     assert_eq!(expected_events, actual_events);
 }

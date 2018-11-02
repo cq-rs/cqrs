@@ -1,5 +1,6 @@
-use cqrs::{Version, Since, VersionedEvent, Precondition};
+use cqrs::{EventNumber, Precondition, SequencedEvent};
 use cqrs::error::{AppendEventsError, Never};
+use cqrs_data::Since;
 use std::sync::{RwLock, Arc};
 
 #[derive(Debug)]
@@ -28,42 +29,45 @@ impl<Event> MemoryEventStream<Event>
     where
         Event: Clone,
 {
-    pub(crate) fn append_events(&self, events: &[Event], precondition: Option<Precondition>) -> Result<(), AppendEventsError<Never>> {
+    pub(crate) fn append_events(&self, events: &[Event], precondition: Option<Precondition>) -> Result<EventNumber, AppendEventsError<Never>> {
         let mut stream = self.events.write().unwrap();
+
+        let next_event_number = EventNumber::new(stream.len());
 
         match precondition {
             None => {}
-            Some(Precondition::LastVersion(i)) if !stream.is_empty() && stream.len() == i + 1 => {}
-            Some(Precondition::EmptyStream) if stream.is_empty() => {}
+            Some(Precondition::ExpectedVersion(i)) if !stream.is_empty() && next_event_number == EventNumber::from(i).incr() => {}
+            Some(Precondition::New) if !stream.is_empty() => {}
+            Some(Precondition::Exists) if stream.is_empty() => {}
             Some(precondition) => return Err(AppendEventsError::PreconditionFailed(precondition)),
         }
 
         stream.extend_from_slice(events);
-        Ok(())
+        Ok(next_event_number)
     }
 
-    pub(crate) fn read(&self, version: Since) -> Vec<VersionedEvent<Event>> {
+    pub(crate) fn read(&self, version: Since) -> Vec<SequencedEvent<Event>> {
         let events = self.events.read().unwrap();
         match version {
             Since::BeginningOfStream => {
-                let mut version = Version::default();
+                let mut sequence_number = EventNumber::default();
                 let mut evts = Vec::new();
                 for event in events.iter() {
-                    evts.push(VersionedEvent{ version, event: event.to_owned() });
-                    version += 1;
+                    evts.push(SequencedEvent{ sequence_number, event: event.to_owned() });
+                    sequence_number = sequence_number.incr();
                 }
                 evts
             }
-            Since::Version(o) => {
-                let next_version = o + 1;
+            Since::Event(o) => {
+                let next_version = o.incr();
                 if o.number() >= events.len() {
                     Vec::default()
                 } else {
-                    let mut version = next_version;
+                    let mut sequence_number = next_version;
                     let mut evts = Vec::new();
                     for event in events[next_version.number()..].iter() {
-                        evts.push(VersionedEvent { version, event: event.to_owned() });
-                        version += 1;
+                        evts.push(SequencedEvent { sequence_number, event: event.to_owned() });
+                        sequence_number = sequence_number.incr();
                     }
                     evts
                 }

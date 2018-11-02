@@ -6,6 +6,7 @@ authors = ["Marcus Griep <marcus@griep.us>"]
 [dependencies]
 cqrs = { path = "../cqrs" }
 cqrs-data = { path = "../cqrs-data" }
+void = "1.0.2"
 
 [dev-dependencies]
 fnv = "*"

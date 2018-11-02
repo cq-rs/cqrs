@@ -1,6 +1,6 @@
-use cqrs::{Precondition, SequencedEvent};
+use cqrs::{EventNumber, Precondition, SequencedEvent};
 use cqrs::error::{AppendEventsError, Never};
-use cqrs_data::events;
+use cqrs_data::event;
 use cqrs_data::Since;
 use event_stream::MemoryEventStream;
 use std::sync::RwLock;
@@ -54,40 +54,40 @@ impl<Event, AggId, Hasher> Default for MemoryEventStore<Event, AggId, Hasher>
     }
 }
 
-impl<Event, AggId, Hasher> events::Source for MemoryEventStore<Event, AggId, Hasher>
+impl<Event, AggId, Hasher> event::Source<'static, Event> for MemoryEventStore<Event, AggId, Hasher>
     where
-        AggId: Hash + Eq + Clone,
+        AggId: Hash + Eq + Clone + 'static,
         Event: Clone,
         Hasher: BuildHasher,
 {
     type AggregateId = AggId;
-    type Result = Option<Vec<SequencedEvent<Event>>>;
+    type Events = Vec<Result<SequencedEvent<Event>, Never>>;
+    type Error = Never;
 
-    fn read_events(&self, agg_id: &Self::AggregateId, since: Since) -> Self::Result {
-        match self.try_get_stream(&agg_id) {
-            Some(es) => Some(es.read(since)),
+    fn read_events(&self, agg_id: Self::AggregateId, since: Since) -> Result<Option<Self::Events>, Self::Error> {
+        Ok(match self.try_get_stream(&agg_id) {
+            Some(es) => Some(es.read(since).iter().map(|e| Ok(e.to_owned())).collect()),
             None => None,
-        }
+        })
     }
 }
 
-impl<Event, AggId, Hasher> EventAppend for MemoryEventStore<Event, AggId, Hasher>
+impl<Event, AggId, Hasher> event::Store<'static, Event> for MemoryEventStore<Event, AggId, Hasher>
     where
-        AggId: Hash + Eq + Clone,
+        AggId: Hash + Eq + Clone + 'static,
         Event: Clone,
         Hasher: BuildHasher,
 {
     type AggregateId = AggId;
-    type Event = Event;
     type Error = AppendEventsError<Never>;
 
-    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], precondition: Option<Precondition>) -> Result<(), Self::Error> {
+    fn append_events(&self, agg_id: Self::AggregateId, events: &[Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
         if let Some(stream) = self.try_get_stream(&agg_id) {
             stream.append_events(events, precondition)
         } else {
             if let Some(precondition) = precondition {
                 match precondition {
-                    Precondition::EmptyStream | Precondition::LastVersion(_) => return Err(AppendEventsError::PreconditionFailed(precondition)),
+                    Precondition::New | Precondition::ExpectedVersion(_) => return Err(AppendEventsError::PreconditionFailed(precondition)),
                     _ => {}
                 }
             }

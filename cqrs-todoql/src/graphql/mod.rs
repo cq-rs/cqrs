@@ -3,24 +3,24 @@ use std::sync::{Arc,RwLock};
 
 use juniper;
 
-use super::{AggregateId, View, Commander};
+use super::{AggregateId};
 
 mod schema;
 pub mod endpoint;
 
 pub struct InnerContext {
     pub stream_index: RwLock<Vec<AggregateId>>,
-    pub query: View,
-    pub command: Commander,
+    pub event_db: super::EventStore,
+    pub state_db: super::SnapshotStore,
     pub id_provider: super::IdProvider,
 }
 
 impl InnerContext {
-    pub fn new(stream_index: Vec<AggregateId>, query: View, command: Commander, id_provider: super::IdProvider) -> Self {
+    pub fn new(stream_index: Vec<AggregateId>, event_db: super::EventStore, state_db: super::SnapshotStore, id_provider: super::IdProvider) -> Self {
         InnerContext {
             stream_index: RwLock::new(stream_index),
-            query,
-            command,
+            event_db,
+            state_db,
             id_provider,
         }
     }

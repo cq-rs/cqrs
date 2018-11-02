@@ -13,9 +13,9 @@ pub fn create_chain(context: InnerContext) -> iron::Chain {
     let context_arc = Arc::new(context);
 
     let context_factory = move |_: &mut iron::Request| {
-        Context {
+        Ok(Context {
             inner: Arc::clone(&context_arc),
-        }
+        })
     };
 
     let mut mount = Mount::new();

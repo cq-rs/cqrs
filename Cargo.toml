@@ -2,7 +2,7 @@
 members = [
     "cqrs",
     "cqrs-data",
-    "cqrs-eventstore",
+#    "cqrs-eventstore",
     "cqrs-memory",
     "cqrs-redis",
     "cqrs-todo-core",

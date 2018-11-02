@@ -9,7 +9,7 @@ mod projection;
 mod types;
 
 pub use aggregate::Aggregate;
-pub use aggregate::hydrated::HydratedAggregate;
-pub use projection::Projection;
+//pub use aggregate::hydrated::HydratedAggregate;
+pub use aggregate::{CommandHandler, Projection};
 pub use types::{EventNumber, Version, Precondition, SequencedEvent, StateSnapshot};
 

@@ -315,9 +315,9 @@ impl TodoAggregate {
 }
 
 impl Aggregate for TodoAggregate {
-    type Events = Events;
     type Event = Event;
     type Command = Command;
+    type Events = Events;
     type Error = error::CommandError;
 
     fn apply(&mut self, event: Self::Event) {
@@ -325,10 +325,11 @@ impl Aggregate for TodoAggregate {
         self.apply_event(event);
     }
 
-    fn execute(&self, command: Self::Command) -> Result<Self::Events, Self::Error> {
+    fn execute(&self, command: Command) -> Result<Self::Events, Self::Error> {
         println!("execute {:?}", command);
         self.execute_command(command)
     }
+
 }
 
 #[cfg(test)]

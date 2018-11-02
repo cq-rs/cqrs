@@ -1,8 +1,7 @@
 use base64;
-use cqrs::Version;
-use cqrs::domain::ident::AggregateIdProvider;
-use cqrs::domain::persist::AggregateCommand;
-use cqrs::domain::{AggregatePrecondition, AggregateVersion, HydratedAggregate};
+use cqrs::{Aggregate, Precondition, StateSnapshot, Version};
+use cqrs_data::Entity;
+use cqrs_data::{event::Store as EO, state::Store as SO};
 use cqrs_todo_core::{domain, TodoAggregate, TodoStatus, Command};
 use chrono::{DateTime, Utc};
 use juniper::{ID, FieldResult, Value};
@@ -64,33 +63,33 @@ graphql_object!(Query: Context |&self| {
     field todo(&executor, id: ID) -> FieldResult<Option<TodoQL>> {
         let context = executor.context();
 
-        let rehydrate_result = context.query.rehydrate(&id.to_string())?;
+        let entity = Entity::rehydrate(id.to_string(), &context.event_db, &context.state_db)?;
 
-        Ok(rehydrate_result.map(|agg| TodoQL(id, agg)))
+        Ok(entity.map(TodoQL))
     }
 });
 
-struct TodoQL(ID, HydratedAggregate<TodoAggregate>);
+struct TodoQL(Entity<TodoAggregate, String>);
 
 graphql_object!(TodoQL: Context |&self| {
     field id() -> FieldResult<ID> {
-        Ok(self.0.clone().into())
+        Ok(self.0.id().to_owned().into())
     }
 
     field description() -> FieldResult<&str> {
-        Ok(self.1.inspect_aggregate().inspect_state().get_data()?.description.as_str())
+        Ok(self.0.aggregate().get_data()?.description.as_str())
     }
 
     field reminder() -> FieldResult<Option<DateTime<Utc>>> {
-        Ok(self.1.inspect_aggregate().inspect_state().get_data()?.reminder.map(|r| r.get_time()))
+        Ok(self.0.aggregate().get_data()?.reminder.map(|r| r.get_time()))
     }
 
     field completed() -> FieldResult<bool> {
-        Ok(self.1.inspect_aggregate().inspect_state().get_data()?.status == TodoStatus::Completed)
+        Ok(self.0.aggregate().get_data()?.status == TodoStatus::Completed)
     }
 
-    field version() -> FieldResult<String> {
-        Ok(self.1.get_version().to_string())
+    field version() -> FieldResult<i32> {
+        Ok(self.0.version().get() as i32)
     }
 });
 
@@ -145,9 +144,13 @@ graphql_scalar!(Cursor {
 
 graphql_object!(TodoEdge: Context |&self| {
     field node(&executor) -> FieldResult<Option<TodoQL>> {
-        let rehydrate_result = executor.context().query.rehydrate(&self.agg_id.to_string())?;
+        let context = executor.context();
 
-        Ok(rehydrate_result.map(|agg| TodoQL(self.agg_id.clone(), agg)))
+        let id = self.agg_id.to_string();
+
+        let entity = Entity::rehydrate(id, &context.event_db, &context.state_db)?;
+
+        Ok(entity.map(TodoQL))
     }
 
     field cursor() -> FieldResult<Cursor> {
@@ -181,101 +184,170 @@ graphql_object!(Mutations: Context |&self| {
         let command = Command::Create(description, reminder);
 
         let new_id = context.id_provider.new_id();
-        let agg = context.command
-            .execute_and_persist_with_decorator(&new_id, command, Some(AggregatePrecondition::New), Default::default())?;
+
+        let mut entity: Entity<TodoAggregate, _> = Entity::from_default(new_id.clone());
+
+        let events = entity.aggregate().execute(command)?;
+
+        context.event_db.append_events(&new_id, &events, Some(Precondition::New))?;
+        entity.apply_events(events);
 
         context.stream_index.write().unwrap().push(new_id.clone());
 
-        Ok(TodoQL(new_id.into(), agg))
+        Ok(TodoQL(entity))
     }
 
 });
 
 struct TodoMutQL(ID);
 
-fn i32_as_aggregate_version(version_int: i32) -> AggregateVersion {
-    if version_int < 0 {
-        AggregateVersion::Initial
-    } else {
-        AggregateVersion::Version(Version::new(version_int as usize))
-    }
-}
-
-fn expect_exists_or(expected_version: Option<i32>) -> AggregatePrecondition {
+fn expect_exists_or(expected_version: Option<i32>) -> Precondition {
     expected_version
-        .map(i32_as_aggregate_version)
-        .map(AggregatePrecondition::ExpectedVersion)
-        .unwrap_or(AggregatePrecondition::Exists)
+        .map(|i| Version::new(i as usize))
+        .map(Precondition::ExpectedVersion)
+        .unwrap_or(Precondition::Exists)
 }
 
 graphql_object!(TodoMutQL: Context |&self| {
-    field set_description(&executor, text: String, expected_version: Option<i32>) -> FieldResult<TodoQL> {
-        let expectation = expect_exists_or(expected_version);
+    field set_description(&executor, text: String, expected_version: Option<i32>) -> FieldResult<Option<TodoQL>> {
+        let context = executor.context();
+
+        let precondition = expect_exists_or(expected_version);
 
         let description = domain::Description::new(text)?;
 
         let command = Command::UpdateText(description);
 
-        let agg = executor.context().command
-            .execute_and_persist_with_decorator(&self.0.to_string(), command, Some(expectation), Default::default())?;
+        let id = self.0.to_string();
 
-        Ok(TodoQL(self.0.clone(), agg))
+        let mut entity = Entity::rehydrate(id, &context.event_db, &context.state_db)?.ok_or("Entity not found")?;
+
+        let events = entity.aggregate().execute(command)?;
+
+        context.event_db.append_events(&entity.id(), &events, Some(precondition))?;
+        entity.apply_events(events);
+
+        if entity.version() - entity.snapshot_version() > 10 {
+            context.state_db.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+        }
+
+        Ok(Some(TodoQL(entity)))
     }
 
-    field set_reminder(&executor, time: DateTime<Utc>, expected_version: Option<i32>) -> FieldResult<TodoQL> {
-        let expectation = expect_exists_or(expected_version);
+    field set_reminder(&executor, time: DateTime<Utc>, expected_version: Option<i32>) -> FieldResult<Option<TodoQL>> {
+        let context = executor.context();
+
+        let precondition = expect_exists_or(expected_version);
 
         let reminder = domain::Reminder::new(time, Utc::now())?;
 
         let command = Command::SetReminder(reminder);
 
-        let agg = executor.context().command
-            .execute_and_persist_with_decorator(&self.0.to_string(), command, Some(expectation), Default::default())?;
+        let id = self.0.to_string();
 
-        Ok(TodoQL(self.0.clone(), agg))
+        let mut entity = Entity::rehydrate(id.to_owned(), &context.event_db, &context.state_db)?.ok_or("Entity not found")?;
+
+        let events = entity.aggregate().execute(command)?;
+
+        context.event_db.append_events(&entity.id(), &events, Some(precondition))?;
+        entity.apply_events(events);
+
+        if entity.version() - entity.snapshot_version() > 10 {
+            context.state_db.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+        }
+
+        Ok(Some(TodoQL(entity)))
     }
 
-    field cancel_reminder(&executor, expected_version: Option<i32>) -> FieldResult<TodoQL> {
-        let expectation = expect_exists_or(expected_version);
+    field cancel_reminder(&executor, expected_version: Option<i32>) -> FieldResult<Option<TodoQL>> {
+        let context = executor.context();
+
+        let precondition = expect_exists_or(expected_version);
 
         let command = Command::CancelReminder;
 
-        let agg = executor.context().command
-            .execute_and_persist_with_decorator(&self.0.to_string(), command, Some(expectation), Default::default())?;
+        let id = self.0.to_string();
 
-        Ok(TodoQL(self.0.clone(), agg))
+        let mut entity = Entity::rehydrate(id.to_owned(), &context.event_db, &context.state_db)?.ok_or("Entity not found")?;
+
+        let events = entity.aggregate().execute(command)?;
+
+        context.event_db.append_events(&entity.id(), &events, Some(precondition))?;
+        entity.apply_events(events);
+
+        if entity.version() - entity.snapshot_version() > 10 {
+            context.state_db.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+        }
+
+        Ok(Some(TodoQL(entity)))
     }
 
-    field toggle(&executor, expected_version: Option<i32>) -> FieldResult<TodoQL> {
-        let expectation = expect_exists_or(expected_version);
+    field toggle(&executor, expected_version: Option<i32>) -> FieldResult<Option<TodoQL>> {
+        let context = executor.context();
+
+        let precondition = expect_exists_or(expected_version);
 
         let command = Command::ToggleCompletion;
 
-        let agg = executor.context().command
-            .execute_and_persist_with_decorator(&self.0.to_string(), command, Some(expectation), Default::default())?;
+        let id = self.0.to_string();
 
-        Ok(TodoQL(self.0.clone(), agg))
+        let mut entity = Entity::rehydrate(id.to_owned(), &context.event_db, &context.state_db)?.ok_or("Entity not found")?;
+
+        let events = entity.aggregate().execute(command)?;
+
+        context.event_db.append_events(&entity.id(), &events, Some(precondition))?;
+        entity.apply_events(events);
+
+        if entity.version() - entity.snapshot_version() > 10 {
+            context.state_db.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+        }
+
+        Ok(Some(TodoQL(entity)))
     }
 
-    field reset(&executor, expected_version: Option<i32>) -> FieldResult<TodoQL> {
-        let expectation = expect_exists_or(expected_version);
+    field reset(&executor, expected_version: Option<i32>) -> FieldResult<Option<TodoQL>> {
+        let context = executor.context();
+
+        let precondition = expect_exists_or(expected_version);
 
         let command = Command::ResetCompleted;
 
-        let agg = executor.context().command
-            .execute_and_persist_with_decorator(&self.0.to_string(), command, Some(expectation), Default::default())?;
+        let id = self.0.to_string();
 
-        Ok(TodoQL(self.0.clone(), agg))
+        let mut entity = Entity::rehydrate(id.to_owned(), &context.event_db, &context.state_db)?.ok_or("Entity not found")?;
+
+        let events = entity.aggregate().execute(command)?;
+
+        context.event_db.append_events(&entity.id(), &events, Some(precondition))?;
+        entity.apply_events(events);
+
+        if entity.version() - entity.snapshot_version() > 10 {
+            context.state_db.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+        }
+
+        Ok(Some(TodoQL(entity)))
     }
 
-    field complete(&executor, expected_version: Option<i32>) -> FieldResult<TodoQL> {
-        let expectation = expect_exists_or(expected_version);
+    field complete(&executor, expected_version: Option<i32>) -> FieldResult<Option<TodoQL>> {
+        let context = executor.context();
+
+        let precondition = expect_exists_or(expected_version);
 
         let command = Command::MarkCompleted;
 
-        let agg = executor.context().command
-            .execute_and_persist_with_decorator(&self.0.to_string(), command, Some(expectation), Default::default())?;
+        let id = self.0.to_string();
 
-        Ok(TodoQL(self.0.clone(), agg))
+        let mut entity = Entity::rehydrate(id.to_owned(), &context.event_db, &context.state_db)?.ok_or("Entity not found")?;
+
+        let events = entity.aggregate().execute(command)?;
+
+        context.event_db.append_events(&entity.id(), &events, Some(precondition))?;
+        entity.apply_events(events);
+
+        if entity.version() - entity.snapshot_version() > 10 {
+            context.state_db.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+        }
+
+        Ok(Some(TodoQL(entity)))
     }
 });

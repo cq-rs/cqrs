@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hash};
-use cqrs::{SnapshotSource, SnapshotPersist, StateSnapshot};
-use cqrs::error::Never;
+use cqrs::{error::Never, StateSnapshot};
+use cqrs_data::state::{Source, Store};
 use std::sync::RwLock;
 
 #[derive(Debug)]
@@ -11,7 +11,7 @@ pub struct MemoryStateStore<State, AggId, Hasher = RandomState>
         AggId: Eq + Hash,
         Hasher: BuildHasher,
 {
-    data: RwLock<HashMap<AggId, StateSnapshot<State>, Hasher>>
+    data: RwLock<HashMap<AggId, State, Hasher>>
 }
 
 impl<State, AggId, Hasher> Default for MemoryStateStore<State, AggId, Hasher>
@@ -26,17 +26,16 @@ impl<State, AggId, Hasher> Default for MemoryStateStore<State, AggId, Hasher>
     }
 }
 
-impl<Snapshot, AggId, Hasher> SnapshotSource for MemoryStateStore<Snapshot, AggId, Hasher>
+impl<Snapshot, AggId, Hasher> Source<'static, Snapshot> for MemoryStateStore<Snapshot, AggId, Hasher>
     where
-        AggId: Eq + Hash + Clone,
+        AggId: Eq + Hash + Clone + 'static,
         Snapshot: Clone,
         Hasher: BuildHasher,
 {
     type AggregateId = AggId;
-    type Snapshot = Snapshot;
     type Error = Never;
 
-    fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<StateSnapshot<Self::Snapshot>>, Self::Error> {
+    fn get_snapshot(&self, agg_id: Self::AggregateId) -> Result<Option<StateSnapshot<Snapshot>>, Self::Error> {
         let lock = self.data.read().unwrap();
         match lock.get(agg_id) {
             Some(s) => Ok(Some(s.clone())),
@@ -45,17 +44,16 @@ impl<Snapshot, AggId, Hasher> SnapshotSource for MemoryStateStore<Snapshot, AggI
     }
 }
 
-impl<Snapshot, AggId, Hasher> SnapshotPersist for MemoryStateStore<Snapshot, AggId, Hasher>
+impl<Snapshot, AggId, Hasher> Store<'static, Snapshot> for MemoryStateStore<Snapshot, AggId, Hasher>
     where
-        AggId: Eq + Hash + Clone,
+        AggId: Eq + Hash + Clone + 'static,
         Snapshot: Clone,
         Hasher: BuildHasher,
 {
     type AggregateId = AggId;
-    type Snapshot = Snapshot;
     type Error = Never;
 
-    fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: StateSnapshot<Self::Snapshot>) -> Result<(), Never> {
+    fn persist_snapshot(&self, agg_id: Self::AggregateId, snapshot: StateSnapshot<Snapshot>) -> Result<(), Never> {
         self.data.write().unwrap()
             .insert(agg_id.clone(), snapshot);
         Ok(())

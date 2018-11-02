@@ -1,16 +1,16 @@
-use types::{Expectation, Since};
-use cqrs::error::{Never};
-use cqrs::{EventNumber, SequencedEvent, StateSnapshot};
+use types::Since;
+use cqrs::{EventNumber, Precondition, SequencedEvent, StateSnapshot};
 use event;
 use state;
 use std::marker::PhantomData;
+use void::Void;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub struct NullEventStore<AggregateId> {
+pub struct NullEventStore<AggregateId: ?Sized> {
     _phantom: PhantomData<AggregateId>,
 }
 
-impl<AggregateId> Default for NullEventStore<AggregateId> {
+impl<AggregateId: ?Sized> Default for NullEventStore<AggregateId> {
     fn default() -> Self {
         NullEventStore {
             _phantom: PhantomData,
@@ -18,33 +18,33 @@ impl<AggregateId> Default for NullEventStore<AggregateId> {
     }
 }
 
-impl<'a, Event, AggregateId: 'a> event::Source<'a, Event> for NullEventStore<AggregateId> {
+impl<Event, AggregateId: ?Sized> event::Source<Event> for NullEventStore<AggregateId> {
     type AggregateId = AggregateId;
-    type Events = Vec<Result<SequencedEvent<Event>, Never>>;
-    type Error = Never;
+    type Events = Vec<Result<SequencedEvent<Event>, Void>>;
+    type Error = Void;
 
     #[inline]
-    fn read_events(&self, _aggregate_id: Self::AggregateId, _version: Since) -> Result<Option<Self::Events>, Self::Error> {
+    fn read_events(&self, _aggregate_id: &Self::AggregateId, _version: Since) -> Result<Option<Self::Events>, Self::Error> {
         Ok(None)
     }
 }
 
-impl<'id, Event, AggregateId: 'id> event::Store<'id, Event> for NullEventStore<AggregateId> {
+impl<Event, AggregateId: ?Sized> event::Store<Event> for NullEventStore<AggregateId> {
     type AggregateId = AggregateId;
-    type Error = Never;
+    type Error = Void;
 
     #[inline]
-    fn append_events(&self, _aggregate_id: Self::AggregateId, _events: &[Event], _expect: Expectation) -> Result<EventNumber, Never> {
-        Ok(EventNumber::default())
+    fn append_events(&self, _aggregate_id: &Self::AggregateId, _events: &[Event], _expect: Option<Precondition>) -> Result<EventNumber, Self::Error> {
+        Ok(EventNumber::MIN_VALUE)
     }
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub struct NullStateStore<AggregateId> {
+pub struct NullStateStore<AggregateId: ?Sized> {
     _phantom: PhantomData<AggregateId>,
 }
 
-impl<AggregateId> Default for NullStateStore<AggregateId> {
+impl<AggregateId: ?Sized> Default for NullStateStore<AggregateId> {
     fn default() -> Self {
         NullStateStore {
             _phantom: PhantomData,
@@ -52,22 +52,22 @@ impl<AggregateId> Default for NullStateStore<AggregateId> {
     }
 }
 
-impl<'id, State, AggregateId: 'id> state::Source<'id, State> for NullStateStore<AggregateId> {
+impl<State, AggregateId: ?Sized> state::Source<State> for NullStateStore<AggregateId> {
     type AggregateId = AggregateId;
-    type Error = Never;
+    type Error = Void;
 
     #[inline]
-    fn get_snapshot(&self, _agg_id: Self::AggregateId) -> Result<Option<StateSnapshot<State>>, Self::Error> {
+    fn get_snapshot(&self, _agg_id: &Self::AggregateId) -> Result<Option<StateSnapshot<State>>, Self::Error> {
         Ok(None)
     }
 }
 
-impl<'id, State, AggregateId: 'id> state::Store<'id, State> for NullStateStore<AggregateId> {
+impl<State, AggregateId: ?Sized> state::Store<State> for NullStateStore<AggregateId> {
     type AggregateId = AggregateId;
-    type Error = Never;
+    type Error = Void;
 
     #[inline]
-    fn persist_snapshot(&self, _agg_id: Self::AggregateId, _snapshot: StateSnapshot<State>) -> Result<(), Self::Error> {
+    fn persist_snapshot(&self, _agg_id: &Self::AggregateId, _snapshot: StateSnapshot<State>) -> Result<(), Self::Error> {
         Ok(())
     }
 }

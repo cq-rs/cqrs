@@ -1,22 +1,27 @@
 use std::fmt;
+use std::num::NonZeroUsize;
 
-#[derive(Debug, Default, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct EventNumber(usize);
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EventNumber(NonZeroUsize);
 
 impl EventNumber {
+    pub const MIN_VALUE: EventNumber = EventNumber(unsafe {NonZeroUsize::new_unchecked(1)});
+
     #[inline]
-    pub fn new(number: usize) -> Self {
-        EventNumber(number)
+    pub fn new(x: usize) -> Option<Self> {
+        Some(EventNumber(NonZeroUsize::new(x)?))
     }
 
     #[inline]
-    pub fn number(&self) -> usize {
-        self.0
+    pub fn get(self) -> usize {
+        self.0.get()
     }
 
     #[inline]
-    pub fn incr(&self) -> Self {
-        EventNumber(self.0 + 1)
+    #[must_use]
+    pub fn incr(self) -> Self {
+        let x = self.0.get();
+        EventNumber(NonZeroUsize::new(x + 1).unwrap())
     }
 }
 
@@ -45,6 +50,41 @@ impl fmt::Display for EventNumber {
 pub enum Version {
     Initial,
     Number(EventNumber),
+}
+
+impl Version {
+    #[inline]
+    pub fn new(number: usize) -> Self {
+        NonZeroUsize::new(number)
+            .map(EventNumber)
+            .map(Version::Number)
+            .unwrap_or(Version::Initial)
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn incr(self) -> Self {
+        match self {
+            Version::Initial => Version::Number(EventNumber(NonZeroUsize::new(1).unwrap())),
+            Version::Number(en) => Version::Number(en.incr()),
+        }
+    }
+
+    #[inline]
+    pub fn get(self) -> usize {
+        match self {
+            Version::Initial => 0,
+            Version::Number(en) => en.get(),
+        }
+    }
+
+    #[inline]
+    pub fn event_number(self) -> Option<EventNumber> {
+        match self {
+            Version::Initial => None,
+            Version::Number(en) => Some(en),
+        }
+    }
 }
 
 impl fmt::Display for Version {
@@ -80,9 +120,25 @@ impl From<EventNumber> for Version {
     }
 }
 
+impl ::std::ops::Sub for Version {
+    type Output = isize;
+
+    fn sub(self, rhs: Version) -> Self::Output {
+        let l = match self {
+            Version::Initial => 0,
+            Version::Number(n) => n.get() as isize
+        };
+        let r = match rhs {
+            Version::Initial => 0,
+            Version::Number(n) => n.get() as isize
+        };
+
+        l - r
+    }
+}
+
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Precondition {
-    None,
     New,
     Exists,
     ExpectedVersion(Version),
@@ -91,7 +147,6 @@ pub enum Precondition {
 impl Precondition {
     pub fn verify(&self, version_opt: Option<Version>) -> Result<(), Self> {
         match *self {
-            Precondition::None => Ok(()),
             Precondition::Exists if version_opt.is_some() => Ok(()),
             Precondition::New if version_opt.is_none() => Ok(()),
             Precondition::ExpectedVersion(expected_version) if version_opt.is_some() => {
@@ -120,7 +175,6 @@ impl From<Version> for Precondition {
 impl fmt::Display for Precondition {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Precondition::None => f.write_str("no precondition"),
             Precondition::Exists => f.write_str("expect aggregate exists"),
             Precondition::New => f.write_str("expect aggregate does not exist"),
             Precondition::ExpectedVersion(Version::Initial) => f.write_str("expect aggregate to exist in initial state"),
