@@ -1,19 +1,19 @@
 use std::fmt;
-use std::num::NonZeroUsize;
+use std::num::NonZeroU64;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct EventNumber(NonZeroUsize);
+pub struct EventNumber(NonZeroU64);
 
 impl EventNumber {
-    pub const MIN_VALUE: EventNumber = EventNumber(unsafe {NonZeroUsize::new_unchecked(1)});
+    pub const MIN_VALUE: EventNumber = EventNumber(unsafe {NonZeroU64::new_unchecked(1)});
 
     #[inline]
     pub fn new(x: usize) -> Option<Self> {
-        Some(EventNumber(NonZeroUsize::new(x)?))
+        Some(EventNumber(NonZeroU64::new(x)?))
     }
 
     #[inline]
-    pub fn get(self) -> usize {
+    pub fn get(self) -> u64 {
         self.0.get()
     }
 
@@ -21,7 +21,7 @@ impl EventNumber {
     #[must_use]
     pub fn incr(self) -> Self {
         let x = self.0.get();
-        EventNumber(NonZeroUsize::new(x + 1).unwrap())
+        EventNumber(NonZeroU64::new(x + 1).unwrap())
     }
 }
 
@@ -54,8 +54,8 @@ pub enum Version {
 
 impl Version {
     #[inline]
-    pub fn new(number: usize) -> Self {
-        NonZeroUsize::new(number)
+    pub fn new(number: u64) -> Self {
+        NonZeroU64::new(number)
             .map(EventNumber)
             .map(Version::Number)
             .unwrap_or(Version::Initial)
@@ -65,13 +65,13 @@ impl Version {
     #[must_use]
     pub fn incr(self) -> Self {
         match self {
-            Version::Initial => Version::Number(EventNumber(NonZeroUsize::new(1).unwrap())),
+            Version::Initial => Version::Number(EventNumber(NonZeroU64::new(1).unwrap())),
             Version::Number(en) => Version::Number(en.incr()),
         }
     }
 
     #[inline]
-    pub fn get(self) -> usize {
+    pub fn get(self) -> u64 {
         match self {
             Version::Initial => 0,
             Version::Number(en) => en.get(),
@@ -145,22 +145,14 @@ pub enum Precondition {
 }
 
 impl Precondition {
-    pub fn verify(&self, version_opt: Option<Version>) -> Result<(), Self> {
-        match *self {
-            Precondition::Exists if version_opt.is_some() => Ok(()),
-            Precondition::New if version_opt.is_none() => Ok(()),
-            Precondition::ExpectedVersion(expected_version) if version_opt.is_some() => {
-                if let Some(version) = version_opt {
-                   if version == expected_version {
-                       Ok(())
-                   } else {
-                       Err(*self)
-                   }
-                } else {
-                    unreachable!()
-                }
-            }
-            _ => Err(*self)
+    pub fn verify(self, current_version: Option<Version>) -> Result<(), Self> {
+        match (self, current_version) {
+            (Precondition::ExpectedVersion(Version::Initial), None) => Ok(()),
+            (Precondition::ExpectedVersion(Version::Initial), Some(Version::Initial)) => Ok(()),
+            (Precondition::ExpectedVersion(e), Some(x)) if e == x => Ok(()),
+            (Precondition::New, None) => Ok(()),
+            (Precondition::Exists, Some(_)) => Ok(()),
+            (precondition, _) => Err(precondition),
         }
     }
 }
@@ -186,7 +178,7 @@ impl fmt::Display for Precondition {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct SequencedEvent<Event>
 {
-    pub sequence_number: EventNumber,
+    pub sequence: EventNumber,
     pub event: Event,
 }
 

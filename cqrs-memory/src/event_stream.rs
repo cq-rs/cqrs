@@ -50,24 +50,24 @@ impl<Event> MemoryEventStream<Event>
         let events = self.events.read().unwrap();
         match version {
             Since::BeginningOfStream => {
-                let mut sequence_number = EventNumber::default();
+                let mut sequence = EventNumber::default();
                 let mut evts = Vec::new();
                 for event in events.iter() {
-                    evts.push(SequencedEvent{ sequence_number, event: event.to_owned() });
-                    sequence_number = sequence_number.incr();
+                    evts.push(SequencedEvent{ sequence, event: event.to_owned() });
+                    sequence = sequence.incr();
                 }
                 evts
             }
             Since::Event(o) => {
-                let next_version = o.incr();
+                let next_sequence = o.incr();
                 if o.number() >= events.len() {
                     Vec::default()
                 } else {
-                    let mut sequence_number = next_version;
+                    let mut sequence = next_sequence;
                     let mut evts = Vec::new();
-                    for event in events[next_version.number()..].iter() {
-                        evts.push(SequencedEvent { sequence_number, event: event.to_owned() });
-                        sequence_number = sequence_number.incr();
+                    for event in events[next_sequence.number()..].iter() {
+                        evts.push(SequencedEvent { sequence, event: event.to_owned() });
+                        sequence = sequence.incr();
                     }
                     evts
                 }

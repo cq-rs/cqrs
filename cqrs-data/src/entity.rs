@@ -50,7 +50,7 @@ impl<A: Aggregate + Debug, I: Debug> Entity<A, I> where     A::Event: Debug, {
 
                 println!("! {:?}", self);
 
-                debug_assert_eq!(Version::Number(event.sequence_number), self.version);
+                debug_assert_eq!(Version::Number(event.sequence), self.version);
             }
         }
 

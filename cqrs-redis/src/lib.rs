@@ -188,7 +188,7 @@ mod store {
         fn next(&mut self) -> Option<Self::Item> {
             if let Some(x) = self.buffer.pop() {
                 let event = cqrs::SequencedEvent {
-                    sequence_number: cqrs::EventNumber::new(self.cursor + self.index + 1).unwrap(),
+                    sequence: cqrs::EventNumber::new(self.cursor + self.index + 1).unwrap(),
                     event: self.serializer.deserialize(x).unwrap(),
                 };
                 self.index += 1;
@@ -215,7 +215,7 @@ mod store {
                 self.buffer.reverse();
                 if let Some(x) = self.buffer.pop() {
                     let event = cqrs::SequencedEvent {
-                        sequence_number: cqrs::EventNumber::new(self.cursor + self.index + 1).unwrap(),
+                        sequence: cqrs::EventNumber::new(self.cursor + self.index + 1).unwrap(),
                         event: self.serializer.deserialize(x).unwrap(),
                     };
                     self.index += 1;

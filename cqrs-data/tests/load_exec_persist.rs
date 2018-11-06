@@ -44,7 +44,7 @@ impl event::Store<cqrs_todo_core::Event> for EventMap {
         }
 
         let stream = entry.or_insert_with(Vec::default);
-        let sequence = EventNumber::new(stream.len());
+        let sequence = EventNumber::new(stream.len()).unwrap();
         match precondition {
             Some(Precondition::ExpectedVersion(evt)) => if evt.incr() != Version::Number(sequence) { panic!("Need error type here") }
             Some(Precondition::New) => if sequence != EventNumber::default() { panic!("Need error type here") }
@@ -55,7 +55,7 @@ impl event::Store<cqrs_todo_core::Event> for EventMap {
         let initial = sequence;
         for event in events {
             stream.push(SequencedEvent {
-                sequence_number: sequence,
+                sequence,
                 event: event.to_owned(),
             });
             sequence.incr();
@@ -80,18 +80,18 @@ fn main_test() {
 
     let expected_events = vec![
         Ok(SequencedEvent {
-            sequence_number: EventNumber::new(0),
+            sequence: EventNumber::new(1).unwrap(),
             event: cqrs_todo_core::Event::Completed,
         }),
         Ok(SequencedEvent {
-            sequence_number: EventNumber::new(1),
+            sequence: EventNumber::new(2).unwrap(),
             event: cqrs_todo_core::Event::Uncompleted,
         }),
     ];
 
     assert_eq!(em.read_events(&agg_id, Since::BeginningOfStream), Ok(Some(expected_events.clone())));
-    assert_eq!(em.read_events(&agg_id, Since::Event(EventNumber::new(0))), Ok(Some(expected_events[1..].to_owned())));
-    assert_eq!(em.read_events(&agg_id, Since::Event(EventNumber::new(1))), Ok(Some(Vec::default())));
+    assert_eq!(em.read_events(&agg_id, Since::Event(EventNumber::new(1).unwrap())), Ok(Some(expected_events[1..].to_owned())));
+    assert_eq!(em.read_events(&agg_id, Since::Event(EventNumber::new(2).unwrap())), Ok(Some(Vec::default())));
 
 
 }

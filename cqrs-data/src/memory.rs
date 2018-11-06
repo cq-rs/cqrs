@@ -36,19 +36,19 @@ impl<K: Clone + Eq + Hash, E: Clone> event::Source<E> for EventStore<K, E> {
                 let stream = stream.read();
                 match since {
                     Since::BeginningOfStream => {
-                        let mut next_sequence_number = EventNumber::MIN_VALUE;
+                        let mut next_event_number = EventNumber::MIN_VALUE;
                         stream.iter().map(|e| {
-                            let sequence_number = next_sequence_number;
-                            next_sequence_number = next_sequence_number.incr();
-                            Ok(SequencedEvent{ sequence_number, event: e.to_owned()})
+                            let sequence = next_event_number;
+                            next_event_number = next_event_number.incr();
+                            Ok(SequencedEvent{ sequence, event: e.to_owned()})
                         }).collect()
                     },
                     Since::Event(event_number) => {
-                        let mut next_sequence_number = event_number.incr();
-                        stream.iter().skip(next_sequence_number.get()).map(|e| {
-                            let sequence_number = next_sequence_number;
-                            next_sequence_number = next_sequence_number.incr();
-                            Ok(SequencedEvent{ sequence_number, event: e.to_owned()})
+                        let mut next_event_number = event_number.incr();
+                        stream.iter().skip(next_event_number.get()).map(|e| {
+                            let sequence = next_event_number;
+                            next_event_number = next_event_number.incr();
+                            Ok(SequencedEvent{ sequence, event: e.to_owned()})
                         }).collect()
                     },
                 }

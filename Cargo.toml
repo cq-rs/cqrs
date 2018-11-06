@@ -4,6 +4,7 @@ members = [
     "cqrs-data",
 #    "cqrs-eventstore",
     "cqrs-memory",
+    "cqrs-postgres",
     "cqrs-redis",
     "cqrs-todo-core",
     "cqrs-todoql",

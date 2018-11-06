@@ -1,5 +1,5 @@
 use cqrs::{EventNumber, Precondition, SequencedEvent};
-use cqrs::error::{AppendEventsError, Never};
+use cqrs::error::{AppendEventsError};
 use cqrs_data::event;
 use cqrs_data::Since;
 use event_stream::MemoryEventStream;
@@ -54,7 +54,7 @@ impl<Event, AggId, Hasher> Default for MemoryEventStore<Event, AggId, Hasher>
     }
 }
 
-impl<Event, AggId, Hasher> event::Source<'static, Event> for MemoryEventStore<Event, AggId, Hasher>
+impl<Event, AggId, Hasher> event::Source<Event> for MemoryEventStore<Event, AggId, Hasher>
     where
         AggId: Hash + Eq + Clone + 'static,
         Event: Clone,
@@ -72,7 +72,7 @@ impl<Event, AggId, Hasher> event::Source<'static, Event> for MemoryEventStore<Ev
     }
 }
 
-impl<Event, AggId, Hasher> event::Store<'static, Event> for MemoryEventStore<Event, AggId, Hasher>
+impl<Event, AggId, Hasher> event::Store<Event> for MemoryEventStore<Event, AggId, Hasher>
     where
         AggId: Hash + Eq + Clone + 'static,
         Event: Clone,

@@ -1,0 +1,17 @@
+[package]
+name = "cqrs-postgres"
+version = "0.1.0"
+authors = ["Marcus Griep <marcus@griep.us>"]
+
+[dependencies]
+cqrs = { path = "../cqrs" }
+cqrs-data = { path = "../cqrs-data" }
+fallible-iterator = "0.1.5"
+postgres = { version = "0.15.2", features = [ "with-serde_json" ] }
+serde = "1.0.80"
+serde_json = "1.0.32"
+
+[dev-dependencies]
+fnv = "*"
+cqrs-todo-core = { path = "../cqrs-todo-core" }
+chrono = "*"

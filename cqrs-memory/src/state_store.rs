@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hash};
-use cqrs::{error::Never, StateSnapshot};
+use cqrs::StateSnapshot;
 use cqrs_data::state::{Source, Store};
 use std::sync::RwLock;
 
@@ -26,7 +26,7 @@ impl<State, AggId, Hasher> Default for MemoryStateStore<State, AggId, Hasher>
     }
 }
 
-impl<Snapshot, AggId, Hasher> Source<'static, Snapshot> for MemoryStateStore<Snapshot, AggId, Hasher>
+impl<Snapshot, AggId, Hasher> Source<Snapshot> for MemoryStateStore<Snapshot, AggId, Hasher>
     where
         AggId: Eq + Hash + Clone + 'static,
         Snapshot: Clone,
@@ -44,7 +44,7 @@ impl<Snapshot, AggId, Hasher> Source<'static, Snapshot> for MemoryStateStore<Sna
     }
 }
 
-impl<Snapshot, AggId, Hasher> Store<'static, Snapshot> for MemoryStateStore<Snapshot, AggId, Hasher>
+impl<Snapshot, AggId, Hasher> Store<Snapshot> for MemoryStateStore<Snapshot, AggId, Hasher>
     where
         AggId: Eq + Hash + Clone + 'static,
         Snapshot: Clone,
