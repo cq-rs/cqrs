@@ -1,11 +1,14 @@
 extern crate cqrs_todoql_psql;
 extern crate clap;
+extern crate env_logger;
 
 use clap::{App, Arg};
 
 use cqrs_todoql_psql::start_todo_server;
 
 fn main() {
+    env_logger::init();
+
     let app = App::new("todo")
         .arg(Arg::with_name("conn-str")
             .long("connection-string")

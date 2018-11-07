@@ -1,6 +1,8 @@
 extern crate cqrs;
 extern crate cqrs_data;
 extern crate fallible_iterator;
+#[macro_use]
+extern crate log;
 extern crate postgres;
 extern crate serde;
 extern crate serde_json;
@@ -103,11 +105,13 @@ where
             })
         });
 
-        println!("Current version: {:?}", current_version);
+        trace!("entity {}: current version: {:?}", id.as_ref(), current_version);
 
         if let Some(precondition) = precondition {
             precondition.verify(current_version)?;
         }
+
+        trace!("entity {}: precondition satisfied", id.as_ref());
 
         let first_sequence = current_version.unwrap_or_default().incr();
         let mut next_sequence = first_sequence;
@@ -116,7 +120,7 @@ where
         for event in events {
             let value = serde_json::to_value(event)?;
             let _modified_count = stmt.execute(&[&A::entity_type(), &id.as_ref(), &(next_sequence.get() as i64), &value])?;
-            println!("Inserted event: {:?}", next_sequence);
+            trace!("entity {}: inserted event; sequence: {}, payload: {}", id.as_ref(), next_sequence, value.to_string());
             next_sequence = next_sequence.incr();
         }
 
@@ -152,6 +156,7 @@ where
             let handle_row = |row: postgres::rows::Row| {
                 let sequence: i64 = row.get("sequence");
                 let event_payload: serde_json::Value = row.get("event_payload");
+                trace!("entity {}: loaded event; sequence: {}, payload: {}", id.as_ref(), sequence, event_payload.to_string());
                 let event: A::Event = serde_json::from_value(event_payload)?;
                 Ok(cqrs::SequencedEvent {
                     sequence: cqrs::EventNumber::new(sequence as u64).expect("Sequence number should be non-zero"),
@@ -167,6 +172,8 @@ where
 
         trans.commit()?;
 
+        trace!("entity {}: read {} events", id.as_ref(), events.len());
+
         Ok(Some(events))
     }
 }
@@ -181,6 +188,7 @@ where
         let stmt = self.conn.prepare_cached("INSERT INTO snapshots (entity_type, entity_id, sequence, snapshot_payload) VALUES ($1, $2, $3, $4)")?;
         let value = serde_json::to_value(snapshot.snapshot)?;
         let _modified_count = stmt.execute(&[&A::entity_type(), &id.as_ref(), &(snapshot.version.get() as i64), &value])?;
+        trace!("entity {}: persisted snapshot; payload: {}", id.as_ref(), value.to_string());
         Ok(())
     }
 }
@@ -197,12 +205,14 @@ where
         if let Some(row) = rows.iter().next() {
             let sequence: i64 = row.get("sequence");
             let payload: serde_json::Value = row.get("snapshot_payload");
+            trace!("entity {}: loaded snapshot; payload: {}", id.as_ref(), payload);
             let snapshot: A = serde_json::from_value(payload)?;
             Ok(Some(cqrs::StateSnapshot {
                 version: cqrs::Version::new(sequence as u64),
                 snapshot,
             }))
         } else {
+            trace!("entity {}: no snapshot found", id.as_ref());
             Ok(None)
         }
     }

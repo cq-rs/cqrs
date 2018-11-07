@@ -3,6 +3,7 @@ extern crate chrono;
 extern crate smallvec;
 extern crate serde;
 #[macro_use] extern crate serde_derive;
+#[macro_use] extern crate log;
 
 use smallvec::SmallVec;
 use cqrs::Aggregate;
@@ -321,12 +322,12 @@ impl Aggregate for TodoAggregate {
     type Error = error::CommandError;
 
     fn apply(&mut self, event: Self::Event) {
-        println!("apply {:?}", event);
+        trace!("apply {:?}", event);
         self.apply_event(event);
     }
 
     fn execute(&self, command: Command) -> Result<Self::Events, Self::Error> {
-        println!("execute {:?}", command);
+        trace!("execute {:?}", command);
         self.execute_command(command)
     }
 

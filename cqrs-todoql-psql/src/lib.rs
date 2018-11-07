@@ -8,7 +8,6 @@ extern crate juniper_iron;
 #[macro_use] extern crate juniper_codegen;
 extern crate chrono;
 extern crate base64;
-extern crate fnv;
 extern crate iron;
 extern crate mount;
 extern crate hashids;

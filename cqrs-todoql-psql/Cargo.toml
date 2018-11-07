@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
 
 [dependencies]
-fnv = "*"
 base64 = "*"
 cqrs = { path = "../cqrs" }
 cqrs-data = { path = "../cqrs-data" }
@@ -12,6 +11,7 @@ cqrs-todo-core = { path = "../cqrs-todo-core" }
 cqrs-postgres = { path = "../cqrs-postgres" }
 clap = "*"
 chrono = "*"
+env_logger = "0.5.13"
 iron = "*"
 juniper = "0.10"
 juniper_codegen = "*"

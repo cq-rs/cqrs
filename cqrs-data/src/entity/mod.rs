@@ -41,9 +41,6 @@ impl<'id, A: Aggregate + Debug> Entity<'id, A> where A::Event: Debug, {
     pub fn refresh<Es: IntoIterator<Item=Result<SequencedEvent<A::Event>, Err>> + Debug, Err: Debug + Display>(&mut self, event_source: &impl event::EventSource<A, Events=Es, Error=Err>) -> Result<(), Err> {
         let events = event_source.read_events(self.id.as_ref(), ::Since::from(self.version))?;
 
-        println!("Events! {:?}", events);
-
-        println!("! {:?}", self);
         if let Some(events) = events {
             for event in events {
                 let event = event?;
@@ -51,8 +48,6 @@ impl<'id, A: Aggregate + Debug> Entity<'id, A> where A::Event: Debug, {
                 self.aggregate.apply(event.event);
 
                 self.version = self.version.incr();
-
-                println!("! {:?}", self);
 
                 debug_assert_eq!(Version::Number(event.sequence), self.version);
             }
