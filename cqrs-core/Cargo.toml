@@ -1,9 +1,10 @@
 [package]
-name = "cqrs-redis"
+name = "cqrs-core"
 version = "0.1.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
 
 [dependencies]
-cqrs-core = { path = "../cqrs-core" }
-redis = "*"
-void = "1.0.2"
+
+[dev-dependencies]
+static_assertions = "*"
+

@@ -1,5 +1,4 @@
 extern crate cqrs;
-extern crate cqrs_data;
 extern crate cqrs_postgres;
 extern crate cqrs_todo_core;
 
@@ -64,7 +63,7 @@ impl IdProvider {
 mod helper {
     use chrono::{Duration,Utc,TimeZone};
     use cqrs::{Version, StateSnapshot};
-    use cqrs_data::{EventSink, SnapshotSink};
+    use cqrs::{EventSink, SnapshotSink};
     use cqrs_todo_core::{Event, TodoAggregate, TodoData, TodoStatus, domain};
     use cqrs_postgres::PostgresStore;
     use r2d2_postgres::postgres::Connection;

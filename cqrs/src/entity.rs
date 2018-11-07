@@ -1,7 +1,5 @@
 use std::borrow::Cow;
 use std::fmt::{self, Debug, Display};
-use cqrs::{Aggregate, SequencedEvent, Version};
-
 use super::*;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -34,7 +32,7 @@ impl<'id, A: Aggregate> Entity<'id, A> {
         }
     }
 
-    pub fn refresh<Es, Err>(&mut self, event_source: &impl event::EventSource<A, Events=Es, Error=Err>) -> Result<(), Err>
+    pub fn refresh<Es, Err>(&mut self, event_source: &impl EventSource<A, Events=Es, Error=Err>) -> Result<(), Err>
     where
         Es: IntoIterator<Item=Result<SequencedEvent<A::Event>, Err>>,
         Err: Debug + Display + Send + Sync + 'static,
@@ -101,7 +99,7 @@ impl<'id, A: Aggregate> Entity<'id, A> {
 
     pub fn rehydrate_from_snapshot<Es, EErr, SErr>(
         id: impl Into<Cow<'id, str>>,
-        event_source: &impl event::EventSource<A, Events=Es, Error=EErr>,
+        event_source: &impl EventSource<A, Events=Es, Error=EErr>,
         snapshot_source: &impl SnapshotSource<A, Error=SErr>
     ) -> Result<Option<Self>, EntityLoadError<EErr, SErr>>
     where
@@ -124,7 +122,7 @@ impl<'id, A: Aggregate> Entity<'id, A> {
     pub fn apply_events_and_persist<EErr, SErr>(
         &mut self,
         events: A::Events,
-        precondition: cqrs::Precondition,
+        precondition: Precondition,
         event_sink: &impl EventSink<A, Error=EErr>,
         snapshot_sink: &impl SnapshotSink<A, Error=SErr>,
         max_events_before_snapshot: u64
@@ -143,7 +141,7 @@ impl<'id, A: Aggregate> Entity<'id, A> {
         }
 
         if self.version - self.snapshot_version >= max_events_before_snapshot as i64 {
-            let snapshot = cqrs::StateSnapshot {
+            let snapshot = StateSnapshot {
                 snapshot: self.aggregate.clone(),
                 version: self.version,
             };
@@ -167,7 +165,7 @@ impl<'id, A: Aggregate> Entity<'id, A> {
 
     pub fn load_from_snapshot_or_default<Err>(
         id: impl Into<Cow<'id, str>>,
-        snapshot_source: &impl state::SnapshotSource<A, Error=Err>
+        snapshot_source: &impl SnapshotSource<A, Error=Err>
     ) -> Result<(Self, SnapshotStatus), Err>
     where
         Err: Debug + Display + Send + Sync + 'static,
@@ -191,8 +189,8 @@ impl<'id, A: Aggregate> Entity<'id, A> {
 
     pub fn rehydrate<Es, EErr, SErr>(
         id: impl Into<Cow<'id, str>>,
-        event_source: &impl event::EventSource<A, Events=Es, Error=EErr>,
-        snapshot_source: &impl state::SnapshotSource<A, Error=SErr>
+        event_source: &impl EventSource<A, Events=Es, Error=EErr>,
+        snapshot_source: &impl SnapshotSource<A, Error=SErr>
     ) -> Result<Option<Self>, EntityLoadError<EErr, SErr>>
     where
         Es: IntoIterator<Item=Result<SequencedEvent<A::Event>, EErr>>,
@@ -212,8 +210,8 @@ impl<'id, A: Aggregate> Entity<'id, A> {
 
     pub fn rehydrate_or_default<Es, EErr, SErr>(
         id: impl Into<Cow<'id, str>>,
-        event_source: &impl event::EventSource<A, Events=Es, Error=EErr>,
-        snapshot_source: &impl state::SnapshotSource<A, Error=SErr>
+        event_source: &impl EventSource<A, Events=Es, Error=EErr>,
+        snapshot_source: &impl SnapshotSource<A, Error=SErr>
     ) -> Result<Self, EntityLoadError<EErr, SErr>>
     where
         Es: IntoIterator<Item=Result<SequencedEvent<A::Event>, EErr>>,
@@ -231,7 +229,7 @@ impl<'id, A: Aggregate> Entity<'id, A> {
     pub fn load_exec_and_persist<LEErr, LSErr, PEErr, PSErr>(
         id: impl Into<Cow<'id, str>>,
         command: A::Command,
-        precondition: Option<cqrs::Precondition>,
+        precondition: Option<Precondition>,
         event_source: &impl EventSource<A, Error=LEErr>,
         snapshot_source: &impl SnapshotSource<A, Error=LSErr>,
         event_sink: &impl EventSink<A, Error=PEErr>,
@@ -250,7 +248,7 @@ impl<'id, A: Aggregate> Entity<'id, A> {
                 precondition.verify(Some(entity.version()))?;
             }
 
-            let precondition = cqrs::Precondition::ExpectedVersion(entity.version());
+            let precondition = Precondition::ExpectedVersion(entity.version());
 
             let events = entity.aggregate.execute(command).map_err(|e| EntityExecError::Exec(entity.clone_with_static_lifetime(), e))?;
 
@@ -342,7 +340,7 @@ where
     PSErr: Debug + Display + Send + Sync + 'static,
 {
     Load(EntityLoadError<LEErr, LSErr>),
-    Precondition(cqrs::Precondition),
+    PreconditionFailed(Precondition),
     Exec(Entity<'static, A>, A::Error),
     Persist(EntityPersistError<PEErr, PSErr>),
 }
@@ -358,7 +356,7 @@ where
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             EntityExecError::Load(e) => Display::fmt(&e, f),
-            EntityExecError::Precondition(p) =>
+            EntityExecError::PreconditionFailed(p) =>
                 write!(f, "entity exec error, precondition failed: {}", p),
             EntityExecError::Exec(_, e) =>
                 write!(f, "entity exec error, command was rejected: {}", e),
@@ -367,7 +365,7 @@ where
     }
 }
 
-impl<LEErr, LSErr, A, PEErr, PSErr> From<cqrs::Precondition> for EntityExecError<LEErr, LSErr, A, PEErr, PSErr>
+impl<LEErr, LSErr, A, PEErr, PSErr> From<Precondition> for EntityExecError<LEErr, LSErr, A, PEErr, PSErr>
 where
     A: Aggregate,
     LEErr: Debug + Display + Send + Sync + 'static,
@@ -375,8 +373,8 @@ where
     PEErr: Debug + Display + Send + Sync + 'static,
     PSErr: Debug + Display + Send + Sync + 'static,
 {
-    fn from(p: cqrs::Precondition) -> Self {
-        EntityExecError::Precondition(p)
+    fn from(p: Precondition) -> Self {
+        EntityExecError::PreconditionFailed(p)
     }
 }
 

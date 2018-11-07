@@ -1,6 +1,5 @@
 use base64;
-use cqrs::{Aggregate, Precondition, Version};
-use cqrs_data::Entity;
+use cqrs::{Aggregate, Entity, Precondition, Version};
 use cqrs_postgres::PostgresStore;
 use cqrs_todo_core::{domain, TodoAggregate, TodoStatus, Command};
 use chrono::{DateTime, Utc};

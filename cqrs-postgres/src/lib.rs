@@ -1,5 +1,4 @@
-extern crate cqrs;
-extern crate cqrs_data;
+extern crate cqrs_core;
 extern crate fallible_iterator;
 #[macro_use]
 extern crate log;
@@ -9,19 +8,19 @@ extern crate serde_json;
 
 use std::fmt;
 use std::marker::PhantomData;
-use cqrs_data::{EventSource, EventSink, SnapshotSource, SnapshotSink, Since};
+use cqrs_core::{EventSource, EventSink, SnapshotSource, SnapshotSink, Since};
 use fallible_iterator::FallibleIterator;
 use postgres::Connection;
 
 pub struct PostgresStore<'conn, A>
-where A: cqrs::Aggregate,
+where A: cqrs_core::Aggregate,
 {
     conn: &'conn Connection,
     _phantom: PhantomData<A>,
 }
 
 impl<'conn, A> PostgresStore<'conn, A>
-where A: cqrs::Aggregate,
+where A: cqrs_core::Aggregate,
 {
     pub fn new(conn: &'conn Connection) -> Self {
         PostgresStore {
@@ -35,7 +34,7 @@ where A: cqrs::Aggregate,
 pub enum StoreError {
     Postgres(postgres::Error),
     Serde(serde_json::Error),
-    PreconditionFailed(cqrs::Precondition),
+    PreconditionFailed(cqrs_core::Precondition),
 }
 
 impl fmt::Display for StoreError {
@@ -60,8 +59,8 @@ impl From<serde_json::Error> for StoreError {
     }
 }
 
-impl From<cqrs::Precondition> for StoreError {
-    fn from(precondition: cqrs::Precondition) -> Self {
+impl From<cqrs_core::Precondition> for StoreError {
+    fn from(precondition: cqrs_core::Precondition) -> Self {
         StoreError::PreconditionFailed(precondition)
     }
 }
@@ -87,12 +86,12 @@ impl From<cqrs::Precondition> for StoreError {
 
 impl<'conn, A> EventSink<A> for PostgresStore<'conn, A>
 where
-    A: cqrs::Aggregate,
+    A: cqrs_core::Aggregate,
     A::Event: serde::Serialize,
 {
     type Error = StoreError;
 
-    fn append_events<Id: AsRef<str> + Into<String>>(&self, id: Id, events: &[A::Event], precondition: Option<cqrs::Precondition>) -> Result<cqrs::EventNumber, Self::Error> {
+    fn append_events<Id: AsRef<str> + Into<String>>(&self, id: Id, events: &[A::Event], precondition: Option<cqrs_core::Precondition>) -> Result<cqrs_core::EventNumber, Self::Error> {
         let trans = self.conn.transaction()?;
 
         let check_stmt = trans.prepare_cached("SELECT MAX(sequence) FROM events WHERE entity_type = $1 AND entity_id = $2")?;
@@ -101,7 +100,7 @@ where
         let current_version = result.iter().next().and_then(|r| {
             let max_sequence: Option<i64> = r.get(0);
             max_sequence.map(|x| {
-                cqrs::Version::new(x as u64)
+                cqrs_core::Version::new(x as u64)
             })
         });
 
@@ -132,16 +131,16 @@ where
 
 impl<'conn, A> EventSource<A> for PostgresStore<'conn, A>
 where
-    A: cqrs::Aggregate,
+    A: cqrs_core::Aggregate,
     A::Event: serde::de::DeserializeOwned,
 {
-    type Events = Vec<Result<cqrs::SequencedEvent<A::Event>, StoreError>>;
+    type Events = Vec<Result<cqrs_core::SequencedEvent<A::Event>, StoreError>>;
     type Error = StoreError;
 
     fn read_events<Id: AsRef<str> + Into<String>>(&self, id: Id, since: Since) -> Result<Option<Self::Events>, Self::Error> {
         let last_sequence = match since {
-            cqrs_data::Since::BeginningOfStream => 0,
-            cqrs_data::Since::Event(x) => x.get(),
+            cqrs_core::Since::BeginningOfStream => 0,
+            cqrs_core::Since::Event(x) => x.get(),
         } as i64;
 
         let events;
@@ -158,8 +157,8 @@ where
                 let event_payload: serde_json::Value = row.get("event_payload");
                 trace!("entity {}: loaded event; sequence: {}, payload: {}", id.as_ref(), sequence, event_payload.to_string());
                 let event: A::Event = serde_json::from_value(event_payload)?;
-                Ok(cqrs::SequencedEvent {
-                    sequence: cqrs::EventNumber::new(sequence as u64).expect("Sequence number should be non-zero"),
+                Ok(cqrs_core::SequencedEvent {
+                    sequence: cqrs_core::EventNumber::new(sequence as u64).expect("Sequence number should be non-zero"),
                     event,
                 })
             };
@@ -180,11 +179,11 @@ where
 
 impl<'conn, A> SnapshotSink<A> for PostgresStore<'conn, A>
 where
-    A: cqrs::Aggregate + serde::Serialize,
+    A: cqrs_core::Aggregate + serde::Serialize,
 {
     type Error = StoreError;
 
-    fn persist_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id, snapshot: cqrs::StateSnapshot<A>) -> Result<(), Self::Error> {
+    fn persist_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id, snapshot: cqrs_core::StateSnapshot<A>) -> Result<(), Self::Error> {
         let stmt = self.conn.prepare_cached("INSERT INTO snapshots (entity_type, entity_id, sequence, snapshot_payload) VALUES ($1, $2, $3, $4)")?;
         let value = serde_json::to_value(snapshot.snapshot)?;
         let _modified_count = stmt.execute(&[&A::entity_type(), &id.as_ref(), &(snapshot.version.get() as i64), &value])?;
@@ -195,11 +194,11 @@ where
 
 impl<'conn, A> SnapshotSource<A> for PostgresStore<'conn, A>
 where
-    A: cqrs::Aggregate + serde::de::DeserializeOwned,
+    A: cqrs_core::Aggregate + serde::de::DeserializeOwned,
 {
     type Error = StoreError;
 
-    fn get_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id) -> Result<Option<cqrs::StateSnapshot<A>>, Self::Error> {
+    fn get_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id) -> Result<Option<cqrs_core::StateSnapshot<A>>, Self::Error> {
         let stmt = self.conn.prepare_cached("SELECT sequence, snapshot_payload FROM snapshots WHERE entity_type = $1 AND entity_id = $2 ORDER BY sequence DESC LIMIT 1")?;
         let rows = stmt.query(&[&A::entity_type(), &id.as_ref()])?;
         if let Some(row) = rows.iter().next() {
@@ -207,8 +206,8 @@ where
             let payload: serde_json::Value = row.get("snapshot_payload");
             trace!("entity {}: loaded snapshot; payload: {}", id.as_ref(), payload);
             let snapshot: A = serde_json::from_value(payload)?;
-            Ok(Some(cqrs::StateSnapshot {
-                version: cqrs::Version::new(sequence as u64),
+            Ok(Some(cqrs_core::StateSnapshot {
+                version: cqrs_core::Version::new(sequence as u64),
                 snapshot,
             }))
         } else {

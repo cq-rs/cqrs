@@ -3,14 +3,12 @@ use std::fmt;
 use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use void::Void;
-use cqrs::{EventNumber, Precondition, SequencedEvent, Version};
-use cqrs::StateSnapshot;
 use super::*;
 
 #[derive(Debug)]
 pub struct EventStore<A, Hasher = DefaultHashBuilder>
 where
-    A: cqrs::Aggregate,
+    A: Aggregate,
     A::Event: Clone,
     Hasher: BuildHasher,
 {
@@ -19,7 +17,7 @@ where
 
 impl<A, Hasher> Default for EventStore<A, Hasher>
 where
-    A: cqrs::Aggregate,
+    A: Aggregate,
     A::Event: Clone,
     Hasher: BuildHasher + Default,
 {
@@ -32,7 +30,7 @@ where
 
 impl<A, Hasher> EventStore<A, Hasher>
 where
-    A: cqrs::Aggregate,
+    A: Aggregate,
     A::Event: Clone,
     Hasher: BuildHasher,
 {
@@ -45,7 +43,7 @@ where
 
 impl<A, Hasher> EventSource<A> for EventStore<A, Hasher>
 where
-    A: cqrs::Aggregate,
+    A: Aggregate,
     A::Event: Clone,
     Hasher: BuildHasher,
 {
@@ -101,7 +99,7 @@ impl fmt::Display for PreconditionFailed {
 
 impl<A, Hasher> EventSink<A> for EventStore<A, Hasher>
 where
-    A: cqrs::Aggregate,
+    A: Aggregate,
     A::Event: Clone,
     Hasher: BuildHasher,
 {
@@ -143,7 +141,7 @@ where
 #[derive(Debug)]
 pub struct StateStore<A, Hasher = DefaultHashBuilder>
 where
-    A: cqrs::Aggregate + Clone,
+    A: Aggregate + Clone,
     Hasher: BuildHasher,
 {
     inner: RwLock<HashMap<String, RwLock<StateSnapshot<A>>, Hasher>>,
@@ -151,7 +149,7 @@ where
 
 impl<A, Hasher> Default for StateStore<A, Hasher>
 where
-    A: cqrs::Aggregate + Clone,
+    A: Aggregate + Clone,
     Hasher: BuildHasher + Default,
 {
     fn default() -> Self {
@@ -163,7 +161,7 @@ where
 
 impl<A, Hasher> StateStore<A, Hasher>
 where
-    A: cqrs::Aggregate + Clone,
+    A: Aggregate + Clone,
     Hasher: BuildHasher,
 {
     pub fn with_hasher(hasher: Hasher) -> Self {
@@ -175,7 +173,7 @@ where
 
 impl<A, Hasher> SnapshotSource<A> for StateStore<A, Hasher>
 where
-    A: cqrs::Aggregate + Clone,
+    A: Aggregate + Clone,
     Hasher: BuildHasher,
 {
     type Error = Void;
@@ -193,7 +191,7 @@ where
 
 impl<A, Hasher> SnapshotSink<A> for StateStore<A, Hasher>
 where
-    A: cqrs::Aggregate + Clone,
+    A: Aggregate + Clone,
     Hasher: BuildHasher,
 {
     type Error = Void;

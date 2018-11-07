@@ -7,8 +7,6 @@ authors = ["Marcus Griep <marcus@griep.us>"]
 fnv = "*"
 base64 = "*"
 cqrs = { path = "../cqrs" }
-cqrs-data = { path = "../cqrs-data" }
-#cqrs-memory = { path = "../cqrs-memory" }
 cqrs-todo-core = { path = "../cqrs-todo-core" }
 cqrs-redis = { path = "../cqrs-redis" }
 clap = "*"

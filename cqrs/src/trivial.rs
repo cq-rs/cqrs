@@ -1,5 +1,3 @@
-use types::Since;
-use cqrs::{EventNumber, Precondition, SequencedEvent, StateSnapshot};
 use std::iter::Empty;
 use void::Void;
 use super::*;
@@ -9,7 +7,7 @@ pub struct NullStore;
 
 impl<A> EventSource<A> for NullStore
 where
-    A: cqrs::Aggregate,
+    A: Aggregate,
 {
     type Events = Empty<Result<SequencedEvent<A::Event>, Void>>;
     type Error = Void;
@@ -22,7 +20,7 @@ where
 
 impl<A> EventSink<A> for NullStore
 where
-    A: cqrs::Aggregate,
+    A: Aggregate,
 {
     type Error = Void;
 
@@ -34,7 +32,7 @@ where
 
 impl<A> SnapshotSource<A> for NullStore
 where
-    A: cqrs::Aggregate,
+    A: Aggregate,
 {
     type Error = Void;
 
@@ -48,7 +46,7 @@ where
 
 impl<A> SnapshotSink<A> for NullStore
 where
-    A: cqrs::Aggregate,
+    A: Aggregate,
 {
     type Error = Void;
 

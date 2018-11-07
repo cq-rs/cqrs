@@ -1,12 +1,14 @@
-///! The core types for a CQRS aggregate system
+//! This is documented.
 
-#[cfg(test)] #[macro_use] extern crate static_assertions;
+extern crate cqrs_core;
+extern crate hashbrown;
+extern crate parking_lot;
+extern crate void;
 
-pub mod error;
+pub mod memory;
+pub mod trivial;
 
-mod aggregate;
-mod types;
+mod entity;
 
-pub use aggregate::Aggregate;
-pub use types::{EventNumber, Version, Precondition, SequencedEvent, StateSnapshot};
-
+pub use entity::Entity;
+pub use cqrs_core::*;

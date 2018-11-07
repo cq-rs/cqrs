@@ -1,4 +1,4 @@
-extern crate cqrs;
+extern crate cqrs_core;
 extern crate chrono;
 extern crate smallvec;
 extern crate serde;
@@ -6,7 +6,7 @@ extern crate serde;
 #[macro_use] extern crate log;
 
 use smallvec::SmallVec;
-use cqrs::Aggregate;
+use cqrs_core::Aggregate;
 
 pub mod domain {
     use chrono::{DateTime,Utc};

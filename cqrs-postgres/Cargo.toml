@@ -4,8 +4,8 @@ version = "0.1.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
 
 [dependencies]
+cqrs-core = { path = "../cqrs-core" }
 cqrs = { path = "../cqrs" }
-cqrs-data = { path = "../cqrs-data" }
 fallible-iterator = "0.1.5"
 log = "0.4.6"
 postgres = { version = "0.15.2", features = [ "with-serde_json" ] }

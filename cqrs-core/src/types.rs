@@ -187,3 +187,18 @@ pub struct StateSnapshot<State> {
     pub version: Version,
     pub snapshot: State,
 }
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Since {
+    BeginningOfStream,
+    Event(EventNumber),
+}
+
+impl From<Version> for Since {
+    fn from(v: Version) -> Self {
+        match v {
+            Version::Initial => Since::BeginningOfStream,
+            Version::Number(x) => Since::Event(x),
+        }
+    }
+}

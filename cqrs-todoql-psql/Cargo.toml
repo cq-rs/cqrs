@@ -6,7 +6,6 @@ authors = ["Marcus Griep <marcus@griep.us>"]
 [dependencies]
 base64 = "*"
 cqrs = { path = "../cqrs" }
-cqrs-data = { path = "../cqrs-data" }
 cqrs-todo-core = { path = "../cqrs-todo-core" }
 cqrs-postgres = { path = "../cqrs-postgres" }
 clap = "*"

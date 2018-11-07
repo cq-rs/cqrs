@@ -1,11 +1,11 @@
 use cqrs::{EventNumber, Precondition, SequencedEvent, StateSnapshot};
-use cqrs_data::Since;
-use cqrs_data::{EventSink, EventSource, SnapshotSink, SnapshotSource};
-use cqrs_data::trivial::NullStore;
-use cqrs_data::memory::{EventStore,StateStore};
-use cqrs::error::{AppendEventsError};
+use cqrs::Since;
+use cqrs::{EventSink, EventSource, SnapshotSink, SnapshotSource};
+use cqrs::trivial::NullStore;
+use cqrs::memory::{EventStore,StateStore};
 
 use cqrs_redis;
+use cqrs_redis::error::AppendEventsError;
 use cqrs_todo_core::{Event, TodoAggregate};
 
 use r2d2;
@@ -57,11 +57,11 @@ impl EventSource<TodoAggregate> for MemoryOrNullEventStore
 
 impl EventSink<TodoAggregate> for MemoryOrNullEventStore
 {
-    type Error = AppendEventsError<::redis::RedisError>;
+    type Error = AppendEventsError;
 
     fn append_events<Id: AsRef<str> + Into<String>>(&self, id: Id, events: &[Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
         match *self {
-            MemoryOrNullEventStore::Memory(ref mem) => Ok(mem.append_events(id, events, precondition).map_err(|::cqrs_data::memory::PreconditionFailed(p)| AppendEventsError::PreconditionFailed(p))?),
+            MemoryOrNullEventStore::Memory(ref mem) => Ok(mem.append_events(id, events, precondition).map_err(|::cqrs::memory::PreconditionFailed(p)| AppendEventsError::PreconditionFailed(p))?),
             MemoryOrNullEventStore::Null => Ok(EventSink::<TodoAggregate>::append_events(&NullStore, id, events, precondition).void_unwrap()),
             MemoryOrNullEventStore::Redis(ref config, ref pool) => {
                 let conn = pool.get().unwrap();

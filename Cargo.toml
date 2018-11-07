@@ -1,8 +1,7 @@
 [workspace]
 members = [
     "cqrs",
-    "cqrs-data",
-#    "cqrs-eventstore",
+    "cqrs-core",
     "cqrs-postgres",
     "cqrs-redis",
     "cqrs-todo-core",

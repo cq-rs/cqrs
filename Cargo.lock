@@ -177,14 +177,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "cqrs"
 version = "0.1.0"
 dependencies = [
- "static_assertions 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "cqrs-data"
-version = "0.1.0"
-dependencies = [
- "cqrs 0.1.0",
+ "cqrs-core 0.1.0",
  "cqrs-todo-core 0.1.0",
  "hashbrown 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -193,12 +186,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cqrs-core"
+version = "0.1.0"
+dependencies = [
+ "static_assertions 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "cqrs-postgres"
 version = "0.1.0"
 dependencies = [
  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "cqrs 0.1.0",
- "cqrs-data 0.1.0",
+ "cqrs-core 0.1.0",
  "cqrs-todo-core 0.1.0",
  "fallible-iterator 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -212,8 +212,7 @@ dependencies = [
 name = "cqrs-redis"
 version = "0.1.0"
 dependencies = [
- "cqrs 0.1.0",
- "cqrs-data 0.1.0",
+ "cqrs-core 0.1.0",
  "redis 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "void 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -223,7 +222,7 @@ name = "cqrs-todo-core"
 version = "0.1.0"
 dependencies = [
  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "cqrs 0.1.0",
+ "cqrs-core 0.1.0",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.80 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.80 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -238,7 +237,6 @@ dependencies = [
  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "cqrs 0.1.0",
- "cqrs-data 0.1.0",
  "cqrs-redis 0.1.0",
  "cqrs-todo-core 0.1.0",
  "fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -265,7 +263,6 @@ dependencies = [
  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "cqrs 0.1.0",
- "cqrs-data 0.1.0",
  "cqrs-postgres 0.1.0",
  "cqrs-todo-core 0.1.0",
  "env_logger 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)",

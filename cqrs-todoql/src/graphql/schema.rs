@@ -1,7 +1,7 @@
 use base64;
 use cqrs::{Aggregate, Precondition, StateSnapshot, Version};
-use cqrs_data::Entity;
-use cqrs_data::{EventSink, SnapshotSink};
+use cqrs::Entity;
+use cqrs::{EventSink, SnapshotSink};
 use cqrs_todo_core::{domain, TodoAggregate, TodoStatus, Command};
 use chrono::{DateTime, Utc};
 use juniper::{ID, FieldResult, Value};
