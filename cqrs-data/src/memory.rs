@@ -45,7 +45,7 @@ impl<K: Clone + Eq + Hash, E: Clone> event::Source<E> for EventStore<K, E> {
                     },
                     Since::Event(event_number) => {
                         let mut next_event_number = event_number.incr();
-                        stream.iter().skip(next_event_number.get()).map(|e| {
+                        stream.iter().skip(next_event_number.get() as usize).map(|e| {
                             let sequence = next_event_number;
                             next_event_number = next_event_number.incr();
                             Ok(SequencedEvent{ sequence, event: e.to_owned()})
@@ -61,6 +61,12 @@ impl<K: Clone + Eq + Hash, E: Clone> event::Source<E> for EventStore<K, E> {
 #[derive(Debug)]
 pub struct PreconditionFailed(pub Precondition);
 
+impl From<Precondition> for PreconditionFailed {
+    fn from(p: Precondition) -> Self {
+        PreconditionFailed(p)
+    }
+}
+
 impl<K: Clone + Eq + Hash, E: Clone> event::Store<E> for EventStore<K, E> {
     type AggregateId = K;
     type Error = PreconditionFailed;
@@ -68,10 +74,13 @@ impl<K: Clone + Eq + Hash, E: Clone> event::Store<E> for EventStore<K, E> {
     fn append_events(&self, agg_id: &Self::AggregateId, events: &[E], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
         let table = self.inner.upgradable_read();
 
+        let existing;
         let table =
             if table.contains_key(agg_id) {
+                existing = true;
                 RwLockUpgradableReadGuard::downgrade(table)
             } else {
+                existing = false;
                 let mut table = RwLockUpgradableReadGuard::upgrade(table);
                 table.insert(agg_id.to_owned(), Default::default());
                 RwLockWriteGuard::downgrade(table)
@@ -79,22 +88,17 @@ impl<K: Clone + Eq + Hash, E: Clone> event::Store<E> for EventStore<K, E> {
 
         let stream = table.get(agg_id).unwrap().upgradable_read();
 
-        let latest_event_number = Version::new(stream.len());
+        let current_version = Version::new(stream.len() as u64);
 
-        match precondition {
-            None => {}
-            Some(Precondition::ExpectedVersion(Version::Initial)) if stream.is_empty() => {}
-            Some(Precondition::ExpectedVersion(v)) if !stream.is_empty() && latest_event_number == v => {}
-            Some(Precondition::New) if !stream.is_empty() => {}
-            Some(Precondition::Exists) if stream.is_empty() => {}
-            Some(precondition) => return Err(PreconditionFailed(precondition)),
+        if let Some(precondition) = precondition {
+            precondition.verify(if existing { Some(current_version) } else { None })?;
         }
 
         let stream = &mut RwLockUpgradableReadGuard::upgrade(stream);
 
         stream.extend_from_slice(events);
 
-        Ok(latest_event_number.incr().event_number().unwrap())
+        Ok(current_version.incr().event_number().unwrap())
     }
 }
 

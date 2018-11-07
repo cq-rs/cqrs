@@ -5,6 +5,7 @@ extern crate postgres;
 extern crate serde;
 extern crate serde_json;
 
+use std::fmt;
 use fallible_iterator::FallibleIterator;
 use postgres::Connection;
 
@@ -27,6 +28,16 @@ pub enum StoreError {
     Postgres(postgres::Error),
     Serde(serde_json::Error),
     PreconditionFailed(cqrs::Precondition),
+}
+
+impl fmt::Display for StoreError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            StoreError::Postgres(ref e) => write!(f, "postgres error: {}", e),
+            StoreError::Serde(ref e) => write!(f, "serde error: {}", e),
+            StoreError::PreconditionFailed(ref e) => write!(f, "precondition error: {}", e),
+        }
+    }
 }
 
 impl From<postgres::Error> for StoreError {
@@ -67,42 +78,47 @@ impl From<cqrs::Precondition> for StoreError {
 // );
 
 impl<'a, 'b, E: serde::Serialize> cqrs_data::event::Store<E> for PostgresStore<'a, 'b> {
-    type AggregateId = str;
+    type AggregateId = String;
     type Error = StoreError;
 
     fn append_events(&self, agg_id: &Self::AggregateId, events: &[E], precondition: Option<cqrs::Precondition>) -> Result<cqrs::EventNumber, Self::Error> {
         let trans = self.conn.transaction()?;
 
-        let check_stmt = trans.prepare_cached("SELECT MAX(sequence) FROM Events WHERE entity_type = $1 AND entity_id = $2")?;
+        let check_stmt = trans.prepare_cached("SELECT MAX(sequence) FROM events WHERE entity_type = $1 AND entity_id = $2")?;
 
         let result = check_stmt.query(&[&self.entity_type, &agg_id])?;
-        let current_verison = result.iter().next().and_then(|r| {
+        let current_version = result.iter().next().and_then(|r| {
             let max_sequence: Option<i64> = r.get(0);
             max_sequence.map(|x| {
                 cqrs::Version::new(x as u64)
             })
         });
 
+        println!("Current version: {:?}", current_version);
+
         if let Some(precondition) = precondition {
-            precondition.verify(current_verison)?;
+            precondition.verify(current_version)?;
         }
 
-        let first_sequence = current_verison.unwrap_or_default().incr();
+        let first_sequence = current_version.unwrap_or_default().incr();
         let mut next_sequence = first_sequence;
 
-        let stmt = trans.prepare_cached("INSERT INTO events (entity_type, entity_id, sequence, event_payload) VALUES ($1, $2, $3, $4)")?;
+        let stmt = trans.prepare_cached("INSERT INTO events (entity_type, entity_id, sequence, event_payload, timestamp) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)")?;
         for event in events {
             let value = serde_json::to_value(event)?;
             let _modified_count = stmt.execute(&[&self.entity_type, &agg_id, &(next_sequence.get() as i64), &value])?;
+            println!("Inserted event: {:?}", next_sequence);
             next_sequence = next_sequence.incr();
         }
+
+        trans.commit()?;
 
         Ok(first_sequence.event_number().expect("valid event number"))
     }
 }
 
 impl<'a, 'b, E: serde::de::DeserializeOwned> cqrs_data::event::Source<E> for PostgresStore<'a, 'b> {
-    type AggregateId = str;
+    type AggregateId = String;
     type Events = Vec<Result<cqrs::SequencedEvent<E>, StoreError>>;
     type Error = StoreError;
 
@@ -112,33 +128,39 @@ impl<'a, 'b, E: serde::de::DeserializeOwned> cqrs_data::event::Source<E> for Pos
             cqrs_data::Since::Event(x) => x.get(),
         } as i64;
 
+        let events;
         let trans = self.conn.transaction_with(postgres::transaction::Config::default().read_only(true))?;
         let stmt = trans.prepare_cached("SELECT sequence, event_payload FROM events WHERE entity_type = $1 AND entity_id = $2 AND sequence > $3 ORDER BY sequence ASC")?;
-        let mut rows = stmt.lazy_query(&trans, &[&self.entity_type, &agg_id, &last_sequence], 100)?;
-        let (lower, upper) = rows.size_hint();
-        let cap = upper.unwrap_or(lower);
-        let mut events = Vec::with_capacity(cap);
+        {
+            let mut rows = stmt.lazy_query(&trans, &[&self.entity_type, &agg_id, &last_sequence], 100)?;
+            let (lower, upper) = rows.size_hint();
+            let cap = upper.unwrap_or(lower);
+            let mut inner_events = Vec::with_capacity(cap);
 
-        let handle_row = |row: postgres::rows::Row| {
-            let sequence: i64 = row.get("sequence");
-            let event_payload: serde_json::Value = row.get("event_payload");
-            let event: E = serde_json::from_value(event_payload)?;
-            Ok(cqrs::SequencedEvent {
-                sequence: cqrs::EventNumber::new(sequence as usize).expect("Sequence number should be non-zero"),
-                event,
-            })
-        };
+            let handle_row = |row: postgres::rows::Row| {
+                let sequence: i64 = row.get("sequence");
+                let event_payload: serde_json::Value = row.get("event_payload");
+                let event: E = serde_json::from_value(event_payload)?;
+                Ok(cqrs::SequencedEvent {
+                    sequence: cqrs::EventNumber::new(sequence as u64).expect("Sequence number should be non-zero"),
+                    event,
+                })
+            };
 
-        while let Some(row) = rows.next()? {
-            events.push(handle_row(row));
+            while let Some(row) = rows.next()? {
+                inner_events.push(handle_row(row));
+            }
+            events = inner_events;
         }
+
+        trans.commit()?;
 
         Ok(Some(events))
     }
 }
 
 impl<'a, 'b, S: serde::Serialize> cqrs_data::state::Store<S> for PostgresStore<'a, 'b> {
-    type AggregateId = str;
+    type AggregateId = String;
     type Error = StoreError;
 
     fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: cqrs::StateSnapshot<S>) -> Result<(), Self::Error> {
@@ -150,7 +172,7 @@ impl<'a, 'b, S: serde::Serialize> cqrs_data::state::Store<S> for PostgresStore<'
 }
 
 impl<'a, 'b, S: serde::de::DeserializeOwned> cqrs_data::state::Source<S> for PostgresStore<'a, 'b> {
-    type AggregateId = str;
+    type AggregateId = String;
     type Error = StoreError;
 
     fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<cqrs::StateSnapshot<S>>, Self::Error> {

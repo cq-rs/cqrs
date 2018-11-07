@@ -8,7 +8,7 @@ impl EventNumber {
     pub const MIN_VALUE: EventNumber = EventNumber(unsafe {NonZeroU64::new_unchecked(1)});
 
     #[inline]
-    pub fn new(x: usize) -> Option<Self> {
+    pub fn new(x: u64) -> Option<Self> {
         Some(EventNumber(NonZeroU64::new(x)?))
     }
 

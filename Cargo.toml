@@ -8,4 +8,5 @@ members = [
     "cqrs-redis",
     "cqrs-todo-core",
     "cqrs-todoql",
+    "cqrs-todoql-psql",
 ]

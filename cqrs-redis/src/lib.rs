@@ -141,7 +141,7 @@ mod store {
             key.push_str("snapshot-");
             key.push_str(agg_id);
 
-            let result: (Option<usize>, Option<S::Input>) =
+            let result: (Option<u64>, Option<S::Input>) =
                 redis::pipe()
                     .hget(&key, "version")
                     .hget(&key, "snapshot")
@@ -169,13 +169,13 @@ mod store {
         conn: &'a C,
         serializer: S,
         key: String,
-        index: usize,
-        cursor: usize,
+        index: u64,
+        cursor: u64,
         first_read: bool,
         buffer: Vec<S::Input>,
     }
 
-    const PAGE_SIZE: usize = 100;
+    const PAGE_SIZE: u64 = 100;
 
     impl<'a, S, C> Iterator for RedisEventIterator<'a, S, C>
         where
@@ -286,22 +286,15 @@ mod store {
             let mut next_event_number = 0;
             if let Some(precondition) = precondition {
                 let result: Option<()> = redis::transaction(self.store.conn, &[&key], |pipe| {
-                    let (exists, len): (bool, usize) =
+                    let (exists, len): (bool, u64) =
                         redis::pipe()
                             .exists(&key)
                             .llen(&key)
                             .query(self.store.conn)?;
                     next_event_number = len;
+                    let current_version = cqrs::Version::new(len);
 
-                    let valid =
-                        match precondition {
-                            cqrs::Precondition::New => !exists,
-                            cqrs::Precondition::Exists => exists,
-                            cqrs::Precondition::ExpectedVersion(cqrs::Version::Initial) => exists && len == 0,
-                            cqrs::Precondition::ExpectedVersion(cqrs::Version::Number(x)) => len == x.get()
-                        };
-
-                    if !valid {
+                    if let Err(_) = precondition.verify(if exists { Some(current_version) } else { None }) {
                         Ok(Some(None))
                     } else {
                         for e in events.iter() {
@@ -317,7 +310,7 @@ mod store {
                 }
             } else {
                 let _: () = redis::transaction(self.store.conn, &[&key], |pipe| {
-                    let len: (usize,) =
+                    let len: (u64,) =
                         redis::pipe()
                             .llen(&key)
                             .query(self.store.conn)?;
