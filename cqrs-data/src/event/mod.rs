@@ -1,5 +1,5 @@
 mod source;
 mod store;
 
-pub use self::source::Source;
-pub use self::store::Store;
+pub use self::source::EventSource;
+pub use self::store::EventSink;

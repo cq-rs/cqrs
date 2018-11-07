@@ -65,7 +65,7 @@ impl IdProvider {
 mod helper {
     use chrono::{Duration,Utc,TimeZone};
     use cqrs::{Version, StateSnapshot};
-    use cqrs_data::{event::Store as EO, state::Store as SO};
+    use cqrs_data::{EventSink, SnapshotSink};
     use cqrs_todo_core::{Event, TodoAggregate, TodoData, TodoStatus, domain};
     use cqrs_postgres::PostgresStore;
     use r2d2_postgres::postgres::Connection;
@@ -81,7 +81,7 @@ mod helper {
         events.push(Event::Created(domain::Description::new("Ignored!").unwrap()));
         events.push(Event::ReminderUpdated(None));
 
-        let store = PostgresStore::new(&*conn, "todo");
+        let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
         store.append_events(id, &events, None).unwrap();
         store.persist_snapshot(id, StateSnapshot {

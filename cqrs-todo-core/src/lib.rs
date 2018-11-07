@@ -330,6 +330,10 @@ impl Aggregate for TodoAggregate {
         self.execute_command(command)
     }
 
+    #[inline(always)]
+    fn entity_type() -> &'static str where Self: Sized {
+        "todo"
+    }
 }
 
 #[cfg(test)]

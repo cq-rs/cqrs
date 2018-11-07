@@ -1,7 +1,28 @@
 use super::*;
-use ::event::{Source as EI, Store as EO};
-use ::state::{Source as SI, Store as SO};
+use ::event::{EventSource as EI, EventSink as EO};
+use ::state::{SnapshotSource as SI, SnapshotSink as SO};
 use void::ResultVoidExt;
+
+struct TestAggregate;
+
+impl cqrs::Aggregate for TestAggregate {
+    type Event = TestEvent;
+    type Events = Option<Self::Event>;
+    type Command = ();
+    type Error = ();
+
+    fn apply(&mut self, event: Self::Event) {
+        unimplemented!()
+    }
+
+    fn execute(&self, command: Self::Command) -> Result<Self::Events, Self::Error> {
+        unimplemented!()
+    }
+
+    fn entity_type() -> &'static str where Self: Sized {
+        "test"
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, Hash, Eq, PartialEq)]
 struct TestEvent;

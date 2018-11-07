@@ -1,15 +1,17 @@
 use types::Since;
 use cqrs::{EventNumber, Precondition, SequencedEvent, StateSnapshot};
-use event;
-use state;
 use std::iter::Empty;
 use void::Void;
+use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone, Copy)]
 pub struct NullStore;
 
-impl<Event> event::Source<Event> for NullStore {
-    type Events = Empty<Result<SequencedEvent<Event>, Void>>;
+impl<A> EventSource<A> for NullStore
+where
+    A: cqrs::Aggregate,
+{
+    type Events = Empty<Result<SequencedEvent<A::Event>, Void>>;
     type Error = Void;
 
     #[inline]
@@ -18,31 +20,40 @@ impl<Event> event::Source<Event> for NullStore {
     }
 }
 
-impl<Event> event::Store<Event> for NullStore {
+impl<A> EventSink<A> for NullStore
+where
+    A: cqrs::Aggregate,
+{
     type Error = Void;
 
     #[inline]
-    fn append_events<Id: AsRef<str> + Into<String>>(&self, _id: Id, _events: &[Event], _expect: Option<Precondition>) -> Result<EventNumber, Self::Error> {
+    fn append_events<Id: AsRef<str> + Into<String>>(&self, _id: Id, _events: &[A::Event], _expect: Option<Precondition>) -> Result<EventNumber, Self::Error> {
         Ok(EventNumber::MIN_VALUE)
     }
 }
 
-impl<State> state::Source<State> for NullStore {
+impl<A> SnapshotSource<A> for NullStore
+where
+    A: cqrs::Aggregate,
+{
     type Error = Void;
 
     #[inline]
-    fn get_snapshot<Id: AsRef<str> + Into<String>>(&self, _id: Id) -> Result<Option<StateSnapshot<State>>, Self::Error>
+    fn get_snapshot<Id: AsRef<str> + Into<String>>(&self, _id: Id) -> Result<Option<StateSnapshot<A>>, Self::Error>
         where Self: Sized
     {
         Ok(None)
     }
 }
 
-impl<State> state::Store<State> for NullStore {
+impl<A> SnapshotSink<A> for NullStore
+where
+    A: cqrs::Aggregate,
+{
     type Error = Void;
 
     #[inline]
-    fn persist_snapshot<Id: AsRef<str> + Into<String>>(&self, _id: Id, _snapshot: StateSnapshot<State>) -> Result<(), Self::Error>
+    fn persist_snapshot<Id: AsRef<str> + Into<String>>(&self, _id: Id, _snapshot: StateSnapshot<A>) -> Result<(), Self::Error>
         where Self: Sized
     {
         Ok(())

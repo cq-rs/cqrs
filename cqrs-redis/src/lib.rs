@@ -100,10 +100,11 @@ mod store {
         serializer: S,
     }
 
-    impl<'a, S, C> cqrs_data::state::Store<S::Value> for SnapshotStore<'a, C, S>
+    impl<'a, S, C> cqrs_data::SnapshotSink<S::Value> for SnapshotStore<'a, C, S>
         where
             C: redis::ConnectionLike + 'a,
             S: RedisSerializer,
+            S::Value: cqrs::Aggregate,
     {
         type Error = redis::RedisError;
 
@@ -125,10 +126,11 @@ mod store {
         }
     }
 
-    impl<'a, S, C> cqrs_data::state::Source<S::Value> for SnapshotStore<'a, C, S>
+    impl<'a, S, C> cqrs_data::SnapshotSource<S::Value> for SnapshotStore<'a, C, S>
         where
             C: redis::ConnectionLike + 'a,
             S: RedisSerializer,
+            S::Value: cqrs::Aggregate,
     {
         type Error = redis::RedisError;
 
@@ -226,8 +228,9 @@ mod store {
         }
     }
 
-    impl<'a, S, C> cqrs_data::event::Source<S::Value> for SnapshotStore<'a, C, S>
+    impl<'a, S, C, A> cqrs_data::EventSource<A> for SnapshotStore<'a, C, S>
         where
+            A: cqrs::Aggregate<Event=S::Value>,
             C: redis::ConnectionLike + 'a,
             S: RedisSerializer + Clone,
             S::Value: ::std::fmt::Debug,
@@ -264,8 +267,9 @@ mod store {
             }
         }
     }
-    impl<'a, S, C> cqrs_data::event::Store<S::Value> for SnapshotStore<'a, C, S>
+    impl<'a, S, C, A> cqrs_data::EventSink<A> for SnapshotStore<'a, C, S>
         where
+            A: cqrs::Aggregate<Event=S::Value>,
             C: redis::ConnectionLike + 'a,
             S: RedisSerializer,
             S::Value: Clone + ::std::fmt::Debug,

@@ -1,12 +1,13 @@
-use ::event::Source as EventSource;
-use ::state::Source as StateSource;
+use ::event::EventSource as EventSource;
+use ::state::SnapshotSource as StateSource;
 
-pub struct EntitySource<'event, 'state, ES, SS, E, S>
+pub struct EntitySource<'event, 'state, ES, SS, A>
 where
-    ES: EventSource<E> + 'event,
-    SS: StateSource<S> + 'state,
+    A: cqrs::Aggregate,
+    ES: EventSource<A> + 'event,
+    SS: StateSource<A> + 'state,
 {
     event_source: &'event ES,
     state_source: &'state SS,
-    _phantom: ::std::marker::PhantomData<(E, S)>,
+    _phantom: ::std::marker::PhantomData<A>,
 }

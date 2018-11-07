@@ -1,6 +1,5 @@
 extern crate cqrs;
 extern crate cqrs_data;
-//extern crate cqrs_memory;
 extern crate cqrs_redis;
 extern crate cqrs_todo_core;
 
@@ -13,7 +12,7 @@ extern crate fnv;
 extern crate iron;
 extern crate mount;
 extern crate hashids;
-
+extern crate parking_lot;
 extern crate redis;
 extern crate r2d2_redis;
 extern crate r2d2;
@@ -25,8 +24,6 @@ mod graphql;
 mod store;
 
 use r2d2_redis::RedisConnectionManager;
-
-type AggregateId = String;
 
 type EventStore = store::MemoryOrNullEventStore;
 type SnapshotStore = store::MemoryOrNullSnapshotStore;
@@ -104,12 +101,12 @@ impl IdProvider {
 mod helper {
     use chrono::{Duration,Utc,TimeZone};
     use cqrs::{Version, StateSnapshot};
-    use cqrs_data::{event::Store as EO, state::Store as SO};
+    use cqrs_data::{EventSink, SnapshotSink};
     use cqrs_todo_core::{Event, TodoAggregate, TodoData, TodoStatus, domain};
 
-    use super::{AggregateId, EventStore, SnapshotStore};
+    use super::{EventStore, SnapshotStore};
 
-    pub fn prefill(id: &AggregateId, es: &EventStore, ss: &SnapshotStore) {
+    pub fn prefill(id: &str, es: &EventStore, ss: &SnapshotStore) {
         let epoch = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
         let reminder_time = epoch + Duration::seconds(10000);
         let mut events = Vec::new();

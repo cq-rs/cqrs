@@ -2,22 +2,26 @@ use std::hash::BuildHasher;
 use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use void::Void;
-use ::event;
-use ::state;
-use ::types::Since;
 use cqrs::{EventNumber, Precondition, SequencedEvent, Version};
 use cqrs::StateSnapshot;
+use super::*;
 
 #[derive(Debug)]
-pub struct EventStore<E: Clone, Hasher = DefaultHashBuilder>
+pub struct EventStore<A, Hasher = DefaultHashBuilder>
 where
-    E: Clone,
+    A: cqrs::Aggregate,
+    A::Event: Clone,
     Hasher: BuildHasher,
 {
-    inner: RwLock<HashMap<String, RwLock<Vec<E>>, Hasher>>,
+    inner: RwLock<HashMap<String, RwLock<Vec<A::Event>>, Hasher>>,
 }
 
-impl<E: Clone, Hasher: BuildHasher + Default> Default for EventStore<E, Hasher> {
+impl<A, Hasher> Default for EventStore<A, Hasher>
+where
+    A: cqrs::Aggregate,
+    A::Event: Clone,
+    Hasher: BuildHasher + Default,
+{
     fn default() -> Self {
         EventStore {
             inner: RwLock::new(HashMap::default())
@@ -25,7 +29,12 @@ impl<E: Clone, Hasher: BuildHasher + Default> Default for EventStore<E, Hasher> 
     }
 }
 
-impl<E: Clone, Hasher: BuildHasher> EventStore<E, Hasher> {
+impl<A, Hasher> EventStore<A, Hasher>
+where
+    A: cqrs::Aggregate,
+    A::Event: Clone,
+    Hasher: BuildHasher,
+{
     pub fn with_hasher(hasher: Hasher) -> Self {
         EventStore {
             inner: RwLock::new(HashMap::with_hasher(hasher))
@@ -33,8 +42,13 @@ impl<E: Clone, Hasher: BuildHasher> EventStore<E, Hasher> {
     }
 }
 
-impl<E: Clone, Hasher: BuildHasher> event::Source<E> for EventStore<E, Hasher> {
-    type Events = Vec<Result<SequencedEvent<E>, Void>>;
+impl<A, Hasher> EventSource<A> for EventStore<A, Hasher>
+where
+    A: cqrs::Aggregate,
+    A::Event: Clone,
+    Hasher: BuildHasher,
+{
+    type Events = Vec<Result<SequencedEvent<A::Event>, Void>>;
     type Error = Void;
 
     fn read_events<Id: AsRef<str> + Into<String>>(&self, id: Id, since: Since) -> Result<Option<Self::Events>, Self::Error> {
@@ -78,10 +92,15 @@ impl From<Precondition> for PreconditionFailed {
     }
 }
 
-impl<E: Clone, Hasher: BuildHasher> event::Store<E> for EventStore<E, Hasher> {
+impl<A, Hasher> EventSink<A> for EventStore<A, Hasher>
+where
+    A: cqrs::Aggregate,
+    A::Event: Clone,
+    Hasher: BuildHasher,
+{
     type Error = PreconditionFailed;
 
-    fn append_events<Id: AsRef<str> + Into<String>>(&self, id: Id, events: &[E], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
+    fn append_events<Id: AsRef<str> + Into<String>>(&self, id: Id, events: &[A::Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
         let table = self.inner.upgradable_read();
 
         if table.contains_key(id.as_ref()) {
@@ -115,11 +134,19 @@ impl<E: Clone, Hasher: BuildHasher> event::Store<E> for EventStore<E, Hasher> {
 }
 
 #[derive(Debug)]
-pub struct StateStore<S: Clone, Hasher: BuildHasher = DefaultHashBuilder> {
-    inner: RwLock<HashMap<String, RwLock<StateSnapshot<S>>, Hasher>>,
+pub struct StateStore<A, Hasher = DefaultHashBuilder>
+where
+    A: cqrs::Aggregate + Clone,
+    Hasher: BuildHasher,
+{
+    inner: RwLock<HashMap<String, RwLock<StateSnapshot<A>>, Hasher>>,
 }
 
-impl<S: Clone, Hasher: BuildHasher + Default> Default for StateStore<S, Hasher> {
+impl<A, Hasher> Default for StateStore<A, Hasher>
+where
+    A: cqrs::Aggregate + Clone,
+    Hasher: BuildHasher + Default,
+{
     fn default() -> Self {
         StateStore {
             inner: RwLock::new(HashMap::default())
@@ -127,7 +154,11 @@ impl<S: Clone, Hasher: BuildHasher + Default> Default for StateStore<S, Hasher> 
     }
 }
 
-impl<S: Clone, Hasher: BuildHasher> StateStore<S, Hasher> {
+impl<A, Hasher> StateStore<A, Hasher>
+where
+    A: cqrs::Aggregate + Clone,
+    Hasher: BuildHasher,
+{
     pub fn with_hasher(hasher: Hasher) -> Self {
         StateStore {
             inner: RwLock::new(HashMap::with_hasher(hasher))
@@ -135,10 +166,14 @@ impl<S: Clone, Hasher: BuildHasher> StateStore<S, Hasher> {
     }
 }
 
-impl<S: Clone, Hasher: BuildHasher> state::Source<S> for StateStore<S, Hasher> {
+impl<A, Hasher> SnapshotSource<A> for StateStore<A, Hasher>
+where
+    A: cqrs::Aggregate + Clone,
+    Hasher: BuildHasher,
+{
     type Error = Void;
 
-    fn get_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id) -> Result<Option<StateSnapshot<S>>, Self::Error> where Self: Sized {
+    fn get_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id) -> Result<Option<StateSnapshot<A>>, Self::Error> where Self: Sized {
         let table = self.inner.read();
 
         let snapshot = table.get(id.as_ref());
@@ -149,10 +184,14 @@ impl<S: Clone, Hasher: BuildHasher> state::Source<S> for StateStore<S, Hasher> {
     }
 }
 
-impl<S: Clone, Hasher: BuildHasher> state::Store<S> for StateStore<S, Hasher> {
+impl<A, Hasher> SnapshotSink<A> for StateStore<A, Hasher>
+where
+    A: cqrs::Aggregate + Clone,
+    Hasher: BuildHasher,
+{
     type Error = Void;
 
-    fn persist_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id, snapshot: StateSnapshot<S>) -> Result<(), Self::Error> where Self: Sized {
+    fn persist_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id, snapshot: StateSnapshot<A>) -> Result<(), Self::Error> where Self: Sized {
         let table = self.inner.upgradable_read();
 
         if table.contains_key(id.as_ref()) {

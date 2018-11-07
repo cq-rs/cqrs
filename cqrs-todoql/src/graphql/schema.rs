@@ -1,7 +1,7 @@
 use base64;
 use cqrs::{Aggregate, Precondition, StateSnapshot, Version};
 use cqrs_data::Entity;
-use cqrs_data::{event::Store as EO, state::Store as SO};
+use cqrs_data::{EventSink, SnapshotSink};
 use cqrs_todo_core::{domain, TodoAggregate, TodoStatus, Command};
 use chrono::{DateTime, Utc};
 use juniper::{ID, FieldResult, Value};
@@ -69,11 +69,11 @@ graphql_object!(Query: Context |&self| {
     }
 });
 
-struct TodoQL(Entity<TodoAggregate, String>);
+struct TodoQL(Entity<'static, TodoAggregate>);
 
 graphql_object!(TodoQL: Context |&self| {
     field id() -> FieldResult<ID> {
-        Ok(self.0.id().to_owned().into())
+        Ok(self.0.id().to_string().into())
     }
 
     field description() -> FieldResult<&str> {
@@ -185,11 +185,11 @@ graphql_object!(Mutations: Context |&self| {
 
         let new_id = context.id_provider.new_id();
 
-        let mut entity: Entity<TodoAggregate, _> = Entity::from_default(new_id.clone());
+        let mut entity: Entity<TodoAggregate> = Entity::from_default(new_id.clone());
 
         let events = entity.aggregate().execute(command)?;
 
-        context.event_db.append_events(&new_id, &events, Some(Precondition::New))?;
+        context.event_db.append_events(new_id.as_ref(), &events, Some(Precondition::New))?;
         entity.apply_events(events);
 
         context.stream_index.write().unwrap().push(new_id.clone());
@@ -203,7 +203,7 @@ struct TodoMutQL(ID);
 
 fn expect_exists_or(expected_version: Option<i32>) -> Precondition {
     expected_version
-        .map(|i| Version::new(i as usize))
+        .map(|i| Version::new(i as u64))
         .map(Precondition::ExpectedVersion)
         .unwrap_or(Precondition::Exists)
 }
@@ -224,11 +224,11 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let events = entity.aggregate().execute(command)?;
 
-        context.event_db.append_events(&entity.id(), &events, Some(precondition))?;
+        context.event_db.append_events(entity.id().as_ref(), &events, Some(precondition))?;
         entity.apply_events(events);
 
         if entity.version() - entity.snapshot_version() > 10 {
-            context.state_db.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+            context.state_db.persist_snapshot(entity.id().as_ref(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
         }
 
         Ok(Some(TodoQL(entity)))
@@ -249,11 +249,11 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let events = entity.aggregate().execute(command)?;
 
-        context.event_db.append_events(&entity.id(), &events, Some(precondition))?;
+        context.event_db.append_events(entity.id().as_ref(), &events, Some(precondition))?;
         entity.apply_events(events);
 
         if entity.version() - entity.snapshot_version() > 10 {
-            context.state_db.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+            context.state_db.persist_snapshot(entity.id().as_ref(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
         }
 
         Ok(Some(TodoQL(entity)))
@@ -272,11 +272,11 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let events = entity.aggregate().execute(command)?;
 
-        context.event_db.append_events(&entity.id(), &events, Some(precondition))?;
+        context.event_db.append_events(entity.id().as_ref(), &events, Some(precondition))?;
         entity.apply_events(events);
 
         if entity.version() - entity.snapshot_version() > 10 {
-            context.state_db.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+            context.state_db.persist_snapshot(entity.id().as_ref(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
         }
 
         Ok(Some(TodoQL(entity)))
@@ -295,11 +295,11 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let events = entity.aggregate().execute(command)?;
 
-        context.event_db.append_events(&entity.id(), &events, Some(precondition))?;
+        context.event_db.append_events(entity.id().as_ref(), &events, Some(precondition))?;
         entity.apply_events(events);
 
         if entity.version() - entity.snapshot_version() > 10 {
-            context.state_db.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+            context.state_db.persist_snapshot(entity.id().as_ref(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
         }
 
         Ok(Some(TodoQL(entity)))
@@ -318,11 +318,11 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let events = entity.aggregate().execute(command)?;
 
-        context.event_db.append_events(&entity.id(), &events, Some(precondition))?;
+        context.event_db.append_events(entity.id().as_ref(), &events, Some(precondition))?;
         entity.apply_events(events);
 
         if entity.version() - entity.snapshot_version() > 10 {
-            context.state_db.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+            context.state_db.persist_snapshot(entity.id().as_ref(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
         }
 
         Ok(Some(TodoQL(entity)))
@@ -341,11 +341,11 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let events = entity.aggregate().execute(command)?;
 
-        context.event_db.append_events(&entity.id(), &events, Some(precondition))?;
+        context.event_db.append_events(entity.id().as_ref(), &events, Some(precondition))?;
         entity.apply_events(events);
 
         if entity.version() - entity.snapshot_version() > 10 {
-            context.state_db.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+            context.state_db.persist_snapshot(entity.id().as_ref(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
         }
 
         Ok(Some(TodoQL(entity)))

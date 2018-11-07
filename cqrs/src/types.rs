@@ -121,16 +121,16 @@ impl From<EventNumber> for Version {
 }
 
 impl ::std::ops::Sub for Version {
-    type Output = isize;
+    type Output = i64;
 
     fn sub(self, rhs: Version) -> Self::Output {
         let l = match self {
             Version::Initial => 0,
-            Version::Number(n) => n.get() as isize
+            Version::Number(n) => n.get() as i64
         };
         let r = match rhs {
             Version::Initial => 0,
-            Version::Number(n) => n.get() as isize
+            Version::Number(n) => n.get() as i64
         };
 
         l - r

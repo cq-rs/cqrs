@@ -14,7 +14,7 @@ use cqrs_data::Since;
 #[derive(Debug)]
 struct EventMap(RefCell<HashMap<String, Vec<cqrs::SequencedEvent<cqrs_todo_core::Event>>>>);
 
-impl event::Source<cqrs_todo_core::Event> for EventMap {
+impl event::EventSource<cqrs_todo_core::Event> for EventMap {
     type AggregateId = str;
     type Events = Vec<Result<SequencedEvent<cqrs_todo_core::Event>, Never>>;
     type Error = cqrs::error::Never;
@@ -29,7 +29,7 @@ impl event::Source<cqrs_todo_core::Event> for EventMap {
     }
 }
 
-impl event::Store<cqrs_todo_core::Event> for EventMap {
+impl event::EventSink<cqrs_todo_core::Event> for EventMap {
     type AggregateId = str;
     type Error = cqrs::error::Never;
 
@@ -65,7 +65,7 @@ impl event::Store<cqrs_todo_core::Event> for EventMap {
     }
 }
 
-use cqrs_data::event::{Source, Store};
+use cqrs_data::event::{EventSource, EventSink};
 
 #[test]
 fn main_test() {

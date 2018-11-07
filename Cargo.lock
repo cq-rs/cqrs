@@ -246,6 +246,7 @@ dependencies = [
  "juniper_codegen 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "juniper_iron 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "mount 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "parking_lot 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "r2d2 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "r2d2_redis 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "redis 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
