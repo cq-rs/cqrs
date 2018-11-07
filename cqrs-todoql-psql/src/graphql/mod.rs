@@ -1,24 +1,25 @@
 use std::ops;
-use std::sync::{Arc,RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 
 use juniper;
+use r2d2_postgres::PostgresConnectionManager;
+use r2d2::Pool;
 
 mod schema;
 pub mod endpoint;
 
 pub struct InnerContext {
     pub stream_index: RwLock<Vec<String>>,
-    pub event_db: super::EventStore,
-    pub state_db: super::SnapshotStore,
+    pub backend: Pool<PostgresConnectionManager>,
     pub id_provider: super::IdProvider,
 }
 
 impl InnerContext {
-    pub fn new(stream_index: Vec<String>, event_db: super::EventStore, state_db: super::SnapshotStore, id_provider: super::IdProvider) -> Self {
+    pub fn new(stream_index: Vec<String>, backend: Pool<PostgresConnectionManager>, id_provider: super::IdProvider) -> Self {
         InnerContext {
             stream_index: RwLock::new(stream_index),
-            event_db,
-            state_db,
+            backend,
             id_provider,
         }
     }

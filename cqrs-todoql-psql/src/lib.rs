@@ -1,6 +1,6 @@
 extern crate cqrs;
 extern crate cqrs_data;
-extern crate cqrs_redis;
+extern crate cqrs_postgres;
 extern crate cqrs_todo_core;
 
 #[macro_use] extern crate juniper;
@@ -8,58 +8,22 @@ extern crate juniper_iron;
 #[macro_use] extern crate juniper_codegen;
 extern crate chrono;
 extern crate base64;
-extern crate fnv;
 extern crate iron;
 extern crate mount;
 extern crate hashids;
 extern crate parking_lot;
-extern crate redis;
-extern crate r2d2_redis;
+extern crate r2d2_postgres;
 extern crate r2d2;
 extern crate serde;
 extern crate serde_json;
 extern crate void;
 
 mod graphql;
-mod store;
 
-use r2d2_redis::RedisConnectionManager;
+use r2d2_postgres::PostgresConnectionManager;
 
-type EventStore = store::MemoryOrNullEventStore;
-type SnapshotStore = store::MemoryOrNullSnapshotStore;
-
-pub enum BackendChoice {
-    Memory,
-    Null,
-    Redis(String)
-}
-
-pub fn start_todo_server(event_backend: BackendChoice, snapshot_backend: BackendChoice) -> iron::Listening {
-    let es =
-        match event_backend {
-            BackendChoice::Null =>
-                store::MemoryOrNullEventStore::new_null_store(),
-            BackendChoice::Memory =>
-                store::MemoryOrNullEventStore::new_memory_store(),
-            BackendChoice::Redis(conn_str) => {
-                let pool = r2d2::Pool::new(RedisConnectionManager::new(conn_str.as_ref()).unwrap()).unwrap();
-                let config = cqrs_redis::Config::new("todoql");
-                store::MemoryOrNullEventStore::new_redis_store(config, pool)
-            }
-        };
-
-    let ss =
-        match snapshot_backend {
-            BackendChoice::Null =>
-                store::MemoryOrNullSnapshotStore::new_null_store(),
-            BackendChoice::Memory =>
-                store::MemoryOrNullSnapshotStore::new_memory_store(),
-            BackendChoice::Redis(conn_str) => {
-                let pool = r2d2::Pool::new(r2d2_redis::RedisConnectionManager::new(conn_str.as_ref()).unwrap()).unwrap();
-                let config = cqrs_redis::Config::new("todoql");
-                store::MemoryOrNullSnapshotStore::new_redis_store(config, pool)
-            }
-        };
+pub fn start_todo_server(conn_str: &str) -> iron::Listening {
+    let pool = r2d2::Pool::new(PostgresConnectionManager::new(conn_str, r2d2_postgres::TlsMode::None).unwrap()).unwrap();
 
     let hashid =
         if let Ok(hashid) = hashids::HashIds::new_with_salt_and_min_length("cqrs".to_string(), 10) {
@@ -72,14 +36,13 @@ pub fn start_todo_server(event_backend: BackendChoice, snapshot_backend: Backend
 
     let id = id_provider.new_id();
 
-    helper::prefill(&id, &es, &ss);
+    helper::prefill(&id, pool.get().unwrap());
 
     let stream_index = vec![id];
 
     let context = graphql::InnerContext::new(
         stream_index,
-        es,
-        ss,
+        pool,
         id_provider,
     );
 
@@ -103,10 +66,10 @@ mod helper {
     use cqrs::{Version, StateSnapshot};
     use cqrs_data::{EventSink, SnapshotSink};
     use cqrs_todo_core::{Event, TodoAggregate, TodoData, TodoStatus, domain};
+    use cqrs_postgres::PostgresStore;
+    use r2d2_postgres::postgres::Connection;
 
-    use super::{EventStore, SnapshotStore};
-
-    pub fn prefill(id: &str, es: &EventStore, ss: &SnapshotStore) {
+    pub fn prefill(id: &str, conn: impl ::std::ops::Deref<Target=Connection>) {
         let epoch = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
         let reminder_time = epoch + Duration::seconds(10000);
         let mut events = Vec::new();
@@ -117,8 +80,10 @@ mod helper {
         events.push(Event::Created(domain::Description::new("Ignored!").unwrap()));
         events.push(Event::ReminderUpdated(None));
 
-        es.append_events(id, &events, None).unwrap();
-        ss.persist_snapshot(id, StateSnapshot {
+        let store = PostgresStore::<TodoAggregate>::new(&*conn);
+
+        store.append_events(id, &events, None).unwrap();
+        store.persist_snapshot(id, StateSnapshot {
             version: Version::new(1),
             snapshot: TodoAggregate::Created(TodoData {
                 description: domain::Description::new("Hello!").unwrap(),

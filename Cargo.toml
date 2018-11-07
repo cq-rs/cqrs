@@ -1,7 +1,11 @@
 [workspace]
 members = [
     "cqrs",
-    "cqrs-memory",
+    "cqrs-data",
+#    "cqrs-eventstore",
+    "cqrs-postgres",
+    "cqrs-redis",
     "cqrs-todo-core",
     "cqrs-todoql",
+    "cqrs-todoql-psql",
 ]

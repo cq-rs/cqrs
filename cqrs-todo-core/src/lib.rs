@@ -1,16 +1,19 @@
 extern crate cqrs;
 extern crate chrono;
 extern crate smallvec;
+extern crate serde;
+#[macro_use] extern crate serde_derive;
+#[macro_use] extern crate log;
 
 use smallvec::SmallVec;
-use cqrs::domain::{Aggregate, RestoreAggregate, SnapshotAggregate};
+use cqrs::Aggregate;
 
 pub mod domain {
     use chrono::{DateTime,Utc};
     use error::{InvalidDescription, InvalidReminderTime};
     use std::borrow::Borrow;
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
     pub struct Reminder {
         time: DateTime<Utc>,
     }
@@ -31,7 +34,7 @@ pub mod domain {
         }
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     pub struct Description {
         text: String,
     }
@@ -49,7 +52,7 @@ pub mod domain {
         }
 
         pub fn as_str(&self) -> &str {
-            self.text.as_str()
+            self.text.borrow()
         }
     }
 
@@ -119,7 +122,7 @@ pub mod error {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Event {
     Created(domain::Description),
     TextUpdated(domain::Description),
@@ -139,13 +142,13 @@ pub enum Command {
     ResetCompleted,
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TodoStatus {
     Completed,
     NotCompleted,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TodoData {
     pub description: domain::Description,
     pub reminder: Option<domain::Reminder>,
@@ -253,40 +256,40 @@ impl TodoData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum TodoState {
-    Uninitialized,
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum TodoAggregate {
     Created(TodoData),
+    Uninitialized,
 }
 
-impl Default for TodoState {
+impl Default for TodoAggregate {
     fn default() -> Self {
-        TodoState::Uninitialized
+        TodoAggregate::Uninitialized
     }
 }
 
-type Events = <TodoAggregate as Aggregate>::Events;
+type Events = SmallVec<[Event; 1]>;
 
-impl TodoState {
-    pub fn apply(&mut self, event: Event) {
+impl TodoAggregate {
+    pub fn apply_event(&mut self, event: Event) {
         match *self {
-            TodoState::Uninitialized => self.apply_to_uninitialized(event),
-            TodoState::Created(ref mut data) => data.apply(event),
+            TodoAggregate::Uninitialized => self.apply_to_uninitialized(event),
+            TodoAggregate::Created(ref mut data) => data.apply(event),
         }
     }
 
     pub fn apply_to_uninitialized(&mut self, event: Event) {
         match event {
             Event::Created(initial_description) =>
-                *self = TodoState::Created(TodoData::with_description(initial_description)),
+                *self = TodoAggregate::Created(TodoData::with_description(initial_description)),
             _ => {}
         }
     }
 
-    pub fn execute(&self, command: Command) -> Result<Events, error::CommandError> {
+    pub fn execute_command(&self, command: Command) -> Result<Events, error::CommandError> {
         match *self {
-            TodoState::Uninitialized => self.execute_on_uninitialized(command),
-            TodoState::Created(ref data) => data.execute(command),
+            TodoAggregate::Uninitialized => self.execute_on_uninitialized(command),
+            TodoAggregate::Created(ref data) => data.execute(command),
         }
     }
 
@@ -306,62 +309,31 @@ impl TodoState {
 
     pub fn get_data(&self) -> Result<&TodoData, &'static str> {
         match *self {
-            TodoState::Uninitialized => Err("uninitialized"),
-            TodoState::Created(ref x) => Ok(x),
+            TodoAggregate::Uninitialized => Err("uninitialized"),
+            TodoAggregate::Created(ref x) => Ok(x),
         }
-    }
-}
-
-#[derive(Debug, PartialEq, Default)]
-pub struct TodoAggregate {
-    applied_event_count: usize,
-    state: TodoState,
-}
-
-impl TodoAggregate {
-    pub fn inspect_state(&self) -> &TodoState {
-        &self.state
-    }
-
-    pub fn applied_events(&self) -> usize {
-        self.applied_event_count
     }
 }
 
 impl Aggregate for TodoAggregate {
-    type Events = SmallVec<[Self::Event;1]>;
     type Event = Event;
     type Command = Command;
-    type CommandError = error::CommandError;
+    type Events = Events;
+    type Error = error::CommandError;
 
     fn apply(&mut self, event: Self::Event) {
-        println!("apply {:?}", event);
-        self.applied_event_count += 1;
-        self.state.apply(event);
+        trace!("apply {:?}", event);
+        self.apply_event(event);
     }
 
-    fn execute(&self, command: Self::Command) -> Result<Self::Events, Self::CommandError> {
-        println!("execute {:?}", command);
-        self.state.execute(command)
+    fn execute(&self, command: Command) -> Result<Self::Events, Self::Error> {
+        trace!("execute {:?}", command);
+        self.execute_command(command)
     }
-}
 
-impl RestoreAggregate for TodoAggregate {
-    type Snapshot = TodoState;
-
-    fn restore(snapshot: Self::Snapshot) -> Self {
-        TodoAggregate {
-            applied_event_count: 0,
-            state: snapshot,
-        }
-    }
-}
-
-impl SnapshotAggregate for TodoAggregate {
-    type Snapshot = TodoState;
-
-    fn as_snapshot(&self) -> Self::Snapshot {
-        self.state.clone()
+    #[inline(always)]
+    fn entity_type() -> &'static str where Self: Sized {
+        "todo"
     }
 }
 
@@ -396,11 +368,11 @@ mod tests {
             reminder: None,
             status: TodoStatus::NotCompleted,
         };
-        let expected_state = TodoState::Created(expected_data);
+        let expected_state = TodoAggregate::Created(expected_data);
 
         let agg = create_basic_aggregate();
 
-        assert_eq!(&expected_state, agg.inspect_state());
+        assert_eq!(expected_state, agg);
     }
 
     #[test]

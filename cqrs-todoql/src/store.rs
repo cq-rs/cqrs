@@ -1,132 +1,161 @@
-use std::hash::{Hash, BuildHasher};
+use cqrs::{EventNumber, Precondition, SequencedEvent, StateSnapshot};
+use cqrs_data::Since;
+use cqrs_data::{EventSink, EventSource, SnapshotSink, SnapshotSource};
+use cqrs_data::trivial::NullStore;
+use cqrs_data::memory::{EventStore,StateStore};
+use cqrs::error::{AppendEventsError};
 
-use cqrs::{EventSource, EventAppend, SnapshotSource, SnapshotPersist};
-use cqrs::{Since, Precondition, VersionedEvent, VersionedSnapshot};
-use cqrs::trivial::{NullEventStore,NullSnapshotStore};
-use cqrs_memory::{MemoryEventStore,MemoryStateStore};
-use cqrs::error::{AppendEventsError, Never};
-use fnv::FnvBuildHasher;
+use cqrs_redis;
+use cqrs_todo_core::{Event, TodoAggregate};
 
-pub enum MemoryOrNullEventStore<E, I, H = FnvBuildHasher>
-    where
-        E: Clone,
-        I: Hash + Eq + Clone,
-        H: BuildHasher + Default,
+use r2d2;
+use r2d2_redis::RedisConnectionManager;
+
+use void::ResultVoidExt;
+
+pub enum MemoryOrNullEventStore
 {
-    Memory(MemoryEventStore<E, I, H>),
-    Null(NullEventStore<E, I>),
+    Memory(EventStore<TodoAggregate>),
+    Null,
+    Redis(cqrs_redis::Config, r2d2::Pool<RedisConnectionManager>)
 }
 
-impl<E, I, H> MemoryOrNullEventStore<E, I, H>
-    where
-        E: Clone,
-        I: Hash + Eq + Clone,
-        H: BuildHasher + Default,
+impl MemoryOrNullEventStore
 {
     pub fn new_memory_store() -> Self {
-        MemoryOrNullEventStore::Memory(MemoryEventStore::<E, I, H>::default())
+        MemoryOrNullEventStore::Memory(EventStore::default())
     }
 
     pub fn new_null_store() -> Self {
-        MemoryOrNullEventStore::Null(NullEventStore::<E, I>::default())
+        MemoryOrNullEventStore::Null
+    }
+
+    pub fn new_redis_store(config: cqrs_redis::Config, pool: r2d2::Pool<RedisConnectionManager>) -> Self {
+        MemoryOrNullEventStore::Redis(config, pool)
     }
 }
 
-impl<E, I, H> EventSource for MemoryOrNullEventStore<E, I, H>
-    where
-        E: Clone,
-        I: Hash + Eq + Clone,
-        H: BuildHasher + Default,
+impl EventSource<TodoAggregate> for MemoryOrNullEventStore
 {
-    type AggregateId = I;
-    type Event = E;
-    type Events = Vec<VersionedEvent<Self::Event>>;
-    type Error = Never;
+    type Events = Vec<Result<SequencedEvent<Event>, Self::Error>>;
+    type Error = ::redis::RedisError;
 
-    fn read_events(&self, agg_id: &Self::AggregateId, since: Since) -> Result<Option<Self::Events>, Self::Error> {
+    fn read_events<Id: AsRef<str> + Into<String>>(&self, id: Id, since: Since) -> Result<Option<Self::Events>, Self::Error> {
         match *self {
-            MemoryOrNullEventStore::Memory(ref mem) => mem.read_events(agg_id, since),
-            MemoryOrNullEventStore::Null(ref nil) => nil.read_events(agg_id, since),
+            MemoryOrNullEventStore::Memory(ref mem) => Ok(mem.read_events(id, since).void_unwrap().map(|es| es.into_iter().map(|r| Ok(r.void_unwrap())).collect())),
+            MemoryOrNullEventStore::Null => Ok(EventSource::<TodoAggregate>::read_events(&NullStore, id, since).void_unwrap().map(|es| es.into_iter().map(|r| Ok(r.void_unwrap())).collect())),
+            MemoryOrNullEventStore::Redis(ref config, ref pool) => {
+                let conn = pool.get().unwrap();
+                let c = config.with_connection(&*conn);
+                let store = c.for_snapshot_with_serializer(SerdeSnapshotSerializer::default());
+                let y = EventSource::<TodoAggregate>::read_events(&store, id, since)?;
+                Ok(y.map(|x| x.collect()))
+            }
         }
     }
 }
 
-impl<E, I, H> EventAppend for MemoryOrNullEventStore<E, I, H>
-    where
-        E: Clone,
-        I: Hash + Eq + Clone,
-        H: BuildHasher + Default,
+impl EventSink<TodoAggregate> for MemoryOrNullEventStore
 {
-    type AggregateId = I;
-    type Event = E;
-    type Error = AppendEventsError<Never>;
+    type Error = AppendEventsError<::redis::RedisError>;
 
-    fn append_events(&self, agg_id: &Self::AggregateId, events: &[Self::Event], precondition: Option<Precondition>) -> Result<(), Self::Error> {
+    fn append_events<Id: AsRef<str> + Into<String>>(&self, id: Id, events: &[Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
         match *self {
-            MemoryOrNullEventStore::Memory(ref mem) => mem.append_events(agg_id, events, precondition),
-            MemoryOrNullEventStore::Null(ref nil) => nil.append_events(agg_id, events, precondition),
+            MemoryOrNullEventStore::Memory(ref mem) => Ok(mem.append_events(id, events, precondition).map_err(|::cqrs_data::memory::PreconditionFailed(p)| AppendEventsError::PreconditionFailed(p))?),
+            MemoryOrNullEventStore::Null => Ok(EventSink::<TodoAggregate>::append_events(&NullStore, id, events, precondition).void_unwrap()),
+            MemoryOrNullEventStore::Redis(ref config, ref pool) => {
+                let conn = pool.get().unwrap();
+                let c = config.with_connection(&*conn);
+                let store = c.for_snapshot_with_serializer(SerdeSnapshotSerializer::default());
+                let e = EventSink::<TodoAggregate>::append_events(&store, id, events, precondition)?;
+                Ok(e)
+            },
         }
     }
 }
 
-pub enum MemoryOrNullSnapshotStore<S, I, H = FnvBuildHasher>
-    where
-        S: Clone,
-        I: Hash + Eq + Clone,
-        H: BuildHasher + Default,
+pub enum MemoryOrNullSnapshotStore
 {
-    Memory(MemoryStateStore<S, I, H>),
-    Null(NullSnapshotStore<S, I>),
+    Memory(StateStore<TodoAggregate>),
+    Null,
+    Redis(cqrs_redis::Config, r2d2::Pool<RedisConnectionManager>)
 }
 
-impl<S, I, H> MemoryOrNullSnapshotStore<S, I, H>
-    where
-        S: Clone,
-        I: Hash + Eq + Clone,
-        H: BuildHasher + Default,
+impl MemoryOrNullSnapshotStore
 {
     pub fn new_memory_store() -> Self {
-        MemoryOrNullSnapshotStore::Memory(MemoryStateStore::<S, I, H>::default())
+        MemoryOrNullSnapshotStore::Memory(StateStore::default())
     }
 
     pub fn new_null_store() -> Self {
-        MemoryOrNullSnapshotStore::Null(NullSnapshotStore::<S, I>::default())
+        MemoryOrNullSnapshotStore::Null
+    }
+
+    pub fn new_redis_store(config: cqrs_redis::Config, pool: r2d2::Pool<RedisConnectionManager>) -> Self {
+        MemoryOrNullSnapshotStore::Redis(config, pool)
     }
 }
 
-impl<S, I, H> SnapshotSource for MemoryOrNullSnapshotStore<S, I, H>
-    where
-        S: Clone,
-        I: Hash + Eq + Clone,
-        H: BuildHasher + Default,
+impl SnapshotSource<TodoAggregate> for MemoryOrNullSnapshotStore
 {
-    type AggregateId = I;
-    type Snapshot = S;
-    type Error = Never;
+    type Error = ::redis::RedisError;
 
-    fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<VersionedSnapshot<S>>, Self::Error> {
+    fn get_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id) -> Result<Option<StateSnapshot<TodoAggregate>>, Self::Error> {
         match *self {
-            MemoryOrNullSnapshotStore::Memory(ref mem) => mem.get_snapshot(agg_id),
-            MemoryOrNullSnapshotStore::Null(ref nil) => nil.get_snapshot(agg_id),
+            MemoryOrNullSnapshotStore::Memory(ref mem) => Ok(mem.get_snapshot(id).void_unwrap()),
+            MemoryOrNullSnapshotStore::Null => Ok(NullStore.get_snapshot(id).void_unwrap()),
+            MemoryOrNullSnapshotStore::Redis(ref config, ref mgr) => {
+                let x = config.with_connection(&*mgr.get().unwrap())
+                    .for_snapshot_with_serializer(SerdeSnapshotSerializer::default())
+                    .get_snapshot(id)?;
+                Ok(x)
+            },
         }
     }
 }
 
-impl<S, I, H> SnapshotPersist for MemoryOrNullSnapshotStore<S, I, H>
-    where
-        S: Clone,
-        I: Hash + Eq + Clone,
-        H: BuildHasher + Default,
+impl SnapshotSink<TodoAggregate> for MemoryOrNullSnapshotStore
 {
-    type AggregateId = I;
-    type Snapshot = S;
-    type Error = Never;
+    type Error = ::redis::RedisError;
 
-    fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: VersionedSnapshot<S>) -> Result<(), Self::Error> {
+    fn persist_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id, snapshot: StateSnapshot<TodoAggregate>) -> Result<(), Self::Error> {
         match *self {
-            MemoryOrNullSnapshotStore::Memory(ref mem) => mem.persist_snapshot(agg_id, snapshot),
-            MemoryOrNullSnapshotStore::Null(ref nil) => nil.persist_snapshot(agg_id, snapshot),
+            MemoryOrNullSnapshotStore::Memory(ref mem) => Ok(mem.persist_snapshot(id, snapshot).void_unwrap()),
+            MemoryOrNullSnapshotStore::Null => Ok(NullStore.persist_snapshot(id, snapshot).void_unwrap()),
+            MemoryOrNullSnapshotStore::Redis(ref config, ref mgr) => {
+                let data = config.with_connection(&*mgr.get().unwrap())
+                    .for_snapshot_with_serializer(SerdeSnapshotSerializer::default())
+                    .persist_snapshot(id, snapshot)?;
+                Ok(data)
+            }
         }
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct SerdeSnapshotSerializer<S: ::serde::Serialize + ::serde::de::DeserializeOwned> {
+    _phantom: ::std::marker::PhantomData<S>,
+}
+
+impl<S: ::serde::Serialize + ::serde::de::DeserializeOwned> Default for SerdeSnapshotSerializer<S> {
+    fn default() -> Self {
+        SerdeSnapshotSerializer {
+            _phantom: ::std::marker::PhantomData,
+        }
+    }
+}
+
+impl<S: ::serde::Serialize + ::serde::de::DeserializeOwned> cqrs_redis::RedisSerializer for SerdeSnapshotSerializer<S> {
+    type Value = S;
+    type Output = Vec<u8>;
+    type Input = Vec<u8>;
+    type Error = ::serde_json::Error;
+
+    fn serialize(&self, snapshot: Self::Value) -> Self::Output {
+        ::serde_json::to_vec(&snapshot).unwrap()
+    }
+
+    fn deserialize(&self, snapshot: Self::Input) -> Result<Self::Value, Self::Error> {
+        ::serde_json::from_slice(&snapshot)
+    }
+}

@@ -6,7 +6,5 @@ authors = ["Marcus Griep <marcus@griep.us>"]
 [dependencies]
 
 [dev-dependencies]
-smallvec = "*"
+static_assertions = "*"
 
-[build-dependencies]
-rustc_version = "*"
