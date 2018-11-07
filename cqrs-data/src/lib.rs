@@ -5,8 +5,6 @@ extern crate hashbrown;
 extern crate parking_lot;
 extern crate void;
 
-#[cfg(test)] #[macro_use] extern crate static_assertions;
-
 pub mod memory;
 pub mod trivial;
 
