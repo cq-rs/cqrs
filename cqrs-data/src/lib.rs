@@ -1,4 +1,4 @@
-#! This is documented.
+//! This is documented.
 
 extern crate cqrs;
 extern crate hashbrown;
@@ -9,12 +9,12 @@ pub mod memory;
 pub mod trivial;
 
 mod event;
-mod state;
+mod snapshot;
 
 mod entity;
 mod types;
 
 pub use event::{EventSink, EventSource};
-pub use state::{SnapshotSink, SnapshotSource};
+pub use snapshot::{SnapshotSink, SnapshotSource};
 pub use entity::Entity;
 pub use types::Since;

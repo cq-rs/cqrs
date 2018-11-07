@@ -1,4 +1,5 @@
 use std::hash::BuildHasher;
+use std::fmt;
 use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use void::Void;
@@ -83,12 +84,18 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PreconditionFailed(pub Precondition);
 
 impl From<Precondition> for PreconditionFailed {
     fn from(p: Precondition) -> Self {
         PreconditionFailed(p)
+    }
+}
+
+impl fmt::Display for PreconditionFailed {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "precondition failed: {}", self.0)
     }
 }
 
