@@ -8,10 +8,8 @@ fnv = "*"
 base64 = "*"
 cqrs = { path = "../cqrs" }
 cqrs-data = { path = "../cqrs-data" }
-#cqrs-memory = { path = "../cqrs-memory" }
 cqrs-todo-core = { path = "../cqrs-todo-core" }
 cqrs-postgres = { path = "../cqrs-postgres" }
-cqrs-redis = { path = "../cqrs-redis" }
 clap = "*"
 chrono = "*"
 iron = "*"
@@ -19,9 +17,8 @@ juniper = "0.10"
 juniper_codegen = "*"
 juniper_iron = "*"
 mount = "*"
-redis = "*"
+parking_lot = "0.6.4"
 r2d2_postgres = "0.14.0"
-r2d2_redis = "*"
 r2d2 = "*"
 serde = "*"
 serde_json = "*"

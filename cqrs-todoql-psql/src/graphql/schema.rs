@@ -19,7 +19,7 @@ graphql_object!(Query: Context |&self| {
     field allTodos(&executor, first: Option<ID>, after: Option<Cursor>) -> FieldResult<TodoPage> {
         let context = executor.context();
 
-        let reader = context.stream_index.read().unwrap();
+        let reader = context.stream_index.read();
         let len = reader.len();
 
         let mut skip =
@@ -73,11 +73,11 @@ graphql_object!(Query: Context |&self| {
     }
 });
 
-struct TodoQL(Entity<TodoAggregate, String>);
+struct TodoQL(Entity<'static, TodoAggregate>);
 
 graphql_object!(TodoQL: Context |&self| {
     field id() -> FieldResult<ID> {
-        Ok(self.0.id().to_owned().into())
+        Ok(self.0.id().to_string().into())
     }
 
     field description() -> FieldResult<&str> {
@@ -192,17 +192,17 @@ graphql_object!(Mutations: Context |&self| {
 
         let new_id = context.id_provider.new_id();
 
-        let mut entity: Entity<TodoAggregate, _> = Entity::from_default(new_id.clone());
+        let mut entity: Entity<TodoAggregate> = Entity::from_default(new_id.clone());
 
         let events = entity.aggregate().execute(command)?;
 
         let conn = context.backend.get()?;
         let store = PostgresStore::new(&*conn, "todo");
 
-        store.append_events(&new_id, &events, Some(Precondition::New))?;
+        store.append_events(entity.id().as_ref(), &events, Some(Precondition::New))?;
         entity.apply_events(events);
 
-        context.stream_index.write().unwrap().push(new_id.clone());
+        context.stream_index.write().push(new_id);
 
         Ok(TodoQL(entity))
     }
@@ -233,15 +233,15 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::new(&*conn, "todo");
 
-        let mut entity = Entity::<TodoAggregate, _>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
+        let mut entity = Entity::<TodoAggregate>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
 
         let events = entity.aggregate().execute(command)?;
 
-        store.append_events(&entity.id(), &events, Some(precondition))?;
+        store.append_events(entity.id().as_ref(), &events, Some(precondition))?;
         entity.apply_events(events);
 
         if entity.version() - entity.snapshot_version() > 10 {
-            store.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+            store.persist_snapshot(entity.id().as_ref(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
         }
 
         Ok(Some(TodoQL(entity)))
@@ -261,15 +261,15 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::new(&*conn, "todo");
 
-        let mut entity = Entity::<TodoAggregate, _>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
+        let mut entity = Entity::<TodoAggregate>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
 
         let events = entity.aggregate().execute(command)?;
 
-        store.append_events(&entity.id(), &events, Some(precondition))?;
+        store.append_events(entity.id().as_ref(), &events, Some(precondition))?;
         entity.apply_events(events);
 
         if entity.version() - entity.snapshot_version() > 10 {
-            store.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+            store.persist_snapshot(entity.id().as_ref(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
         }
 
         Ok(Some(TodoQL(entity)))
@@ -287,15 +287,15 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::new(&*conn, "todo");
 
-        let mut entity = Entity::<TodoAggregate, _>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
+        let mut entity = Entity::<TodoAggregate>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
 
         let events = entity.aggregate().execute(command)?;
 
-        store.append_events(&entity.id(), &events, Some(precondition))?;
+        store.append_events(entity.id().as_ref(), &events, Some(precondition))?;
         entity.apply_events(events);
 
         if entity.version() - entity.snapshot_version() > 10 {
-            store.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+            store.persist_snapshot(entity.id().as_ref(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
         }
 
         Ok(Some(TodoQL(entity)))
@@ -313,15 +313,15 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::new(&*conn, "todo");
 
-        let mut entity = Entity::<TodoAggregate, _>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
+        let mut entity = Entity::<TodoAggregate>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
 
         let events = entity.aggregate().execute(command)?;
 
-        store.append_events(&entity.id(), &events, Some(precondition))?;
+        store.append_events(entity.id().as_ref(), &events, Some(precondition))?;
         entity.apply_events(events);
 
         if entity.version() - entity.snapshot_version() > 10 {
-            store.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+            store.persist_snapshot(entity.id().as_ref(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
         }
 
         Ok(Some(TodoQL(entity)))
@@ -339,15 +339,15 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::new(&*conn, "todo");
 
-        let mut entity = Entity::<TodoAggregate, _>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
+        let mut entity = Entity::<TodoAggregate>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
 
         let events = entity.aggregate().execute(command)?;
 
-        store.append_events(&entity.id(), &events, Some(precondition))?;
+        store.append_events(entity.id().as_ref(), &events, Some(precondition))?;
         entity.apply_events(events);
 
         if entity.version() - entity.snapshot_version() > 10 {
-            store.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+            store.persist_snapshot(entity.id().as_ref(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
         }
 
         Ok(Some(TodoQL(entity)))
@@ -365,15 +365,15 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::new(&*conn, "todo");
 
-        let mut entity = Entity::<TodoAggregate, _>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
+        let mut entity = Entity::<TodoAggregate>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
 
         let events = entity.aggregate().execute(command)?;
 
-        store.append_events(&entity.id(), &events, Some(precondition))?;
+        store.append_events(entity.id().as_ref(), &events, Some(precondition))?;
         entity.apply_events(events);
 
         if entity.version() - entity.snapshot_version() > 10 {
-            store.persist_snapshot(&entity.id(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
+            store.persist_snapshot(entity.id().as_ref(), StateSnapshot {snapshot: entity.aggregate().to_owned(), version: entity.version()})?;
         }
 
         Ok(Some(TodoQL(entity)))

@@ -1,7 +1,6 @@
 extern crate cqrs;
 extern crate cqrs_data;
 extern crate cqrs_postgres;
-extern crate cqrs_redis;
 extern crate cqrs_todo_core;
 
 #[macro_use] extern crate juniper;
@@ -13,7 +12,7 @@ extern crate fnv;
 extern crate iron;
 extern crate mount;
 extern crate hashids;
-
+extern crate parking_lot;
 extern crate r2d2_postgres;
 extern crate r2d2;
 extern crate serde;
@@ -23,8 +22,6 @@ extern crate void;
 mod graphql;
 
 use r2d2_postgres::PostgresConnectionManager;
-
-type AggregateId = String;
 
 pub fn start_todo_server(conn_str: &str) -> iron::Listening {
     let pool = r2d2::Pool::new(PostgresConnectionManager::new(conn_str, r2d2_postgres::TlsMode::None).unwrap()).unwrap();
@@ -73,9 +70,7 @@ mod helper {
     use cqrs_postgres::PostgresStore;
     use r2d2_postgres::postgres::Connection;
 
-    use super::AggregateId;
-
-    pub fn prefill(id: &AggregateId, conn: impl ::std::ops::Deref<Target=Connection>) {
+    pub fn prefill(id: &str, conn: impl ::std::ops::Deref<Target=Connection>) {
         let epoch = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
         let reminder_time = epoch + Duration::seconds(10000);
         let mut events = Vec::new();

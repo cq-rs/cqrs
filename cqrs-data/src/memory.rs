@@ -1,6 +1,6 @@
-use hashbrown::HashMap;
-use parking_lot::{RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
-use std::hash::Hash;
+use std::hash::BuildHasher;
+use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
+use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use void::Void;
 use ::event;
 use ::state;
@@ -9,27 +9,38 @@ use cqrs::{EventNumber, Precondition, SequencedEvent, Version};
 use cqrs::StateSnapshot;
 
 #[derive(Debug)]
-pub struct EventStore<K: Clone + Eq + Hash, E: Clone> {
-    inner: RwLock<HashMap<K, RwLock<Vec<E>>>>,
+pub struct EventStore<E: Clone, Hasher = DefaultHashBuilder>
+where
+    E: Clone,
+    Hasher: BuildHasher,
+{
+    inner: RwLock<HashMap<String, RwLock<Vec<E>>, Hasher>>,
 }
 
-impl<K: Clone + Eq + Hash, E: Clone> Default for EventStore<K, E> {
+impl<E: Clone, Hasher: BuildHasher + Default> Default for EventStore<E, Hasher> {
     fn default() -> Self {
         EventStore {
-            inner: RwLock::new(HashMap::new())
+            inner: RwLock::new(HashMap::default())
         }
     }
 }
 
-impl<K: Clone + Eq + Hash, E: Clone> event::Source<E> for EventStore<K, E> {
-    type AggregateId = K;
+impl<E: Clone, Hasher: BuildHasher> EventStore<E, Hasher> {
+    pub fn with_hasher(hasher: Hasher) -> Self {
+        EventStore {
+            inner: RwLock::new(HashMap::with_hasher(hasher))
+        }
+    }
+}
+
+impl<E: Clone, Hasher: BuildHasher> event::Source<E> for EventStore<E, Hasher> {
     type Events = Vec<Result<SequencedEvent<E>, Void>>;
     type Error = Void;
 
-    fn read_events(&self, agg_id: &Self::AggregateId, since: Since) -> Result<Option<Self::Events>, Self::Error> {
+    fn read_events<Id: AsRef<str> + Into<String>>(&self, id: Id, since: Since) -> Result<Option<Self::Events>, Self::Error> {
         let table = self.inner.read();
 
-        let stream = table.get(agg_id);
+        let stream = table.get(id.as_ref());
 
         let result =
             stream.map(|stream| {
@@ -67,62 +78,70 @@ impl From<Precondition> for PreconditionFailed {
     }
 }
 
-impl<K: Clone + Eq + Hash, E: Clone> event::Store<E> for EventStore<K, E> {
-    type AggregateId = K;
+impl<E: Clone, Hasher: BuildHasher> event::Store<E> for EventStore<E, Hasher> {
     type Error = PreconditionFailed;
 
-    fn append_events(&self, agg_id: &Self::AggregateId, events: &[E], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
+    fn append_events<Id: AsRef<str> + Into<String>>(&self, id: Id, events: &[E], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
         let table = self.inner.upgradable_read();
 
-        let existing;
-        let table =
-            if table.contains_key(agg_id) {
-                existing = true;
-                RwLockUpgradableReadGuard::downgrade(table)
-            } else {
-                existing = false;
-                let mut table = RwLockUpgradableReadGuard::upgrade(table);
-                table.insert(agg_id.to_owned(), Default::default());
-                RwLockWriteGuard::downgrade(table)
-            };
+        if table.contains_key(id.as_ref()) {
+            let table = RwLockUpgradableReadGuard::downgrade(table);
+            let stream = table.get(id.as_ref()).unwrap().upgradable_read();
 
-        let stream = table.get(agg_id).unwrap().upgradable_read();
+            let current_version = Version::new(stream.len() as u64);
 
-        let current_version = Version::new(stream.len() as u64);
+            if let Some(precondition) = precondition {
+                precondition.verify(Some(current_version))?;
+            }
 
-        if let Some(precondition) = precondition {
-            precondition.verify(if existing { Some(current_version) } else { None })?;
+            let stream = &mut RwLockUpgradableReadGuard::upgrade(stream);
+
+            stream.extend_from_slice(events);
+
+            Ok(current_version.incr().event_number().unwrap())
+        } else {
+            if let Some(precondition) = precondition {
+                precondition.verify(None)?;
+            }
+
+            let stream = RwLock::new(events.into());
+
+            let mut table = RwLockUpgradableReadGuard::upgrade(table);
+            table.insert(id.into(), stream);
+
+            Ok(EventNumber::MIN_VALUE)
         }
-
-        let stream = &mut RwLockUpgradableReadGuard::upgrade(stream);
-
-        stream.extend_from_slice(events);
-
-        Ok(current_version.incr().event_number().unwrap())
     }
 }
 
 #[derive(Debug)]
-pub struct StateStore<K: Clone + Eq + Hash, S: Clone> {
-    inner: RwLock<HashMap<K, RwLock<StateSnapshot<S>>>>,
+pub struct StateStore<S: Clone, Hasher: BuildHasher = DefaultHashBuilder> {
+    inner: RwLock<HashMap<String, RwLock<StateSnapshot<S>>, Hasher>>,
 }
 
-impl<K: Clone + Eq + Hash, S: Clone> Default for StateStore<K, S> {
+impl<S: Clone, Hasher: BuildHasher + Default> Default for StateStore<S, Hasher> {
     fn default() -> Self {
         StateStore {
-            inner: RwLock::new(HashMap::new())
+            inner: RwLock::new(HashMap::default())
         }
     }
 }
 
-impl<K: Clone + Eq + Hash, S: Clone> state::Source<S> for StateStore<K, S> {
-    type AggregateId = K;
+impl<S: Clone, Hasher: BuildHasher> StateStore<S, Hasher> {
+    pub fn with_hasher(hasher: Hasher) -> Self {
+        StateStore {
+            inner: RwLock::new(HashMap::with_hasher(hasher))
+        }
+    }
+}
+
+impl<S: Clone, Hasher: BuildHasher> state::Source<S> for StateStore<S, Hasher> {
     type Error = Void;
 
-    fn get_snapshot(&self, agg_id: &Self::AggregateId) -> Result<Option<StateSnapshot<S>>, Self::Error> {
+    fn get_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id) -> Result<Option<StateSnapshot<S>>, Self::Error> where Self: Sized {
         let table = self.inner.read();
 
-        let snapshot = table.get(agg_id);
+        let snapshot = table.get(id.as_ref());
 
         Ok(snapshot.map(|snapshot| {
             snapshot.read().to_owned()
@@ -130,20 +149,19 @@ impl<K: Clone + Eq + Hash, S: Clone> state::Source<S> for StateStore<K, S> {
     }
 }
 
-impl<K: Clone + Eq + Hash, S: Clone> state::Store<S> for StateStore<K, S> {
-    type AggregateId = K;
+impl<S: Clone, Hasher: BuildHasher> state::Store<S> for StateStore<S, Hasher> {
     type Error = Void;
 
-    fn persist_snapshot(&self, agg_id: &Self::AggregateId, snapshot: StateSnapshot<S>) -> Result<(), Self::Error> {
+    fn persist_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id, snapshot: StateSnapshot<S>) -> Result<(), Self::Error> where Self: Sized {
         let table = self.inner.upgradable_read();
 
-        if table.contains_key(agg_id) {
+        if table.contains_key(id.as_ref()) {
             let table = RwLockUpgradableReadGuard::downgrade(table);
-            let mut value = table.get(agg_id).unwrap().write();
+            let mut value = table.get(id.as_ref()).unwrap().write();
             *value = snapshot;
         } else {
             let mut table = RwLockUpgradableReadGuard::upgrade(table);
-            table.insert(agg_id.to_owned(), RwLock::new(snapshot));
+            table.insert(id.into(), RwLock::new(snapshot));
         };
 
         Ok(())

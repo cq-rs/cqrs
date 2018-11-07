@@ -1,9 +1,9 @@
-extern crate cqrs_todoql;
+extern crate cqrs_todoql_psql;
 extern crate clap;
 
 use clap::{App, Arg};
 
-use cqrs_todoql::start_todo_server;
+use cqrs_todoql_psql::start_todo_server;
 
 fn main() {
     let app = App::new("todo")
