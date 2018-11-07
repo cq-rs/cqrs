@@ -10,7 +10,6 @@ pub trait Aggregate {
 
     fn apply(&mut self, event: Self::Event);
     fn execute(&self, command: Self::Command) -> Result<Self::Events, Self::Error>;
-    #[inline(always)]
     fn entity_type() -> &'static str where Self: Sized;
 }
 
