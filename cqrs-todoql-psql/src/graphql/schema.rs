@@ -191,7 +191,7 @@ graphql_object!(Mutations: Context |&self| {
 
         let new_id = context.id_provider.new_id();
 
-        let mut entity: Entity<TodoAggregate> = Entity::from_default(new_id.clone());
+        let mut entity = Entity::<TodoAggregate>::from_default(new_id.clone());
 
         let events = entity.aggregate().execute(command)?;
 

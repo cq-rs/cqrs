@@ -35,14 +35,13 @@ impl<'id, A: Aggregate> Entity<'id, A> {
     }
 
     pub fn refresh<Es: IntoIterator<Item=Result<SequencedEvent<A::Event>, Err>>, Err: Debug + Display>(&mut self, event_source: &impl event::EventSource<A, Events=Es, Error=Err>) -> Result<(), Err> {
-        let events = event_source.read_events(self.id.as_ref(), ::Since::from(self.version))?;
+        let events = event_source.read_events(self.id.as_ref(), self.version.into())?;
 
         if let Some(events) = events {
             for event in events {
                 let event = event?;
 
                 self.aggregate.apply(event.event);
-
                 self.version = self.version.incr();
 
                 debug_assert_eq!(Version::Number(event.sequence), self.version);
@@ -230,7 +229,16 @@ where
         Ok(entity)
     }
 
-    pub fn rehydrate<Es: IntoIterator<Item=Result<SequencedEvent<A::Event>, EErr>>, EErr: Debug + Display, SErr: Debug + Display>(id: impl Into<Cow<'id, str>>, event_source: &impl event::EventSource<A, Events=Es, Error=EErr>, snapshot_source: &impl state::SnapshotSource<A, Error=SErr>) -> Result<Option<Self>, EntityLoadError<EErr, SErr>> {
+    pub fn rehydrate<Es, EErr, SErr>(
+        id: impl Into<Cow<'id, str>>,
+        event_source: &impl event::EventSource<A, Events=Es, Error=EErr>,
+        snapshot_source: &impl state::SnapshotSource<A, Error=SErr>
+    ) -> Result<Option<Self>, EntityLoadError<EErr, SErr>>
+    where
+        Es: IntoIterator<Item=Result<SequencedEvent<A::Event>, EErr>>,
+        EErr: Debug + Display,
+        SErr: Debug + Display,
+    {
         let (mut entity, snapshot_status) = Self::load_from_snapshot_or_default(id, snapshot_source).map_err(EntityLoadError::SnapshotSource)?;
 
         entity.refresh(event_source).map_err(EntityLoadError::EventSource)?;
@@ -268,9 +276,9 @@ where
                 precondition.verify(Some(entity.version()))?;
             }
 
-            let precondition = precondition.unwrap_or(cqrs::Precondition::New);
+            let precondition = cqrs::Precondition::ExpectedVersion(entity.version());
 
-            let events = entity.aggregate().execute(command).map_err(|e| EntityExecError::Exec(entity.clone(), e))?;
+            let events = entity.aggregate.execute(command).map_err(|e| EntityExecError::Exec(entity.clone(), e))?;
 
             entity.apply_events_and_persist(
                 events,
