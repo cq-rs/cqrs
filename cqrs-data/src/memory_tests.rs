@@ -8,7 +8,7 @@ impl cqrs::Aggregate for TestAggregate {
     type Event = TestEvent;
     type Events = Option<Self::Event>;
     type Command = ();
-    type Error = ();
+    type Error = ::void::Void;
 
     fn apply(&mut self, _event: Self::Event) {
         unimplemented!()

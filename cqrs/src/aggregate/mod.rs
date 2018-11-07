@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 //pub mod hydrated;
 
@@ -6,7 +6,7 @@ pub trait Aggregate {
     type Event;
     type Command;
     type Events: IntoIterator<Item=Self::Event>;
-    type Error: Debug;
+    type Error: Debug + Display;
 
     fn apply(&mut self, event: Self::Event);
     fn execute(&self, command: Self::Command) -> Result<Self::Events, Self::Error>;
@@ -14,7 +14,7 @@ pub trait Aggregate {
     fn entity_type() -> &'static str where Self: Sized;
 }
 
-impl<E, C, Es: IntoIterator<Item=E>, Err: Debug> Projection for Aggregate<Event=E, Command=C, Events=Es, Error=Err> {
+impl<E, C, Es: IntoIterator<Item=E>, Err: Debug + Display> Projection for Aggregate<Event=E, Command=C, Events=Es, Error=Err> {
     type Event = E;
 
     fn apply(&mut self, event: Self::Event) {
@@ -22,7 +22,7 @@ impl<E, C, Es: IntoIterator<Item=E>, Err: Debug> Projection for Aggregate<Event=
     }
 }
 
-impl<E, C, Es: IntoIterator<Item=E>, Err: Debug> CommandHandler<C> for Aggregate<Event=E, Command=C, Events=Es, Error=Err> {
+impl<E, C, Es: IntoIterator<Item=E>, Err: Debug + Display> CommandHandler<C> for Aggregate<Event=E, Command=C, Events=Es, Error=Err> {
     type Event = E;
     type Events = Es;
     type Error = Err;

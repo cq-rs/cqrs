@@ -237,19 +237,18 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-        let mut entity = Entity::<TodoAggregate>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
-
-        let events = entity.aggregate().execute(command)?;
-
-        entity.apply_events_and_persist(
-            events,
-            precondition,
+        let entity = Entity::<TodoAggregate>::load_exec_and_persist(
+            id,
+            command,
+            Some(precondition),
+            &store,
+            &store,
             &store,
             &store,
             10,
         )?;
 
-        Ok(Some(TodoQL(entity)))
+        Ok(entity.map(TodoQL))
     }
 
     field set_reminder(&executor, time: DateTime<Utc>, expected_version: Option<i32>) -> FieldResult<Option<TodoQL>> {
@@ -266,19 +265,18 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-        let mut entity = Entity::<TodoAggregate>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
-
-        let events = entity.aggregate().execute(command)?;
-
-        entity.apply_events_and_persist(
-            events,
-            precondition,
+       let entity = Entity::<TodoAggregate>::load_exec_and_persist(
+            id,
+            command,
+            Some(precondition),
+            &store,
+            &store,
             &store,
             &store,
             10,
         )?;
 
-        Ok(Some(TodoQL(entity)))
+        Ok(entity.map(TodoQL))
     }
 
     field cancel_reminder(&executor, expected_version: Option<i32>) -> FieldResult<Option<TodoQL>> {
@@ -293,19 +291,18 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-        let mut entity = Entity::<TodoAggregate>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
-
-        let events = entity.aggregate().execute(command)?;
-
-        entity.apply_events_and_persist(
-            events,
-            precondition,
+       let entity = Entity::<TodoAggregate>::load_exec_and_persist(
+            id,
+            command,
+            Some(precondition),
+            &store,
+            &store,
             &store,
             &store,
             10,
         )?;
 
-        Ok(Some(TodoQL(entity)))
+        Ok(entity.map(TodoQL))
     }
 
     field toggle(&executor, expected_version: Option<i32>) -> FieldResult<Option<TodoQL>> {
@@ -320,19 +317,18 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-        let mut entity = Entity::<TodoAggregate>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
-
-        let events = entity.aggregate().execute(command)?;
-
-        entity.apply_events_and_persist(
-            events,
-            precondition,
+       let entity = Entity::<TodoAggregate>::load_exec_and_persist(
+            id,
+            command,
+            Some(precondition),
+            &store,
+            &store,
             &store,
             &store,
             10,
         )?;
 
-        Ok(Some(TodoQL(entity)))
+        Ok(entity.map(TodoQL))
     }
 
     field reset(&executor, expected_version: Option<i32>) -> FieldResult<Option<TodoQL>> {
@@ -347,19 +343,18 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-        let mut entity = Entity::<TodoAggregate>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
-
-        let events = entity.aggregate().execute(command)?;
-
-        entity.apply_events_and_persist(
-            events,
-            precondition,
+       let entity = Entity::<TodoAggregate>::load_exec_and_persist(
+            id,
+            command,
+            Some(precondition),
+            &store,
+            &store,
             &store,
             &store,
             10,
         )?;
 
-        Ok(Some(TodoQL(entity)))
+        Ok(entity.map(TodoQL))
     }
 
     field complete(&executor, expected_version: Option<i32>) -> FieldResult<Option<TodoQL>> {
@@ -374,18 +369,17 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-        let mut entity = Entity::<TodoAggregate>::rehydrate(id, &store, &store)?.ok_or("Entity not found")?;
-
-        let events = entity.aggregate().execute(command)?;
-
-        entity.apply_events_and_persist(
-            events,
-            precondition,
+       let entity = Entity::<TodoAggregate>::load_exec_and_persist(
+            id,
+            command,
+            Some(precondition),
+            &store,
+            &store,
             &store,
             &store,
             10,
         )?;
 
-        Ok(Some(TodoQL(entity)))
+        Ok(entity.map(TodoQL))
     }
 });
