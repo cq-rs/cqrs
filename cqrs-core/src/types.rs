@@ -183,6 +183,12 @@ pub struct SequencedEvent<Event>
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub struct StateSnapshotView<'state, State: 'state> {
+    pub version: Version,
+    pub snapshot: &'state State,
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct StateSnapshot<State> {
     pub version: Version,
     pub snapshot: State,
@@ -202,3 +208,8 @@ impl From<Version> for Since {
         }
     }
 }
+
+pub trait CqrsError: fmt::Debug + fmt::Display + Send + Sync + 'static {}
+
+impl<T> CqrsError for T
+where T: fmt::Debug + fmt::Display + Send + Sync + 'static {}

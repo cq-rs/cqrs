@@ -99,7 +99,7 @@ impl IdProvider {
 
 mod helper {
     use chrono::{Duration,Utc,TimeZone};
-    use cqrs::{Version, StateSnapshot};
+    use cqrs::{Version, StateSnapshotView};
     use cqrs::{EventSink, SnapshotSink};
     use cqrs_todo_core::{Event, TodoAggregate, TodoData, TodoStatus, domain};
 
@@ -117,9 +117,9 @@ mod helper {
         events.push(Event::ReminderUpdated(None));
 
         es.append_events(id, &events, None).unwrap();
-        ss.persist_snapshot(id, StateSnapshot {
+        ss.persist_snapshot(id, StateSnapshotView {
             version: Version::new(1),
-            snapshot: TodoAggregate::Created(TodoData {
+            snapshot: &TodoAggregate::Created(TodoData {
                 description: domain::Description::new("Hello!").unwrap(),
                 reminder: None,
                 status: TodoStatus::NotCompleted,

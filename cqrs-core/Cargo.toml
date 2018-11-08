@@ -7,4 +7,5 @@ authors = ["Marcus Griep <marcus@griep.us>"]
 
 [dev-dependencies]
 static_assertions = "*"
+void = "*"
 

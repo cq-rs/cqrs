@@ -5,6 +5,8 @@ use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use void::Void;
 use super::*;
 
+type EventStream<Event> = RwLock<Vec<Event>>;
+
 #[derive(Debug)]
 pub struct EventStore<A, Hasher = DefaultHashBuilder>
 where
@@ -12,7 +14,7 @@ where
     A::Event: Clone,
     Hasher: BuildHasher,
 {
-    inner: RwLock<HashMap<String, RwLock<Vec<A::Event>>, Hasher>>,
+    inner: RwLock<HashMap<String, EventStream<A::Event>, Hasher>>,
 }
 
 impl<A, Hasher> Default for EventStore<A, Hasher>
@@ -50,10 +52,10 @@ where
     type Events = Vec<Result<SequencedEvent<A::Event>, Void>>;
     type Error = Void;
 
-    fn read_events<Id: AsRef<str> + Into<String>>(&self, id: Id, since: Since) -> Result<Option<Self::Events>, Self::Error> {
+    fn read_events(&self, id: &str, since: Since) -> Result<Option<Self::Events>, Self::Error> {
         let table = self.inner.read();
 
-        let stream = table.get(id.as_ref());
+        let stream = table.get(id);
 
         let result =
             stream.map(|stream| {
@@ -105,12 +107,12 @@ where
 {
     type Error = PreconditionFailed;
 
-    fn append_events<Id: AsRef<str> + Into<String>>(&self, id: Id, events: &[A::Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
+    fn append_events(&self, id: &str, events: &[A::Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
         let table = self.inner.upgradable_read();
 
-        if table.contains_key(id.as_ref()) {
+        if table.contains_key(id) {
             let table = RwLockUpgradableReadGuard::downgrade(table);
-            let stream = table.get(id.as_ref()).unwrap().upgradable_read();
+            let stream = table.get(id).unwrap().upgradable_read();
 
             let current_version = Version::new(stream.len() as u64);
 
@@ -178,10 +180,10 @@ where
 {
     type Error = Void;
 
-    fn get_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id) -> Result<Option<StateSnapshot<A>>, Self::Error> where Self: Sized {
+    fn get_snapshot(&self, id: &str) -> Result<Option<StateSnapshot<A>>, Self::Error> where Self: Sized {
         let table = self.inner.read();
 
-        let snapshot = table.get(id.as_ref());
+        let snapshot = table.get(id);
 
         Ok(snapshot.map(|snapshot| {
             snapshot.read().to_owned()
@@ -196,16 +198,22 @@ where
 {
     type Error = Void;
 
-    fn persist_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id, snapshot: StateSnapshot<A>) -> Result<(), Self::Error> where Self: Sized {
+    fn persist_snapshot(&self, id: &str, snapshot: StateSnapshotView<A>) -> Result<(), Self::Error> where Self: Sized {
         let table = self.inner.upgradable_read();
 
-        if table.contains_key(id.as_ref()) {
+        if table.contains_key(id) {
             let table = RwLockUpgradableReadGuard::downgrade(table);
-            let mut value = table.get(id.as_ref()).unwrap().write();
-            *value = snapshot;
+            let mut value = table.get(id).unwrap().write();
+            *value = StateSnapshot {
+                version: snapshot.version,
+                snapshot: snapshot.snapshot.to_owned(),
+            };
         } else {
             let mut table = RwLockUpgradableReadGuard::upgrade(table);
-            table.insert(id.into(), RwLock::new(snapshot));
+            table.insert(id.into(), RwLock::new(StateSnapshot {
+                version: snapshot.version,
+                snapshot: snapshot.snapshot.to_owned(),
+            }));
         };
 
         Ok(())
@@ -214,4 +222,4 @@ where
 
 #[path = "memory_tests.rs"]
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

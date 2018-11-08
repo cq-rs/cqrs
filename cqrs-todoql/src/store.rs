@@ -1,4 +1,4 @@
-use cqrs::{EventNumber, Precondition, SequencedEvent, StateSnapshot};
+use cqrs::{EventNumber, Precondition, SequencedEvent, StateSnapshot, StateSnapshotView};
 use cqrs::Since;
 use cqrs::{EventSink, EventSource, SnapshotSink, SnapshotSource};
 use cqrs::trivial::NullStore;
@@ -40,7 +40,7 @@ impl EventSource<TodoAggregate> for MemoryOrNullEventStore
     type Events = Vec<Result<SequencedEvent<Event>, Self::Error>>;
     type Error = ::redis::RedisError;
 
-    fn read_events<Id: AsRef<str> + Into<String>>(&self, id: Id, since: Since) -> Result<Option<Self::Events>, Self::Error> {
+    fn read_events(&self, id: &str, since: Since) -> Result<Option<Self::Events>, Self::Error> {
         match *self {
             MemoryOrNullEventStore::Memory(ref mem) => Ok(mem.read_events(id, since).void_unwrap().map(|es| es.into_iter().map(|r| Ok(r.void_unwrap())).collect())),
             MemoryOrNullEventStore::Null => Ok(EventSource::<TodoAggregate>::read_events(&NullStore, id, since).void_unwrap().map(|es| es.into_iter().map(|r| Ok(r.void_unwrap())).collect())),
@@ -59,7 +59,7 @@ impl EventSink<TodoAggregate> for MemoryOrNullEventStore
 {
     type Error = AppendEventsError;
 
-    fn append_events<Id: AsRef<str> + Into<String>>(&self, id: Id, events: &[Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
+    fn append_events(&self, id: &str, events: &[Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
         match *self {
             MemoryOrNullEventStore::Memory(ref mem) => Ok(mem.append_events(id, events, precondition).map_err(|::cqrs::memory::PreconditionFailed(p)| AppendEventsError::PreconditionFailed(p))?),
             MemoryOrNullEventStore::Null => Ok(EventSink::<TodoAggregate>::append_events(&NullStore, id, events, precondition).void_unwrap()),
@@ -100,7 +100,7 @@ impl SnapshotSource<TodoAggregate> for MemoryOrNullSnapshotStore
 {
     type Error = ::redis::RedisError;
 
-    fn get_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id) -> Result<Option<StateSnapshot<TodoAggregate>>, Self::Error> {
+    fn get_snapshot(&self, id: &str) -> Result<Option<StateSnapshot<TodoAggregate>>, Self::Error> {
         match *self {
             MemoryOrNullSnapshotStore::Memory(ref mem) => Ok(mem.get_snapshot(id).void_unwrap()),
             MemoryOrNullSnapshotStore::Null => Ok(NullStore.get_snapshot(id).void_unwrap()),
@@ -118,7 +118,7 @@ impl SnapshotSink<TodoAggregate> for MemoryOrNullSnapshotStore
 {
     type Error = ::redis::RedisError;
 
-    fn persist_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id, snapshot: StateSnapshot<TodoAggregate>) -> Result<(), Self::Error> {
+    fn persist_snapshot(&self, id: &str, snapshot: StateSnapshotView<TodoAggregate>) -> Result<(), Self::Error> {
         match *self {
             MemoryOrNullSnapshotStore::Memory(ref mem) => Ok(mem.persist_snapshot(id, snapshot).void_unwrap()),
             MemoryOrNullSnapshotStore::Null => Ok(NullStore.persist_snapshot(id, snapshot).void_unwrap()),
@@ -151,8 +151,8 @@ impl<S: ::serde::Serialize + ::serde::de::DeserializeOwned> cqrs_redis::RedisSer
     type Input = Vec<u8>;
     type Error = ::serde_json::Error;
 
-    fn serialize(&self, snapshot: Self::Value) -> Self::Output {
-        ::serde_json::to_vec(&snapshot).unwrap()
+    fn serialize(&self, snapshot: &Self::Value) -> Self::Output {
+        ::serde_json::to_vec(snapshot).unwrap()
     }
 
     fn deserialize(&self, snapshot: Self::Input) -> Result<Self::Value, Self::Error> {

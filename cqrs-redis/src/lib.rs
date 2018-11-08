@@ -13,28 +13,34 @@ pub trait RedisSerializer {
     type Input: redis::FromRedisValue;
     type Error: ::std::error::Error;
 
-    fn serialize(&self, value: Self::Value) -> Self::Output;
+    fn serialize(&self, value: &Self::Value) -> Self::Output;
     fn deserialize(&self, value: Self::Input) -> Result<Self::Value, Self::Error>;
 }
 
-pub struct IdentitySerializer<S: redis::ToRedisArgs + redis::FromRedisValue> {
+pub struct IdentitySerializer<S: redis::FromRedisValue + ToOwned>
+where S::Owned: redis::ToRedisArgs
+{
     _phantom: PhantomData<S>,
 }
 
-impl<S: redis::ToRedisArgs + redis::FromRedisValue> Default for IdentitySerializer<S> {
+impl<S: redis::FromRedisValue + ToOwned> Default for IdentitySerializer<S>
+where S::Owned: redis::ToRedisArgs
+{
     fn default() -> Self {
         IdentitySerializer { _phantom: PhantomData }
     }
 }
 
-impl<S: redis::ToRedisArgs + redis::FromRedisValue> RedisSerializer for IdentitySerializer<S> {
+impl<S: redis::FromRedisValue + ToOwned> RedisSerializer for IdentitySerializer<S>
+where S::Owned: redis::ToRedisArgs
+{
     type Value = S;
-    type Output = S;
+    type Output = S::Owned;
     type Input = S;
     type Error = Void;
 
-    fn serialize(&self, value: Self::Value) -> Self::Output {
-        value
+    fn serialize(&self, value: &Self::Value) -> Self::Output {
+        value.to_owned()
     }
     fn deserialize(&self, value: Self::Input) -> Result<Self::Value, Self::Error> {
         Ok(value)
@@ -78,7 +84,9 @@ mod store {
             }
         }
 
-        pub fn for_snapshot<S: redis::ToRedisArgs + redis::FromRedisValue>(&self) -> SnapshotStore<C, super::IdentitySerializer<S>> {
+        pub fn for_snapshot<S: redis::FromRedisValue + ToOwned>(&self) -> SnapshotStore<C, super::IdentitySerializer<S>>
+        where S::Owned: redis::ToRedisArgs
+        {
             SnapshotStore {
                 store: &self,
                 serializer: super::IdentitySerializer::default(),
@@ -107,12 +115,12 @@ mod store {
     {
         type Error = redis::RedisError;
 
-        fn persist_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id, snapshot: cqrs_core::StateSnapshot<S::Value>) -> Result<(), Self::Error> {
-            let mut key = String::with_capacity(self.store.config.key_prefix.len() + id.as_ref().len() + 1);
+        fn persist_snapshot(&self, id: &str, snapshot: cqrs_core::StateSnapshotView<S::Value>) -> Result<(), Self::Error> {
+            let mut key = String::with_capacity(self.store.config.key_prefix.len() + id.len() + 1);
             key.push_str(&self.store.config.key_prefix);
             key.push('-');
             key.push_str("snapshot-");
-            key.push_str(id.as_ref());
+            key.push_str(id);
 
             let snapshot_ver = snapshot.version.get();
 
@@ -133,12 +141,12 @@ mod store {
     {
         type Error = redis::RedisError;
 
-        fn get_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id) -> Result<Option<cqrs_core::StateSnapshot<S::Value>>, Self::Error> {
-            let mut key = String::with_capacity(self.store.config.key_prefix.len() + id.as_ref().len() + 10);
+        fn get_snapshot(&self, id: &str) -> Result<Option<cqrs_core::StateSnapshot<S::Value>>, Self::Error> {
+            let mut key = String::with_capacity(self.store.config.key_prefix.len() + id.len() + 10);
             key.push_str(&self.store.config.key_prefix);
             key.push('-');
             key.push_str("snapshot-");
-            key.push_str(id.as_ref());
+            key.push_str(id);
 
             let result: (Option<u64>, Option<S::Input>) =
                 redis::pipe()
@@ -237,11 +245,11 @@ mod store {
         type Events = RedisEventIterator<'a, S, C>;
         type Error = redis::RedisError;
 
-        fn read_events<Id: AsRef<str> + Into<String>>(&self, id: Id, since: cqrs_core::Since) -> Result<Option<Self::Events>, Self::Error> {
-            let mut key = String::with_capacity(self.store.config.key_prefix.len() + id.as_ref().len() + 1);
+        fn read_events(&self, id: &str, since: cqrs_core::Since) -> Result<Option<Self::Events>, Self::Error> {
+            let mut key = String::with_capacity(self.store.config.key_prefix.len() + id.len() + 1);
             key.push_str(&self.store.config.key_prefix);
             key.push('-');
-            key.push_str(id.as_ref());
+            key.push_str(id);
 
             let initial =
                 if let cqrs_core::Since::Event(x) = since {
@@ -275,12 +283,12 @@ mod store {
     {
         type Error = ::error::AppendEventsError;
 
-        fn append_events<Id: AsRef<str> + Into<String>>(&self, id: Id, events: &[S::Value], precondition: Option<cqrs_core::Precondition>) -> Result<cqrs_core::EventNumber, Self::Error> {
+        fn append_events(&self, id: &str, events: &[S::Value], precondition: Option<cqrs_core::Precondition>) -> Result<cqrs_core::EventNumber, Self::Error> {
             println!("Appending {} events!", events.len());
-            let mut key = String::with_capacity(self.store.config.key_prefix.len() + id.as_ref().len() + 1);
+            let mut key = String::with_capacity(self.store.config.key_prefix.len() + id.len() + 1);
             key.push_str(&self.store.config.key_prefix);
             key.push('-');
-            key.push_str(id.as_ref());
+            key.push_str(id);
 
             let mut next_event_number = 0;
             if let Some(precondition) = precondition {
@@ -299,7 +307,7 @@ mod store {
                         for e in events.iter() {
                             let e = e.to_owned();
                             println!("Appending event: {:?}", e);
-                            pipe.rpush(&key, self.serializer.serialize(e));
+                            pipe.rpush(&key, self.serializer.serialize(&e));
                         }
                         pipe.query(self.store.conn)
                     }
@@ -317,7 +325,7 @@ mod store {
 
                     for e in events.iter() {
                         let e = e.to_owned();
-                        pipe.rpush(&key, self.serializer.serialize(e));
+                        pipe.rpush(&key, self.serializer.serialize(&e));
                     }
                     pipe.query(self.store.conn)
                 }).map_err(::error::AppendEventsError::WriteError)?;

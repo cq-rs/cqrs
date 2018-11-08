@@ -1,21 +1,20 @@
 use super::*;
-use {EventSink, EventSource};
+use {Aggregate, EventSink, EventSource};
 use void::ResultVoidExt;
 
-struct TestAggregate;
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct TestAggregate;
 
-impl cqrs::Aggregate for TestAggregate {
+impl Aggregate for TestAggregate {
     type Event = TestEvent;
-    type Events = Option<Self::Event>;
+    type Events = ::std::iter::Empty<Self::Event>;
     type Command = ();
     type Error = ::void::Void;
 
-    fn apply(&mut self, _event: Self::Event) {
-        unimplemented!()
-    }
+    fn apply(&mut self, _event: Self::Event) {}
 
     fn execute(&self, _command: Self::Command) -> Result<Self::Events, Self::Error> {
-        unimplemented!()
+        Ok(Default::default())
     }
 
     fn entity_type() -> &'static str where Self: Sized {
@@ -24,7 +23,7 @@ impl cqrs::Aggregate for TestAggregate {
 }
 
 #[derive(Clone, Copy, Debug, Default, Hash, Eq, PartialEq)]
-struct TestEvent;
+pub(crate) struct TestEvent;
 
 type TestMemoryEventStore = EventStore<TestAggregate>;
 

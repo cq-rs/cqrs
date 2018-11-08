@@ -13,7 +13,7 @@ where
     type Error = Void;
 
     #[inline]
-    fn read_events<Id: AsRef<str> + Into<String>>(&self, _id: Id, _version: Since) -> Result<Option<Self::Events>, Self::Error> {
+    fn read_events(&self, _id: &str, _version: Since) -> Result<Option<Self::Events>, Self::Error> {
         Ok(None)
     }
 }
@@ -25,7 +25,7 @@ where
     type Error = Void;
 
     #[inline]
-    fn append_events<Id: AsRef<str> + Into<String>>(&self, _id: Id, _events: &[A::Event], _expect: Option<Precondition>) -> Result<EventNumber, Self::Error> {
+    fn append_events(&self, _id: &str, _events: &[A::Event], _expect: Option<Precondition>) -> Result<EventNumber, Self::Error> {
         Ok(EventNumber::MIN_VALUE)
     }
 }
@@ -37,7 +37,7 @@ where
     type Error = Void;
 
     #[inline]
-    fn get_snapshot<Id: AsRef<str> + Into<String>>(&self, _id: Id) -> Result<Option<StateSnapshot<A>>, Self::Error>
+    fn get_snapshot(&self, _id: &str) -> Result<Option<StateSnapshot<A>>, Self::Error>
         where Self: Sized
     {
         Ok(None)
@@ -51,7 +51,7 @@ where
     type Error = Void;
 
     #[inline]
-    fn persist_snapshot<Id: AsRef<str> + Into<String>>(&self, _id: Id, _snapshot: StateSnapshot<A>) -> Result<(), Self::Error>
+    fn persist_snapshot(&self, _id: &str, _snapshot: StateSnapshotView<A>) -> Result<(), Self::Error>
         where Self: Sized
     {
         Ok(())

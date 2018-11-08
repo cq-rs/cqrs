@@ -1,5 +1,4 @@
 extern crate cqrs;
-extern crate cqrs_data;
 extern crate cqrs_todo_core;
 extern crate void;
 
@@ -8,7 +7,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
 use cqrs::{EventNumber, Precondition, SequencedEvent, Version};
-use cqrs_data::{EventSource, EventSink, Since};
+use cqrs::{EventSource, EventSink, Since};
 use cqrs_todo_core::{TodoAggregate, Event};
 use void::Void;
 
@@ -19,9 +18,9 @@ impl EventSource<TodoAggregate> for EventMap {
     type Events = Vec<Result<SequencedEvent<Event>, Void>>;
     type Error = Void;
 
-    fn read_events<Id: AsRef<str> + Into<String>>(&self, id: Id, since: Since) -> Result<Option<Self::Events>, Self::Error> {
+    fn read_events(&self, id: &str, since: Since) -> Result<Option<Self::Events>, Self::Error> {
         let borrow = self.0.borrow();
-        let stream = borrow.get(id.as_ref());
+        let stream = borrow.get(id);
         match since {
             Since::BeginningOfStream => Ok(stream.map(|e| e.into_iter().map(|e| Ok(e.to_owned())).collect())),
             Since::Event(event_number) => Ok(stream.map(|e| e.into_iter().skip(event_number.get() as usize).map(|e| Ok(e.to_owned())).collect())),
@@ -32,7 +31,7 @@ impl EventSource<TodoAggregate> for EventMap {
 impl EventSink<TodoAggregate> for EventMap {
     type Error = Void;
 
-    fn append_events<Id: AsRef<str> + Into<String>>(&self, id: Id, events: &[Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
+    fn append_events(&self, id: &str, events: &[Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
         let mut borrow = self.0.borrow_mut();
         let entry = borrow.entry(id.into());
 
@@ -68,12 +67,12 @@ impl EventSink<TodoAggregate> for EventMap {
 #[test]
 fn main_test() {
     let em = EventMap(RefCell::new(HashMap::default()));
-    let id = "test".to_string();
+    let id = "test";
 
-    assert_eq!(em.read_events(id.as_str(), Since::BeginningOfStream), Ok(None));
-    let event_num = em.append_events(id.as_str(), &[cqrs_todo_core::Event::Completed], Some(Precondition::New)).unwrap();
+    assert_eq!(em.read_events(id, Since::BeginningOfStream), Ok(None));
+    let event_num = em.append_events(id, &[cqrs_todo_core::Event::Completed], Some(Precondition::New)).unwrap();
     assert_eq!(event_num, EventNumber::MIN_VALUE);
-    let event_num = em.append_events(id.as_str(), &[cqrs_todo_core::Event::Uncompleted], Some(Precondition::ExpectedVersion(Version::Number(EventNumber::MIN_VALUE)))).unwrap();
+    let event_num = em.append_events(id, &[cqrs_todo_core::Event::Uncompleted], Some(Precondition::ExpectedVersion(Version::Number(EventNumber::MIN_VALUE)))).unwrap();
     assert_eq!(event_num, EventNumber::MIN_VALUE.incr());
 
     let expected_events = vec![
@@ -87,7 +86,7 @@ fn main_test() {
         }),
     ];
 
-    assert_eq!(em.read_events(id.as_str(), Since::BeginningOfStream), Ok(Some(expected_events.clone())));
-    assert_eq!(em.read_events(id.as_str(), Since::Event(EventNumber::MIN_VALUE)), Ok(Some(expected_events[1..].to_owned())));
-    assert_eq!(em.read_events(id.as_str(), Since::Event(EventNumber::MIN_VALUE.incr())), Ok(Some(Vec::default())));
+    assert_eq!(em.read_events(id, Since::BeginningOfStream), Ok(Some(expected_events.clone())));
+    assert_eq!(em.read_events(id, Since::Event(EventNumber::MIN_VALUE)), Ok(Some(expected_events[1..].to_owned())));
+    assert_eq!(em.read_events(id, Since::Event(EventNumber::MIN_VALUE.incr())), Ok(Some(Vec::default())));
 }

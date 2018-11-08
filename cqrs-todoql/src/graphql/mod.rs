@@ -1,5 +1,6 @@
 use std::ops;
-use std::sync::{Arc,RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 
 use juniper;
 

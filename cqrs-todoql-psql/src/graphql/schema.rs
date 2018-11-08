@@ -1,5 +1,5 @@
 use base64;
-use cqrs::{Aggregate, Entity, Precondition, Version};
+use cqrs::{Entity, Precondition, Version, EntityStore, EntitySink, EntitySource};
 use cqrs_postgres::PostgresStore;
 use cqrs_todo_core::{domain, TodoAggregate, TodoStatus, Command};
 use chrono::{DateTime, Utc};
@@ -65,13 +65,16 @@ graphql_object!(Query: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-        let entity = Entity::rehydrate(id.to_string(), &store, &store)?;
+        let id = id.to_string();
 
-        Ok(entity.map(TodoQL))
+        let entity = store.rehydrate(&id)?
+            .map(|agg| TodoQL(agg.to_entity_with_id(id)));
+
+        Ok(entity)
     }
 });
 
-struct TodoQL(Entity<'static, TodoAggregate>);
+struct TodoQL(Entity<String, TodoAggregate>);
 
 graphql_object!(TodoQL: Context |&self| {
     field id() -> FieldResult<ID> {
@@ -79,19 +82,19 @@ graphql_object!(TodoQL: Context |&self| {
     }
 
     field description() -> FieldResult<&str> {
-        Ok(self.0.aggregate().get_data()?.description.as_str())
+        Ok(self.0.aggregate().state().get_data()?.description.as_str())
     }
 
     field reminder() -> FieldResult<Option<DateTime<Utc>>> {
-        Ok(self.0.aggregate().get_data()?.reminder.map(|r| r.get_time()))
+        Ok(self.0.aggregate().state().get_data()?.reminder.map(|r| r.get_time()))
     }
 
     field completed() -> FieldResult<bool> {
-        Ok(self.0.aggregate().get_data()?.status == TodoStatus::Completed)
+        Ok(self.0.aggregate().state().get_data()?.status == TodoStatus::Completed)
     }
 
     field version() -> FieldResult<i32> {
-        Ok(self.0.version().get() as i32)
+        Ok(self.0.aggregate().version().get() as i32)
     }
 });
 
@@ -153,9 +156,10 @@ graphql_object!(TodoEdge: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-        let entity= Entity::rehydrate(id, &store, &store)?;
+        let entity = store.rehydrate(&id)?
+            .map(|agg| TodoQL(agg.to_entity_with_id(id)));
 
-        Ok(entity.map(TodoQL))
+        Ok(entity)
     }
 
     field cursor() -> FieldResult<Cursor> {
@@ -190,20 +194,16 @@ graphql_object!(Mutations: Context |&self| {
 
         let new_id = context.id_provider.new_id();
 
-        let mut entity = Entity::<TodoAggregate>::from_default(new_id.clone());
-
-        let events = entity.aggregate().execute(command)?;
-
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-        entity.apply_events_and_persist(
-            events,
-            Precondition::New,
-            &store,
-            &store,
+        let entity = store.exec_and_persist(
+            &new_id,
+            Default::default(),
+            command,
+            Some(Precondition::New),
             10,
-        )?;
+        )?.to_entity_with_id(new_id.clone());
 
         context.stream_index.write().push(new_id);
 
@@ -236,16 +236,12 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-        let entity = Entity::<TodoAggregate>::load_exec_and_persist(
-            id,
+        let entity = store.load_exec_and_persist(
+            &id,
             command,
             Some(precondition),
-            &store,
-            &store,
-            &store,
-            &store,
             10,
-        )?;
+        )?.map(move |agg| agg.to_entity_with_id(id));
 
         Ok(entity.map(TodoQL))
     }
@@ -264,16 +260,12 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-       let entity = Entity::<TodoAggregate>::load_exec_and_persist(
-            id,
+        let entity = store.load_exec_and_persist(
+            &id,
             command,
             Some(precondition),
-            &store,
-            &store,
-            &store,
-            &store,
             10,
-        )?;
+        )?.map(move |agg| agg.to_entity_with_id(id));
 
         Ok(entity.map(TodoQL))
     }
@@ -290,16 +282,12 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-       let entity = Entity::<TodoAggregate>::load_exec_and_persist(
-            id,
+        let entity = store.load_exec_and_persist(
+            &id,
             command,
             Some(precondition),
-            &store,
-            &store,
-            &store,
-            &store,
             10,
-        )?;
+        )?.map(move |agg| agg.to_entity_with_id(id));
 
         Ok(entity.map(TodoQL))
     }
@@ -316,16 +304,12 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-       let entity = Entity::<TodoAggregate>::load_exec_and_persist(
-            id,
+        let entity = store.load_exec_and_persist(
+            &id,
             command,
             Some(precondition),
-            &store,
-            &store,
-            &store,
-            &store,
             10,
-        )?;
+        )?.map(move |agg| agg.to_entity_with_id(id));
 
         Ok(entity.map(TodoQL))
     }
@@ -342,16 +326,12 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-       let entity = Entity::<TodoAggregate>::load_exec_and_persist(
-            id,
+        let entity = store.load_exec_and_persist(
+            &id,
             command,
             Some(precondition),
-            &store,
-            &store,
-            &store,
-            &store,
             10,
-        )?;
+        )?.map(move |agg| agg.to_entity_with_id(id));
 
         Ok(entity.map(TodoQL))
     }
@@ -368,16 +348,12 @@ graphql_object!(TodoMutQL: Context |&self| {
         let conn = context.backend.get()?;
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
-       let entity = Entity::<TodoAggregate>::load_exec_and_persist(
-            id,
+        let entity = store.load_exec_and_persist(
+            &id,
             command,
             Some(precondition),
-            &store,
-            &store,
-            &store,
-            &store,
             10,
-        )?;
+        )?.map(move |agg| agg.to_entity_with_id(id));
 
         Ok(entity.map(TodoQL))
     }

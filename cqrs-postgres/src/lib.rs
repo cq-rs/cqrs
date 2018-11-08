@@ -91,12 +91,12 @@ where
 {
     type Error = StoreError;
 
-    fn append_events<Id: AsRef<str> + Into<String>>(&self, id: Id, events: &[A::Event], precondition: Option<cqrs_core::Precondition>) -> Result<cqrs_core::EventNumber, Self::Error> {
+    fn append_events(&self, id: &str, events: &[A::Event], precondition: Option<cqrs_core::Precondition>) -> Result<cqrs_core::EventNumber, Self::Error> {
         let trans = self.conn.transaction()?;
 
         let check_stmt = trans.prepare_cached("SELECT MAX(sequence) FROM events WHERE entity_type = $1 AND entity_id = $2")?;
 
-        let result = check_stmt.query(&[&A::entity_type(), &id.as_ref()])?;
+        let result = check_stmt.query(&[&A::entity_type(), &id])?;
         let current_version = result.iter().next().and_then(|r| {
             let max_sequence: Option<i64> = r.get(0);
             max_sequence.map(|x| {
@@ -104,13 +104,13 @@ where
             })
         });
 
-        trace!("entity {}: current version: {:?}", id.as_ref(), current_version);
+        trace!("entity {}: current version: {:?}", id, current_version);
 
         if let Some(precondition) = precondition {
             precondition.verify(current_version)?;
         }
 
-        trace!("entity {}: precondition satisfied", id.as_ref());
+        trace!("entity {}: precondition satisfied", id);
 
         let first_sequence = current_version.unwrap_or_default().incr();
         let mut next_sequence = first_sequence;
@@ -118,8 +118,8 @@ where
         let stmt = trans.prepare_cached("INSERT INTO events (entity_type, entity_id, sequence, event_payload, timestamp) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)")?;
         for event in events {
             let value = serde_json::to_value(event)?;
-            let _modified_count = stmt.execute(&[&A::entity_type(), &id.as_ref(), &(next_sequence.get() as i64), &value])?;
-            trace!("entity {}: inserted event; sequence: {}, payload: {}", id.as_ref(), next_sequence, value.to_string());
+            let _modified_count = stmt.execute(&[&A::entity_type(), &id, &(next_sequence.get() as i64), &value])?;
+            trace!("entity {}: inserted event; sequence: {}, payload: {}", id, next_sequence, value.to_string());
             next_sequence = next_sequence.incr();
         }
 
@@ -137,7 +137,7 @@ where
     type Events = Vec<Result<cqrs_core::SequencedEvent<A::Event>, StoreError>>;
     type Error = StoreError;
 
-    fn read_events<Id: AsRef<str> + Into<String>>(&self, id: Id, since: Since) -> Result<Option<Self::Events>, Self::Error> {
+    fn read_events(&self, id: &str, since: Since) -> Result<Option<Self::Events>, Self::Error> {
         let last_sequence = match since {
             cqrs_core::Since::BeginningOfStream => 0,
             cqrs_core::Since::Event(x) => x.get(),
@@ -147,7 +147,7 @@ where
         let trans = self.conn.transaction_with(postgres::transaction::Config::default().read_only(true))?;
         let stmt = trans.prepare_cached("SELECT sequence, event_payload FROM events WHERE entity_type = $1 AND entity_id = $2 AND sequence > $3 ORDER BY sequence ASC")?;
         {
-            let mut rows = stmt.lazy_query(&trans, &[&A::entity_type(), &id.as_ref(), &last_sequence], 100)?;
+            let mut rows = stmt.lazy_query(&trans, &[&A::entity_type(), &id, &last_sequence], 100)?;
             let (lower, upper) = rows.size_hint();
             let cap = upper.unwrap_or(lower);
             let mut inner_events = Vec::with_capacity(cap);
@@ -155,7 +155,7 @@ where
             let handle_row = |row: postgres::rows::Row| {
                 let sequence: i64 = row.get("sequence");
                 let event_payload: serde_json::Value = row.get("event_payload");
-                trace!("entity {}: loaded event; sequence: {}, payload: {}", id.as_ref(), sequence, event_payload.to_string());
+                trace!("entity {}: loaded event; sequence: {}, payload: {}", id, sequence, event_payload.to_string());
                 let event: A::Event = serde_json::from_value(event_payload)?;
                 Ok(cqrs_core::SequencedEvent {
                     sequence: cqrs_core::EventNumber::new(sequence as u64).expect("Sequence number should be non-zero"),
@@ -171,7 +171,7 @@ where
 
         trans.commit()?;
 
-        trace!("entity {}: read {} events", id.as_ref(), events.len());
+        trace!("entity {}: read {} events", id, events.len());
 
         Ok(Some(events))
     }
@@ -183,11 +183,11 @@ where
 {
     type Error = StoreError;
 
-    fn persist_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id, snapshot: cqrs_core::StateSnapshot<A>) -> Result<(), Self::Error> {
+    fn persist_snapshot(&self, id: &str, snapshot: cqrs_core::StateSnapshotView<A>) -> Result<(), Self::Error> {
         let stmt = self.conn.prepare_cached("INSERT INTO snapshots (entity_type, entity_id, sequence, snapshot_payload) VALUES ($1, $2, $3, $4)")?;
         let value = serde_json::to_value(snapshot.snapshot)?;
-        let _modified_count = stmt.execute(&[&A::entity_type(), &id.as_ref(), &(snapshot.version.get() as i64), &value])?;
-        trace!("entity {}: persisted snapshot; payload: {}", id.as_ref(), value.to_string());
+        let _modified_count = stmt.execute(&[&A::entity_type(), &id, &(snapshot.version.get() as i64), &value])?;
+        trace!("entity {}: persisted snapshot; payload: {}", id, value.to_string());
         Ok(())
     }
 }
@@ -198,20 +198,20 @@ where
 {
     type Error = StoreError;
 
-    fn get_snapshot<Id: AsRef<str> + Into<String>>(&self, id: Id) -> Result<Option<cqrs_core::StateSnapshot<A>>, Self::Error> {
+    fn get_snapshot(&self, id: &str) -> Result<Option<cqrs_core::StateSnapshot<A>>, Self::Error> {
         let stmt = self.conn.prepare_cached("SELECT sequence, snapshot_payload FROM snapshots WHERE entity_type = $1 AND entity_id = $2 ORDER BY sequence DESC LIMIT 1")?;
-        let rows = stmt.query(&[&A::entity_type(), &id.as_ref()])?;
+        let rows = stmt.query(&[&A::entity_type(), &id])?;
         if let Some(row) = rows.iter().next() {
             let sequence: i64 = row.get("sequence");
             let payload: serde_json::Value = row.get("snapshot_payload");
-            trace!("entity {}: loaded snapshot; payload: {}", id.as_ref(), payload);
+            trace!("entity {}: loaded snapshot; payload: {}", id, payload);
             let snapshot: A = serde_json::from_value(payload)?;
             Ok(Some(cqrs_core::StateSnapshot {
                 version: cqrs_core::Version::new(sequence as u64),
                 snapshot,
             }))
         } else {
-            trace!("entity {}: no snapshot found", id.as_ref());
+            trace!("entity {}: no snapshot found", id);
             Ok(None)
         }
     }
