@@ -1,3 +1,16 @@
+#![warn(
+    unused_import_braces,
+    unused_imports,
+    unused_qualifications,
+)]
+
+#![deny(
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+)]
+
 extern crate cqrs;
 extern crate cqrs_postgres;
 extern crate cqrs_todo_core;
@@ -62,7 +75,7 @@ impl IdProvider {
 
 mod helper {
     use chrono::{Duration,Utc,TimeZone};
-    use cqrs::{Version, StateSnapshotView};
+    use cqrs::{Version, VersionedAggregateView};
     use cqrs::{EventSink, SnapshotSink};
     use cqrs_todo_core::{Event, TodoAggregate, TodoData, TodoStatus, domain};
     use cqrs_postgres::PostgresStore;
@@ -82,9 +95,9 @@ mod helper {
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
         store.append_events(id, &events, None).unwrap();
-        store.persist_snapshot(id, StateSnapshotView {
+        store.persist_snapshot(id, VersionedAggregateView {
             version: Version::new(1),
-            snapshot: &TodoAggregate::Created(TodoData {
+            payload: &TodoAggregate::Created(TodoData {
                 description: domain::Description::new("Hello!").unwrap(),
                 reminder: None,
                 status: TodoStatus::NotCompleted,

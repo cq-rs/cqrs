@@ -1,51 +1,30 @@
+#![warn(
+    unused_import_braces,
+    unused_imports,
+    unused_qualifications,
+    missing_docs,
+)]
+
+#![deny(
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+)]
+
 extern crate cqrs_core;
+extern crate log;
 extern crate redis;
-extern crate void;
+
+mod error;
+
+pub use error::{LoadError, PersistError};
 
 use std::marker::PhantomData;
-use void::Void;
+use redis::ConnectionLike;
 
 pub use store::{Store, SnapshotStore};
-
-pub trait RedisSerializer {
-    type Value;
-    type Output: redis::ToRedisArgs;
-    type Input: redis::FromRedisValue;
-    type Error: ::std::error::Error;
-
-    fn serialize(&self, value: &Self::Value) -> Self::Output;
-    fn deserialize(&self, value: Self::Input) -> Result<Self::Value, Self::Error>;
-}
-
-pub struct IdentitySerializer<S: redis::FromRedisValue + ToOwned>
-where S::Owned: redis::ToRedisArgs
-{
-    _phantom: PhantomData<S>,
-}
-
-impl<S: redis::FromRedisValue + ToOwned> Default for IdentitySerializer<S>
-where S::Owned: redis::ToRedisArgs
-{
-    fn default() -> Self {
-        IdentitySerializer { _phantom: PhantomData }
-    }
-}
-
-impl<S: redis::FromRedisValue + ToOwned> RedisSerializer for IdentitySerializer<S>
-where S::Owned: redis::ToRedisArgs
-{
-    type Value = S;
-    type Output = S::Owned;
-    type Input = S;
-    type Error = Void;
-
-    fn serialize(&self, value: &Self::Value) -> Self::Output {
-        value.to_owned()
-    }
-    fn deserialize(&self, value: Self::Input) -> Result<Self::Value, Self::Error> {
-        Ok(value)
-    }
-}
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Config {
@@ -59,107 +38,98 @@ impl Config {
         }
     }
 
-    pub fn with_connection<'a, C: redis::ConnectionLike + 'a>(&'a self, conn: &'a C) -> Store<'a, C> {
+    pub fn with_connection<'conn, C: ConnectionLike + 'conn>(&'conn self, conn: &'conn C) -> Store<'conn, C> {
         Store::new(&self, conn)
     }
 }
 
 mod store {
-    use cqrs_core;
-    use redis::{self, PipelineCommands};
-    use super::RedisSerializer;
+    use cqrs_core::{Aggregate, EventNumber, EventSource, EventSink, PersistableAggregate, SnapshotSource, SnapshotSink, VersionedAggregate, VersionedAggregateView, Precondition, VersionedEvent, Since, Version, SerializableEvent, EventDeserializeError};
+    use redis::PipelineCommands;
+    use super::*;
 
 
     #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-    pub struct Store<'a, C: redis::ConnectionLike + 'a> {
-        config: &'a super::Config,
-        conn: &'a C,
+    pub struct Store<'conn, C: ConnectionLike + 'conn> {
+        config: &'conn Config,
+        conn: &'conn C,
     }
 
-    impl<'a, C: redis::ConnectionLike + 'a> Store<'a, C> {
-        pub fn new(config: &'a super::Config, conn: &'a C) -> Self {
+    impl<'conn, C: ConnectionLike + 'conn> Store<'conn, C> {
+        pub fn new(config: &'conn Config, conn: &'conn C) -> Self {
             Store {
                 config,
                 conn,
             }
         }
 
-        pub fn for_snapshot<S: redis::FromRedisValue + ToOwned>(&self) -> SnapshotStore<C, super::IdentitySerializer<S>>
-        where S::Owned: redis::ToRedisArgs
+        pub fn for_aggregate<A: Aggregate>(&self) -> SnapshotStore<C, A>
         {
             SnapshotStore {
                 store: &self,
-                serializer: super::IdentitySerializer::default(),
-            }
-        }
-
-        pub fn for_snapshot_with_serializer<S: RedisSerializer>(&self, serializer: S) -> SnapshotStore<C, S> {
-            SnapshotStore {
-                store: &self,
-                serializer,
+                _phantom: PhantomData,
             }
         }
     }
 
     #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-    pub struct SnapshotStore<'a, C: redis::ConnectionLike + 'a, S: RedisSerializer> {
-        store: &'a Store<'a, C>,
-        serializer: S,
+    pub struct SnapshotStore<'conn, C: ConnectionLike + 'conn, A: Aggregate> {
+        store: &'conn Store<'conn, C>,
+        _phantom: PhantomData<A>,
     }
 
-    impl<'a, S, C> cqrs_core::SnapshotSink<S::Value> for SnapshotStore<'a, C, S>
-        where
-            C: redis::ConnectionLike + 'a,
-            S: RedisSerializer,
-            S::Value: cqrs_core::Aggregate,
+    impl<'conn, A, C> SnapshotSink<A> for SnapshotStore<'conn, C, A>
+    where
+        C: ConnectionLike + 'conn,
+        A: PersistableAggregate,
     {
-        type Error = redis::RedisError;
+        type Error = PersistError;
 
-        fn persist_snapshot(&self, id: &str, snapshot: cqrs_core::StateSnapshotView<S::Value>) -> Result<(), Self::Error> {
+        fn persist_snapshot(&self, id: &str, aggregate: VersionedAggregateView<A>) -> Result<(), Self::Error> {
             let mut key = String::with_capacity(self.store.config.key_prefix.len() + id.len() + 1);
             key.push_str(&self.store.config.key_prefix);
             key.push('-');
             key.push_str("snapshot-");
             key.push_str(id);
 
-            let snapshot_ver = snapshot.version.get();
+            let snapshot_ver = aggregate.version.get();
+            let raw = aggregate.payload.snapshot();
 
             let _: () =
                 redis::pipe()
                     .hset(&key, "version", snapshot_ver)
-                    .hset(&key, "snapshot", self.serializer.serialize(snapshot.snapshot))
+                    .hset(&key, "snapshot", raw)
                     .query(self.store.conn)?;
             Ok(())
         }
     }
 
-    impl<'a, S, C> cqrs_core::SnapshotSource<S::Value> for SnapshotStore<'a, C, S>
-        where
-            C: redis::ConnectionLike + 'a,
-            S: RedisSerializer,
-            S::Value: cqrs_core::Aggregate,
+    impl<'conn, A, C> SnapshotSource<A> for SnapshotStore<'conn, C, A>
+    where
+        C: ConnectionLike + 'conn,
+        A: PersistableAggregate,
     {
-        type Error = redis::RedisError;
+        type Error = LoadError<A::SnapshotError>;
 
-        fn get_snapshot(&self, id: &str) -> Result<Option<cqrs_core::StateSnapshot<S::Value>>, Self::Error> {
+        fn get_snapshot(&self, id: &str) -> Result<Option<VersionedAggregate<A>>, Self::Error> {
             let mut key = String::with_capacity(self.store.config.key_prefix.len() + id.len() + 10);
             key.push_str(&self.store.config.key_prefix);
             key.push('-');
             key.push_str("snapshot-");
             key.push_str(id);
 
-            let result: (Option<u64>, Option<S::Input>) =
+            let result: (Option<u64>, Option<Vec<u8>>) =
                 redis::pipe()
                     .hget(&key, "version")
                     .hget(&key, "snapshot")
                     .query(self.store.conn)?;
             Ok(match result {
-                (Some(snapshot_ver), Some(snapshot)) => {
-                    let version = cqrs_core::Version::new(snapshot_ver);
+                (Some(snapshot_ver), Some(raw)) => {
+                    let version = Version::new(snapshot_ver);
 
-                    Some(cqrs_core::StateSnapshot {
+                    Some(VersionedAggregate {
                         version: version,
-                        snapshot: self.serializer.deserialize(snapshot).expect("the snapshot should have been deserializable"),
+                        payload: A::restore(&raw).map_err(LoadError::Deserialize)?,
                     })
                 },
                 _ => None
@@ -167,67 +137,89 @@ mod store {
         }
     }
 
-    pub struct RedisEventIterator<'a, S, C>
-        where
-            C: redis::ConnectionLike + 'a,
-            S: RedisSerializer,
-            S::Value: ::std::fmt::Debug,
+    #[derive(Debug)]
+    pub struct RedisEventIterator<'conn, C, E>
+    where
+        C: ConnectionLike + 'conn,
+        E: SerializableEvent,
     {
-        conn: &'a C,
-        serializer: S,
+        conn: &'conn C,
+        _event: PhantomData<E>,
         key: String,
         index: u64,
         cursor: u64,
+        remaining: u64,
         first_read: bool,
-        buffer: Vec<S::Input>,
+        buffer: Vec<Vec<u8>>,
     }
 
     const PAGE_SIZE: u64 = 100;
 
-    impl<'a, S, C> Iterator for RedisEventIterator<'a, S, C>
-        where
-            C: redis::ConnectionLike + 'a,
-            S: RedisSerializer,
-            S::Value: ::std::fmt::Debug,
+    impl<'conn, C, E> Iterator for RedisEventIterator<'conn, C, E>
+    where
+        C: ConnectionLike + 'conn,
+        E: SerializableEvent + 'static,
     {
-        type Item = Result<cqrs_core::SequencedEvent<S::Value>, redis::RedisError>;
+        type Item = Result<VersionedEvent<E>, LoadError<EventDeserializeError<E>>>;
 
         fn next(&mut self) -> Option<Self::Item> {
-            if let Some(x) = self.buffer.pop() {
-                let event = cqrs_core::SequencedEvent {
-                    sequence: cqrs_core::EventNumber::new(self.cursor + self.index + 1).unwrap(),
-                    event: self.serializer.deserialize(x).unwrap(),
-                };
+            use std::io::Read;
+            if self.remaining == 0 {
+                self.buffer.clear();
+                None
+            } else if let Some(raw) = self.buffer.pop() {
+                let sequence = Version::new(self.cursor + self.index).next_event();
+                log::trace!("entity {}: loaded event; sequence: {}", &self.key, sequence);
+                let mut raw_ref: &[u8] = raw.as_ref();
+                let mut len = [0u8; 1];
+                raw_ref.read_exact(&mut len).unwrap();
+                let (event_type_raw, payload) = raw_ref.split_at(len[0] as usize);
+                let data = E::deserialize(::std::str::from_utf8(event_type_raw).unwrap(), payload);
+                let event = data.map(|event| {
+                    VersionedEvent {
+                        sequence,
+                        event,
+                    }
+                });
                 self.index += 1;
-                println!("Next event: {:?}", event);
-                Some(Ok(event))
+                self.remaining -= 1;
+                Some(event.map_err(LoadError::Deserialize))
             } else if !self.first_read && self.index + 1 < PAGE_SIZE {
                 None
             } else {
                 self.first_read = false;
                 self.cursor += self.index;
                 self.index = 0;
-                let values: Result<Vec<Vec<S::Input>>, _> =
+                let values: Result<Vec<Vec<Vec<u8>>>, _> =
                     redis::pipe()
-                        .lrange(&self.key, self.cursor as isize, (self.cursor + PAGE_SIZE - 1) as isize)
+                        .lrange(&self.key, self.cursor as isize, (self.cursor + PAGE_SIZE.min(self.remaining) - 1) as isize)
                         .query(self.conn);
 
                 if let Err(e) = values {
-                    return Some(Err(e));
+                    return Some(Err(e.into()));
                 }
 
                 let mut values = values.unwrap();
 
                 self.buffer = values.pop().unwrap();
                 self.buffer.reverse();
-                if let Some(x) = self.buffer.pop() {
-                    let event = cqrs_core::SequencedEvent {
-                        sequence: cqrs_core::EventNumber::new(self.cursor + self.index + 1).unwrap(),
-                        event: self.serializer.deserialize(x).unwrap(),
-                    };
+                if let Some(mut raw) = self.buffer.pop() {
+                    let sequence = EventNumber::new(self.cursor + self.index + 1).unwrap();
+                    log::trace!("entity {}: loaded event; sequence: {}", &self.key, sequence);
+                    let mut raw_ref: &[u8] = raw.as_ref();
+                    let mut len = [0u8; 1];
+                    raw_ref.read_exact(&mut len).unwrap();
+                    let (event_type_raw, payload) = raw_ref.split_at(len[0] as usize);
+                    let data = E::deserialize(::std::str::from_utf8(event_type_raw).unwrap(), payload);
+                    let event = data.map(|event| {
+                        VersionedEvent {
+                            sequence,
+                            event,
+                        }
+                    });
                     self.index += 1;
-                    println!("Next event: {:?}", event);
-                    Some(Ok(event))
+                    self.remaining -= 1;
+                    Some(event.map_err(LoadError::Deserialize))
                 } else {
                     None
                 }
@@ -235,24 +227,23 @@ mod store {
         }
     }
 
-    impl<'a, S, C, A> cqrs_core::EventSource<A> for SnapshotStore<'a, C, S>
-        where
-            A: cqrs_core::Aggregate<Event=S::Value>,
-            C: redis::ConnectionLike + 'a,
-            S: RedisSerializer + Clone,
-            S::Value: ::std::fmt::Debug,
+    impl<'conn, C, A> EventSource<A> for SnapshotStore<'conn, C, A>
+    where
+        A: Aggregate,
+        A::Event: SerializableEvent + 'static,
+        C: ConnectionLike + 'conn,
     {
-        type Events = RedisEventIterator<'a, S, C>;
-        type Error = redis::RedisError;
+        type Events = RedisEventIterator<'conn, C, A::Event>;
+        type Error = LoadError<EventDeserializeError<A::Event>>;
 
-        fn read_events(&self, id: &str, since: cqrs_core::Since) -> Result<Option<Self::Events>, Self::Error> {
+        fn read_events(&self, id: &str, since: Since, max_count: Option<u64>) -> Result<Option<Self::Events>, Self::Error> {
             let mut key = String::with_capacity(self.store.config.key_prefix.len() + id.len() + 1);
             key.push_str(&self.store.config.key_prefix);
             key.push('-');
             key.push_str(id);
 
             let initial =
-                if let cqrs_core::Since::Event(x) = since {
+                if let Since::Event(x) = since {
                     x.get()
                 } else {
                     0
@@ -262,10 +253,11 @@ mod store {
             if exists.len() == 1 && exists[0] {
                 Ok(Some(RedisEventIterator {
                     conn: self.store.conn,
-                    serializer: self.serializer.clone(),
+                    _event: PhantomData,
                     key,
                     cursor: initial,
                     index: 0,
+                    remaining: max_count.unwrap_or(u64::max_value()),
                     first_read: true,
                     buffer: Vec::default(),
                 }))
@@ -274,23 +266,23 @@ mod store {
             }
         }
     }
-    impl<'a, S, C, A> cqrs_core::EventSink<A> for SnapshotStore<'a, C, S>
-        where
-            A: cqrs_core::Aggregate<Event=S::Value>,
-            C: redis::ConnectionLike + 'a,
-            S: RedisSerializer,
-            S::Value: Clone + ::std::fmt::Debug,
-    {
-        type Error = ::error::AppendEventsError;
 
-        fn append_events(&self, id: &str, events: &[S::Value], precondition: Option<cqrs_core::Precondition>) -> Result<cqrs_core::EventNumber, Self::Error> {
-            println!("Appending {} events!", events.len());
+    impl<'conn, C, A> EventSink<A> for SnapshotStore<'conn, C, A>
+    where
+        A: Aggregate,
+        A::Event: SerializableEvent,
+        C: ConnectionLike + 'conn,
+    {
+        type Error = PersistError;
+
+        fn append_events(&self, id: &str, events: &[A::Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
+            log::trace!("Appending {} events!", events.len());
             let mut key = String::with_capacity(self.store.config.key_prefix.len() + id.len() + 1);
             key.push_str(&self.store.config.key_prefix);
             key.push('-');
             key.push_str(id);
 
-            let mut next_event_number = 0;
+            let mut last_event_number = 0;
             if let Some(precondition) = precondition {
                 let result: Option<()> = redis::transaction(self.store.conn, &[&key], |pipe| {
                     let (exists, len): (bool, u64) =
@@ -298,22 +290,30 @@ mod store {
                             .exists(&key)
                             .llen(&key)
                             .query(self.store.conn)?;
-                    next_event_number = len;
-                    let current_version = cqrs_core::Version::new(len);
+                    last_event_number = len;
+                    let current_version = Version::new(len);
 
                     if let Err(_) = precondition.verify(if exists { Some(current_version) } else { None }) {
                         Ok(Some(None))
                     } else {
                         for e in events.iter() {
-                            let e = e.to_owned();
-                            println!("Appending event: {:?}", e);
-                            pipe.rpush(&key, self.serializer.serialize(&e));
+                            log::trace!("entity {}; appending event", id);
+                            let mut serialized = Vec::new();
+                            e.serialize_in_place(&mut serialized);
+                            let event_type = e.event_type();
+                            let len = event_type.len();
+                            debug_assert!(len < u8::max_value() as usize);
+                            let mut data = Vec::with_capacity(serialized.len() + len + 1);
+                            data.push(len as u8);
+                            data.extend_from_slice(event_type.as_ref());
+                            data.extend_from_slice(&serialized);
+                            pipe.rpush(&key, data);
                         }
                         pipe.query(self.store.conn)
                     }
-                }).map_err(::error::AppendEventsError::WriteError)?;
+                })?;
                 if result.is_none() {
-                    return Err(::error::AppendEventsError::PreconditionFailed(precondition))
+                    return Err(PersistError::PreconditionFailed(precondition))
                 }
             } else {
                 let _: () = redis::transaction(self.store.conn, &[&key], |pipe| {
@@ -321,74 +321,25 @@ mod store {
                         redis::pipe()
                             .llen(&key)
                             .query(self.store.conn)?;
-                    next_event_number = len.0;
+                    last_event_number = len.0;
 
                     for e in events.iter() {
-                        let e = e.to_owned();
-                        pipe.rpush(&key, self.serializer.serialize(&e));
+                        log::trace!("entity {}; appending event", id);
+                        let mut serialized = Vec::new();
+                        e.serialize_in_place(&mut serialized);
+                        let event_type = e.event_type();
+                        let len = event_type.len();
+                        debug_assert!(len < u8::max_value() as usize);
+                        let mut data = Vec::with_capacity(serialized.len() + len + 1);
+                        data.push(len as u8);
+                        data.extend_from_slice(event_type.as_ref());
+                        data.extend_from_slice(&serialized);
+                        pipe.rpush(&key, data);
                     }
                     pipe.query(self.store.conn)
-                }).map_err(::error::AppendEventsError::WriteError)?;
+                })?;
             }
-            Ok(cqrs_core::EventNumber::new(next_event_number + 1).unwrap())
+            Ok(Version::new(last_event_number).next_event())
         }
-    }
-}
-
-pub mod error {
-    use cqrs_core::Precondition;
-    use std::error;
-    use std::fmt;
-    use redis::RedisError;
-
-    #[derive(Debug, PartialEq)]
-    pub enum AppendEventsError {
-        PreconditionFailed(Precondition),
-        WriteError(RedisError),
-    }
-
-    impl fmt::Display for AppendEventsError
-    {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            let err = self as &error::Error;
-            f.write_str(err.description())?;
-            f.write_str(": ")?;
-            match *self {
-                AppendEventsError::WriteError(ref e) => write!(f, "{}", e),
-                AppendEventsError::PreconditionFailed(Precondition::ExpectedVersion(v)) => write!(f, "expected aggregate with version {}", v),
-                AppendEventsError::PreconditionFailed(Precondition::New) => f.write_str("expected to create new aggregate"),
-                AppendEventsError::PreconditionFailed(Precondition::Exists) => f.write_str("expected existing aggregate"),
-            }
-        }
-    }
-
-    impl error::Error for AppendEventsError
-    {
-        fn description(&self) -> &str {
-            match *self {
-                AppendEventsError::PreconditionFailed(_) => "precondition failed",
-                AppendEventsError::WriteError(_) => "error appending events",
-            }
-        }
-
-        fn cause(&self) -> Option<&error::Error> {
-            match *self {
-                AppendEventsError::WriteError(ref e) => Some(e),
-                AppendEventsError::PreconditionFailed(_) => None,
-            }
-        }
-    }
-    impl From<Precondition> for AppendEventsError {
-        fn from(p: Precondition) -> Self {
-            AppendEventsError::PreconditionFailed(p)
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
     }
 }

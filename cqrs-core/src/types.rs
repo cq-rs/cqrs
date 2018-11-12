@@ -1,11 +1,15 @@
 use std::fmt;
 use std::num::NonZeroU64;
+use aggregate::PersistableAggregate;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EventNumber(NonZeroU64);
 
 impl EventNumber {
-    pub const MIN_VALUE: EventNumber = EventNumber(unsafe {NonZeroU64::new_unchecked(1)});
+    #[allow(unsafe_code)]
+    pub const MIN_VALUE: EventNumber =
+        // One is absolutely non-zero.
+        EventNumber(unsafe {NonZeroU64::new_unchecked(1)});
 
     #[inline]
     pub fn new(x: u64) -> Option<Self> {
@@ -65,8 +69,16 @@ impl Version {
     #[must_use]
     pub fn incr(self) -> Self {
         match self {
-            Version::Initial => Version::Number(EventNumber(NonZeroU64::new(1).unwrap())),
+            Version::Initial => Version::Number(EventNumber::MIN_VALUE),
             Version::Number(en) => Version::Number(en.incr()),
+        }
+    }
+
+    #[inline]
+    pub fn next_event(self) -> EventNumber {
+        match self {
+            Version::Initial => EventNumber::MIN_VALUE,
+            Version::Number(en) => en.incr(),
         }
     }
 
@@ -176,22 +188,26 @@ impl fmt::Display for Precondition {
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct SequencedEvent<Event>
+pub struct VersionedEvent<Event>
 {
     pub sequence: EventNumber,
     pub event: Event,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct StateSnapshotView<'state, State: 'state> {
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct VersionedAggregate<A>
+where A: PersistableAggregate
+{
     pub version: Version,
-    pub snapshot: &'state State,
+    pub payload: A,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct StateSnapshot<State> {
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct VersionedAggregateView<'a, A>
+    where A: PersistableAggregate + 'a
+{
     pub version: Version,
-    pub snapshot: State,
+    pub payload: &'a A,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -205,6 +221,53 @@ impl From<Version> for Since {
         match v {
             Version::Initial => Since::BeginningOfStream,
             Version::Number(x) => Since::Event(x),
+        }
+    }
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum EventDeserializeError<E>
+where E: super::SerializableEvent
+{
+    UnknownEventType(String),
+    InvalidPayload(E::PayloadError),
+}
+
+impl<E> EventDeserializeError<E>
+where E: super::SerializableEvent
+{
+    pub fn new_unknown_event_type(event_type: impl Into<String>) -> Self {
+        EventDeserializeError::UnknownEventType(event_type.into())
+    }
+}
+
+impl<E> fmt::Debug for EventDeserializeError<E>
+where
+    E: super::SerializableEvent,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            EventDeserializeError::UnknownEventType(ref evt_type) =>
+                f.debug_tuple("UnknownEventType")
+                    .field(evt_type)
+                    .finish(),
+            EventDeserializeError::InvalidPayload(ref err) =>
+                f.debug_tuple("InvalidPayload")
+                    .field(err)
+                    .finish(),
+        }
+    }
+}
+
+impl<E> fmt::Display for EventDeserializeError<E>
+where E: super::SerializableEvent
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            EventDeserializeError::UnknownEventType(ref evt_type) =>
+                write!(f, "event deserialize error; unknown event type: {}", evt_type),
+            EventDeserializeError::InvalidPayload(ref err) =>
+                write!(f, "event deserialize error; invalid payload: {}", err),
         }
     }
 }

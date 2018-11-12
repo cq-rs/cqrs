@@ -1,12 +1,28 @@
+#![warn(
+    unused_import_braces,
+    unused_imports,
+    unused_qualifications,
+    missing_docs,
+)]
+
+#![deny(
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+)]
+
 extern crate cqrs_core;
 extern crate chrono;
 extern crate smallvec;
 extern crate serde;
 #[macro_use] extern crate serde_derive;
+extern crate serde_json;
 #[macro_use] extern crate log;
 
 use smallvec::SmallVec;
-use cqrs_core::Aggregate;
+use cqrs_core::{Aggregate, PersistableAggregate, SerializableEvent, EventDeserializeError};
 
 pub mod domain {
     use chrono::{DateTime,Utc};
@@ -78,7 +94,7 @@ pub mod error {
 
     impl fmt::Display for InvalidReminderTime {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            let err = self as &error::Error;
+            let err: &error::Error = self;
             f.write_str(err.description())
         }
     }
@@ -94,7 +110,7 @@ pub mod error {
 
     impl fmt::Display for InvalidDescription {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            let err = self as &error::Error;
+            let err: &error::Error = self;
             f.write_str(err.description())
         }
     }
@@ -116,7 +132,7 @@ pub mod error {
 
     impl fmt::Display for CommandError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            let err = self as &error::Error;
+            let err: &error::Error = self;
             f.write_str(err.description())
         }
     }
@@ -334,6 +350,63 @@ impl Aggregate for TodoAggregate {
     #[inline(always)]
     fn entity_type() -> &'static str where Self: Sized {
         "todo"
+    }
+}
+
+impl PersistableAggregate for TodoAggregate {
+    type SnapshotError = serde_json::Error;
+
+    fn snapshot_in_place(&self, snapshot: &mut Vec<u8>) {
+        use std::io::Cursor;
+        use serde::Serialize;
+        let cursor = Cursor::new(snapshot);
+        let mut serializer = serde_json::Serializer::new(cursor);
+        self.serialize(&mut serializer).unwrap();
+    }
+
+    fn restore(snapshot: &[u8]) -> Result<Self, <Self as PersistableAggregate>::SnapshotError> {
+        Ok(serde_json::from_slice(snapshot)?)
+    }
+}
+
+impl SerializableEvent for Event {
+    type PayloadError = serde_json::Error;
+
+    fn event_type(&self) -> &'static str {
+        match *self {
+            Event::Created(_) => "todo_created",
+            Event::ReminderUpdated(_) => "todo_reminder_updated",
+            Event::TextUpdated(_) => "todo_text_updated",
+            Event::Completed => "todo_completed",
+            Event::Uncompleted => "todo_uncompleted",
+        }
+    }
+
+    fn deserialize(event_type: &str, payload: &[u8]) -> Result<Self, EventDeserializeError<Self>> {
+        let event = match event_type {
+            "todo_created" => Event::Created(serde_json::from_slice(payload).map_err(EventDeserializeError::InvalidPayload)?),
+            "todo_reminder_updated" => Event::ReminderUpdated(serde_json::from_slice(payload).map_err(EventDeserializeError::InvalidPayload)?),
+            "todo_text_updated" => Event::TextUpdated(serde_json::from_slice(payload).map_err(EventDeserializeError::InvalidPayload)?),
+            "todo_completed" => Event::Completed,
+            "todo_uncompleted" => Event::Uncompleted,
+            _ => Err(EventDeserializeError::new_unknown_event_type(event_type))?,
+        };
+
+        Ok(event)
+    }
+
+    fn serialize_in_place(&self, payload: &mut Vec<u8>) {
+        use std::io::Cursor;
+        use serde::Serialize;
+        let cursor = Cursor::new(payload);
+        let mut serializer = serde_json::Serializer::new(cursor);
+        match *self {
+            Event::Created(ref x) => x.serialize(&mut serializer).unwrap(),
+            Event::ReminderUpdated(ref x) => x.serialize(&mut serializer).unwrap(),
+            Event::TextUpdated(ref x) => x.serialize(&mut serializer).unwrap(),
+            Event::Completed => {},
+            Event::Uncompleted => {},
+        }
     }
 }
 

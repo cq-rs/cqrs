@@ -1,3 +1,16 @@
+#![warn(
+    unused_import_braces,
+    unused_imports,
+    unused_qualifications,
+)]
+
+#![deny(
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+)]
+
 extern crate cqrs;
 extern crate cqrs_redis;
 extern crate cqrs_todo_core;
@@ -27,6 +40,7 @@ use r2d2_redis::RedisConnectionManager;
 type EventStore = store::MemoryOrNullEventStore;
 type SnapshotStore = store::MemoryOrNullSnapshotStore;
 
+#[derive(Debug)]
 pub enum BackendChoice {
     Memory,
     Null,
@@ -99,7 +113,7 @@ impl IdProvider {
 
 mod helper {
     use chrono::{Duration,Utc,TimeZone};
-    use cqrs::{Version, StateSnapshotView};
+    use cqrs::{Version, VersionedAggregateView};
     use cqrs::{EventSink, SnapshotSink};
     use cqrs_todo_core::{Event, TodoAggregate, TodoData, TodoStatus, domain};
 
@@ -117,9 +131,9 @@ mod helper {
         events.push(Event::ReminderUpdated(None));
 
         es.append_events(id, &events, None).unwrap();
-        ss.persist_snapshot(id, StateSnapshotView {
+        ss.persist_snapshot(id, VersionedAggregateView {
             version: Version::new(1),
-            snapshot: &TodoAggregate::Created(TodoData {
+            payload: &TodoAggregate::Created(TodoData {
                 description: domain::Description::new("Hello!").unwrap(),
                 reminder: None,
                 status: TodoStatus::NotCompleted,
