@@ -3,14 +3,13 @@
 #[cfg(test)] #[macro_use] extern crate static_assertions;
 #[cfg(test)] extern crate void;
 
-mod event;
-mod snapshot;
-
 mod aggregate;
+mod store;
 mod types;
 
-pub use aggregate::Aggregate;
-pub use event::{EventSource, EventSink};
-pub use snapshot::{SnapshotSource, SnapshotSink};
-pub use types::{CqrsError, EventNumber, Version, Precondition, SequencedEvent, Since, StateSnapshot, StateSnapshotView};
+pub use aggregate::{Aggregate, PersistableAggregate, SerializableEvent};
+pub use store::{EventSource, EventSink, SnapshotSource, SnapshotSink};
+pub use types::{CqrsError, EventNumber, Version, Precondition, RawEvent, VersionedEvent, Since, VersionedAggregate, VersionedAggregateView, EventDeserializeError};
 
+#[cfg(test)]
+pub use aggregate::testing;

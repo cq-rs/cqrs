@@ -10,5 +10,7 @@ pub mod trivial;
 
 mod entity;
 
+mod testing;
+
 pub use entity::{Entity, EntitySink, EntitySource, EntityStore, CompositeEntitySink, CompositeEntitySource, CompositeEntityStore};
 pub use cqrs_core::*;

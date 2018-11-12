@@ -9,11 +9,11 @@ impl<A> EventSource<A> for NullStore
 where
     A: Aggregate,
 {
-    type Events = Empty<Result<SequencedEvent<A::Event>, Void>>;
+    type Events = Empty<Result<VersionedEvent<A::Event>, Void>>;
     type Error = Void;
 
     #[inline]
-    fn read_events(&self, _id: &str, _version: Since) -> Result<Option<Self::Events>, Self::Error> {
+    fn read_events(&self, _id: &str, _version: Since, _max_count: Option<u64>) -> Result<Option<Self::Events>, Self::Error> {
         Ok(None)
     }
 }
@@ -32,12 +32,12 @@ where
 
 impl<A> SnapshotSource<A> for NullStore
 where
-    A: Aggregate,
+    A: PersistableAggregate,
 {
     type Error = Void;
 
     #[inline]
-    fn get_snapshot(&self, _id: &str) -> Result<Option<StateSnapshot<A>>, Self::Error>
+    fn get_snapshot(&self, _id: &str) -> Result<Option<VersionedAggregate<A>>, Self::Error>
         where Self: Sized
     {
         Ok(None)
@@ -46,12 +46,12 @@ where
 
 impl<A> SnapshotSink<A> for NullStore
 where
-    A: Aggregate,
+    A: PersistableAggregate,
 {
     type Error = Void;
 
     #[inline]
-    fn persist_snapshot(&self, _id: &str, _snapshot: StateSnapshotView<A>) -> Result<(), Self::Error>
+    fn persist_snapshot(&self, _id: &str, _aggregate: VersionedAggregateView<A>) -> Result<(), Self::Error>
         where Self: Sized
     {
         Ok(())

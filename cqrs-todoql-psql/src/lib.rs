@@ -62,7 +62,7 @@ impl IdProvider {
 
 mod helper {
     use chrono::{Duration,Utc,TimeZone};
-    use cqrs::{Version, StateSnapshotView};
+    use cqrs::{Version, VersionedAggregateView};
     use cqrs::{EventSink, SnapshotSink};
     use cqrs_todo_core::{Event, TodoAggregate, TodoData, TodoStatus, domain};
     use cqrs_postgres::PostgresStore;
@@ -82,9 +82,9 @@ mod helper {
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
         store.append_events(id, &events, None).unwrap();
-        store.persist_snapshot(id, StateSnapshotView {
+        store.persist_snapshot(id, VersionedAggregateView {
             version: Version::new(1),
-            snapshot: &TodoAggregate::Created(TodoData {
+            payload: &TodoAggregate::Created(TodoData {
                 description: domain::Description::new("Hello!").unwrap(),
                 reminder: None,
                 status: TodoStatus::NotCompleted,

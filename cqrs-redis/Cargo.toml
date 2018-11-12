@@ -5,5 +5,5 @@ authors = ["Marcus Griep <marcus@griep.us>"]
 
 [dependencies]
 cqrs-core = { path = "../cqrs-core" }
-redis = "*"
-void = "1.0.2"
+log = "0.4"
+redis = "0.9"
