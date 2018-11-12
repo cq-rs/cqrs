@@ -1,3 +1,16 @@
+#![warn(
+    unused_import_braces,
+    unused_imports,
+    unused_qualifications,
+)]
+
+#![deny(
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+)]
+
 extern crate cqrs;
 extern crate cqrs_postgres;
 extern crate cqrs_todo_core;

@@ -1,3 +1,16 @@
+#![warn(
+    unused_import_braces,
+    unused_imports,
+    unused_qualifications,
+)]
+
+#![deny(
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+)]
+
 extern crate cqrs;
 extern crate cqrs_redis;
 extern crate cqrs_todo_core;
@@ -27,6 +40,7 @@ use r2d2_redis::RedisConnectionManager;
 type EventStore = store::MemoryOrNullEventStore;
 type SnapshotStore = store::MemoryOrNullSnapshotStore;
 
+#[derive(Debug)]
 pub enum BackendChoice {
     Memory,
     Null,

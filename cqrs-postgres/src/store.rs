@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{fmt, marker::PhantomData};
 use cqrs_core::{Aggregate, SerializableEvent, EventNumber, EventSource, EventSink, Precondition, VersionedEvent, Since, Version, EventDeserializeError, SnapshotSink, SnapshotSource, PersistableAggregate, VersionedAggregate, VersionedAggregateView};
 use fallible_iterator::FallibleIterator;
 use postgres::Connection;
@@ -10,6 +10,16 @@ where A: Aggregate,
 {
     conn: &'conn Connection,
     _phantom: PhantomData<A>,
+}
+
+impl<'conn, A> fmt::Debug for PostgresStore<'conn, A>
+where A: Aggregate,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("PostgresStore")
+            .field("conn", &*self.conn)
+            .finish()
+    }
 }
 
 impl<'conn, A> PostgresStore<'conn, A>

@@ -13,15 +13,14 @@ use r2d2_redis::RedisConnectionManager;
 
 use void::ResultVoidExt;
 
-pub enum MemoryOrNullEventStore
-{
+#[derive(Debug)]
+pub enum MemoryOrNullEventStore {
     Memory(EventStore<TodoAggregate>),
     Null,
     Redis(cqrs_redis::Config, r2d2::Pool<RedisConnectionManager>)
 }
 
-impl MemoryOrNullEventStore
-{
+impl MemoryOrNullEventStore {
     pub fn new_memory_store() -> Self {
         MemoryOrNullEventStore::Memory(EventStore::default())
     }
@@ -35,8 +34,7 @@ impl MemoryOrNullEventStore
     }
 }
 
-impl EventSource<TodoAggregate> for MemoryOrNullEventStore
-{
+impl EventSource<TodoAggregate> for MemoryOrNullEventStore {
     type Events = Vec<Result<VersionedEvent<Event>, Self::Error>>;
     type Error = LoadError<EventDeserializeError<Event>>;
 
@@ -55,8 +53,7 @@ impl EventSource<TodoAggregate> for MemoryOrNullEventStore
     }
 }
 
-impl EventSink<TodoAggregate> for MemoryOrNullEventStore
-{
+impl EventSink<TodoAggregate> for MemoryOrNullEventStore {
     type Error = PersistError;
 
     fn append_events(&self, id: &str, events: &[Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
@@ -74,15 +71,14 @@ impl EventSink<TodoAggregate> for MemoryOrNullEventStore
     }
 }
 
-pub enum MemoryOrNullSnapshotStore
-{
+#[derive(Debug)]
+pub enum MemoryOrNullSnapshotStore {
     Memory(StateStore<TodoAggregate>),
     Null,
     Redis(cqrs_redis::Config, r2d2::Pool<RedisConnectionManager>)
 }
 
-impl MemoryOrNullSnapshotStore
-{
+impl MemoryOrNullSnapshotStore {
     pub fn new_memory_store() -> Self {
         MemoryOrNullSnapshotStore::Memory(StateStore::default())
     }
@@ -96,8 +92,7 @@ impl MemoryOrNullSnapshotStore
     }
 }
 
-impl SnapshotSource<TodoAggregate> for MemoryOrNullSnapshotStore
-{
+impl SnapshotSource<TodoAggregate> for MemoryOrNullSnapshotStore {
     type Error = LoadError<<Event as SerializableEvent>::PayloadError>;
 
     fn get_snapshot(&self, id: &str) -> Result<Option<VersionedAggregate<TodoAggregate>>, Self::Error> {
@@ -114,8 +109,7 @@ impl SnapshotSource<TodoAggregate> for MemoryOrNullSnapshotStore
     }
 }
 
-impl SnapshotSink<TodoAggregate> for MemoryOrNullSnapshotStore
-{
+impl SnapshotSink<TodoAggregate> for MemoryOrNullSnapshotStore {
     type Error = PersistError;
 
     fn persist_snapshot(&self, id: &str, snapshot: VersionedAggregateView<TodoAggregate>) -> Result<(), Self::Error> {

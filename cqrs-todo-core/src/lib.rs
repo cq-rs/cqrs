@@ -1,3 +1,18 @@
+#![warn(
+    unused_import_braces,
+    unused_imports,
+    unused_qualifications,
+    missing_docs,
+)]
+
+#![deny(
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+)]
+
 extern crate cqrs_core;
 extern crate chrono;
 extern crate smallvec;
@@ -79,7 +94,7 @@ pub mod error {
 
     impl fmt::Display for InvalidReminderTime {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            let err = self as &error::Error;
+            let err: &error::Error = self;
             f.write_str(err.description())
         }
     }
@@ -95,7 +110,7 @@ pub mod error {
 
     impl fmt::Display for InvalidDescription {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            let err = self as &error::Error;
+            let err: &error::Error = self;
             f.write_str(err.description())
         }
     }
@@ -117,7 +132,7 @@ pub mod error {
 
     impl fmt::Display for CommandError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            let err = self as &error::Error;
+            let err: &error::Error = self;
             f.write_str(err.description())
         }
     }

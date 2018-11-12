@@ -6,7 +6,10 @@ use aggregate::PersistableAggregate;
 pub struct EventNumber(NonZeroU64);
 
 impl EventNumber {
-    pub const MIN_VALUE: EventNumber = EventNumber(unsafe {NonZeroU64::new_unchecked(1)});
+    #[allow(unsafe_code)]
+    pub const MIN_VALUE: EventNumber =
+        // One is absolutely non-zero.
+        EventNumber(unsafe {NonZeroU64::new_unchecked(1)});
 
     #[inline]
     pub fn new(x: u64) -> Option<Self> {
@@ -191,18 +194,6 @@ pub struct VersionedEvent<Event>
     pub event: Event,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct RawEvent {
-    pub event_type: &'static str,
-    pub payload: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct VersionedRawEvent {
-    pub event_type: &'static str,
-    pub payload: Vec<u8>
-}
-
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct VersionedAggregate<A>
 where A: PersistableAggregate
@@ -217,18 +208,6 @@ pub struct VersionedAggregateView<'a, A>
 {
     pub version: Version,
     pub payload: &'a A,
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct VersionedRawSnapshot {
-    pub version: Version,
-    pub payload: Vec<u8>,
-}
-
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct VersionedRawSnapshotView<'a> {
-    pub version: Version,
-    pub payload: &'a [u8],
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
