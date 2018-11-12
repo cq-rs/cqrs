@@ -70,7 +70,7 @@ impl ToSql for RawJson {
             out.push(1);
         }
         if self.0.is_empty() {
-            out.extend_from_slice(&['{' as u8, '}' as u8]);
+            out.extend_from_slice("null".as_ref());
         } else {
             out.extend_from_slice(&self.0);
         }
