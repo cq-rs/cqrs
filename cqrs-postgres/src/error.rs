@@ -54,3 +54,4 @@ where E: CqrsError
         LoadError::Postgres(err)
     }
 }
+

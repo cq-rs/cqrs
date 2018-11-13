@@ -13,6 +13,7 @@
     trivial_casts,
     trivial_numeric_casts,
     unsafe_code,
+    unused_must_use,
 )]
 
 #[cfg(test)] #[macro_use] extern crate static_assertions;
@@ -25,6 +26,3 @@ mod types;
 pub use aggregate::{Aggregate, PersistableAggregate, SerializableEvent};
 pub use store::{EventSource, EventSink, SnapshotSource, SnapshotSink};
 pub use types::{CqrsError, EventNumber, Version, Precondition, VersionedEvent, Since, VersionedAggregate, VersionedAggregateView, EventDeserializeError};
-
-#[cfg(test)]
-pub use aggregate::testing;

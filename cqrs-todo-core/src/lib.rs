@@ -11,6 +11,7 @@
     trivial_casts,
     trivial_numeric_casts,
     unsafe_code,
+    unused_must_use,
 )]
 
 extern crate cqrs_core;
@@ -23,6 +24,7 @@ extern crate serde_json;
 
 use smallvec::SmallVec;
 use cqrs_core::{Aggregate, PersistableAggregate, SerializableEvent, EventDeserializeError};
+use std::io;
 
 pub mod domain {
     use chrono::{DateTime,Utc};
@@ -356,16 +358,16 @@ impl Aggregate for TodoAggregate {
 impl PersistableAggregate for TodoAggregate {
     type SnapshotError = serde_json::Error;
 
-    fn snapshot_in_place(&self, snapshot: &mut Vec<u8>) {
-        use std::io::Cursor;
-        use serde::Serialize;
-        let cursor = Cursor::new(snapshot);
-        let mut serializer = serde_json::Serializer::new(cursor);
-        self.serialize(&mut serializer).unwrap();
+    fn snapshot_to_writer<W: io::Write>(&self, writer: W) -> io::Result<()> {
+        Ok(serde_json::to_writer(writer, &self)?)
     }
 
     fn restore(snapshot: &[u8]) -> Result<Self, <Self as PersistableAggregate>::SnapshotError> {
         Ok(serde_json::from_slice(snapshot)?)
+    }
+
+    fn restore_from_reader<R: io::Read>(reader: R) -> Result<Self, <Self as PersistableAggregate>::SnapshotError> {
+        Ok(serde_json::from_reader(reader)?)
     }
 }
 
@@ -395,18 +397,27 @@ impl SerializableEvent for Event {
         Ok(event)
     }
 
-    fn serialize_in_place(&self, payload: &mut Vec<u8>) {
-        use std::io::Cursor;
-        use serde::Serialize;
-        let cursor = Cursor::new(payload);
-        let mut serializer = serde_json::Serializer::new(cursor);
-        match *self {
-            Event::Created(ref x) => x.serialize(&mut serializer).unwrap(),
-            Event::ReminderUpdated(ref x) => x.serialize(&mut serializer).unwrap(),
-            Event::TextUpdated(ref x) => x.serialize(&mut serializer).unwrap(),
-            Event::Completed => {},
-            Event::Uncompleted => {},
-        }
+    fn deserialize_from_reader<R: io::Read>(event_type: &str, reader: R) -> Result<Self, EventDeserializeError<Self>> {
+        let event = match event_type {
+            "todo_created" => Event::Created(serde_json::from_reader(reader).map_err(EventDeserializeError::InvalidPayload)?),
+            "todo_reminder_updated" => Event::ReminderUpdated(serde_json::from_reader(reader).map_err(EventDeserializeError::InvalidPayload)?),
+            "todo_text_updated" => Event::TextUpdated(serde_json::from_reader(reader).map_err(EventDeserializeError::InvalidPayload)?),
+            "todo_completed" => Event::Completed,
+            "todo_uncompleted" => Event::Uncompleted,
+            _ => Err(EventDeserializeError::new_unknown_event_type(event_type))?,
+        };
+
+        Ok(event)
+    }
+
+    fn serialize_to_writer<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+        Ok(match *self {
+            Event::Created(ref x) => serde_json::to_writer(writer, x)?,
+            Event::ReminderUpdated(ref x) => serde_json::to_writer(writer, x)?,
+            Event::TextUpdated(ref x) => serde_json::to_writer(writer, x)?,
+            Event::Completed => {writer.write(b"{}")?;},
+            Event::Uncompleted => {writer.write(b"{}")?;},
+        })
     }
 }
 

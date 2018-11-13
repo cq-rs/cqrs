@@ -11,6 +11,7 @@
     trivial_casts,
     trivial_numeric_casts,
     unsafe_code,
+    unused_must_use,
 )]
 
 extern crate cqrs_core;

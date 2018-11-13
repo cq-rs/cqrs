@@ -40,7 +40,7 @@ impl EventSource<TodoAggregate> for MemoryOrNullEventStore {
 
     fn read_events(&self, id: &str, since: Since, max_count: Option<u64>) -> Result<Option<Self::Events>, Self::Error> {
         match *self {
-            MemoryOrNullEventStore::Memory(ref mem) => Ok(mem.read_events(id, since, max_count).map_err(LoadError::Deserialize)?.map(|es| es.into_iter().map(|e| e.map_err(LoadError::Deserialize)).collect())),
+            MemoryOrNullEventStore::Memory(ref mem) => Ok(mem.read_events(id, since, max_count).void_unwrap().map(|es| es.into_iter().map(|e| Ok(e.void_unwrap())).collect())),
             MemoryOrNullEventStore::Null => Ok(EventSource::<TodoAggregate>::read_events(&NullStore, id, since, max_count).void_unwrap().map(|es| es.into_iter().map(|r| Ok(r.void_unwrap())).collect())),
             MemoryOrNullEventStore::Redis(ref config, ref pool) => {
                 let conn = pool.get().unwrap();
@@ -97,7 +97,7 @@ impl SnapshotSource<TodoAggregate> for MemoryOrNullSnapshotStore {
 
     fn get_snapshot(&self, id: &str) -> Result<Option<VersionedAggregate<TodoAggregate>>, Self::Error> {
         match *self {
-            MemoryOrNullSnapshotStore::Memory(ref mem) => Ok(mem.get_snapshot(id).map_err(LoadError::Deserialize)?),
+            MemoryOrNullSnapshotStore::Memory(ref mem) => Ok(mem.get_snapshot(id).void_unwrap()),
             MemoryOrNullSnapshotStore::Null => Ok(NullStore.get_snapshot(id).void_unwrap()),
             MemoryOrNullSnapshotStore::Redis(ref config, ref mgr) => {
                 let x = config.with_connection(&*mgr.get().unwrap())

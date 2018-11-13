@@ -1,8 +1,8 @@
 use std::borrow::{Borrow, BorrowMut};
-use std::fmt::{self, Display};
+use std::fmt;
 use std::marker::PhantomData;
 use trivial::NullStore;
-use super::*;
+use cqrs_core::{Aggregate, EventSource, EventSink, SnapshotSource, SnapshotSink, EventNumber, Since, Version, VersionedAggregate, VersionedAggregateView, Precondition, CqrsError};
 
 #[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
 pub struct HydratedAggregate<A>
@@ -161,7 +161,7 @@ impl<I, A> BorrowMut<HydratedAggregate<A>> for Entity<I, A>
 
 pub trait EntitySource<A>: EventSource<A> + SnapshotSource<A>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
 {
     fn load_from_snapshot(
         &self,
@@ -261,13 +261,13 @@ pub type EntityOptionResult<A, L> =
 
 impl<A, T> EntitySource<A> for T
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     T: EventSource<A> + SnapshotSource<A>
 {}
 
 pub trait EntitySink<A>: EventSink<A> + SnapshotSink<A>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
 {
     fn apply_events_and_persist(
         &self,
@@ -335,13 +335,13 @@ where
 
 impl<A, T> EntitySink<A> for T
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     T: EventSink<A> + SnapshotSink<A>
 {}
 
 pub trait EntityStore<A>: EntitySource<A> + EntitySink<A>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
 {
     fn load_or_default_exec_and_persist(
         &self,
@@ -389,14 +389,14 @@ where
 
 impl<A, T> EntityStore<A> for T
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     T: EntitySource<A> + EntitySink<A>
 {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CompositeEntitySource<'e, 's, A, ES, SS>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     ES: EventSource<A> + 'e,
     SS: SnapshotSource<A> + 's,
 {
@@ -407,7 +407,7 @@ where
 
 impl<A> Default for CompositeEntitySource<'static, 'static, A, NullStore, NullStore>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
 {
     fn default() -> Self {
         CompositeEntitySource {
@@ -420,7 +420,7 @@ where
 
 impl<'e, 's, A, ES, SS> CompositeEntitySource<'e, 's, A, ES, SS>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     ES: EventSource<A> + 'e,
     SS: SnapshotSource<A> + 's,
 {
@@ -449,7 +449,7 @@ where
 
 impl<'e, 's, A, ES, SS> EventSource<A> for CompositeEntitySource<'e, 's, A, ES, SS>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     ES: EventSource<A> + 'e,
     SS: SnapshotSource<A> + 's,
 {
@@ -463,7 +463,7 @@ where
 
 impl<'e, 's, A, ES, SS> SnapshotSource<A> for CompositeEntitySource<'e, 's, A, ES, SS>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     ES: EventSource<A> + 'e,
     SS: SnapshotSource<A> + 's,
 {
@@ -477,7 +477,7 @@ where
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CompositeEntitySink<'e, 's, A, ES, SS>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     ES: EventSink<A> + 'e,
     SS: SnapshotSink<A> + 's,
 {
@@ -488,7 +488,7 @@ where
 
 impl<A> Default for CompositeEntitySink<'static, 'static, A, NullStore, NullStore>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
 {
     fn default() -> Self {
         CompositeEntitySink {
@@ -501,7 +501,7 @@ where
 
 impl<'e, 's, A, ES, SS> CompositeEntitySink<'e, 's, A, ES, SS>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     ES: EventSink<A> + 'e,
     SS: SnapshotSink<A> + 's,
 {
@@ -530,7 +530,7 @@ where
 
 impl<'e, 's, A, ES, SS> EventSink<A> for CompositeEntitySink<'e, 's, A, ES, SS>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     ES: EventSink<A> + 'e,
     SS: SnapshotSink<A> + 's,
 {
@@ -543,7 +543,7 @@ where
 
 impl<'e, 's, A, ES, SS> SnapshotSink<A> for CompositeEntitySink<'e, 's, A, ES, SS>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     ES: EventSink<A> + 'e,
     SS: SnapshotSink<A> + 's,
 {
@@ -557,7 +557,7 @@ where
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CompositeEntityStore<A, ES, SS>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     ES: EntitySource<A>,
     SS: EntitySink<A>,
 {
@@ -568,7 +568,7 @@ where
 
 impl<A> Default for CompositeEntityStore<A, NullStore, NullStore>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
 {
     fn default() -> Self {
         CompositeEntityStore {
@@ -581,7 +581,7 @@ where
 
 impl<A, ES, SS> CompositeEntityStore<A, ES, SS>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     ES: EntitySource<A>,
     SS: EntitySink<A>,
 {
@@ -610,7 +610,7 @@ where
 
 impl<A, ES, SS> EventSource<A> for CompositeEntityStore<A, ES, SS>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     ES: EntitySource<A>,
     SS: EntitySink<A>,
 {
@@ -624,7 +624,7 @@ where
 
 impl<A, ES, SS> SnapshotSource<A> for CompositeEntityStore<A, ES, SS>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     ES: EntitySource<A>,
     SS: EntitySink<A>,
 {
@@ -637,7 +637,7 @@ where
 
 impl<A, ES, SS> EventSink<A> for CompositeEntityStore<A, ES, SS>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     ES: EntitySource<A>,
     SS: EntitySink<A>,
 {
@@ -650,7 +650,7 @@ where
 
 impl<A, ES, SS> SnapshotSink<A> for CompositeEntityStore<A, ES, SS>
 where
-    A: Aggregate + PersistableAggregate,
+    A: Aggregate,
     ES: EntitySource<A>,
     SS: EntitySink<A>,
 {
@@ -735,7 +735,7 @@ impl<A, PEErr, PSErr> fmt::Display for EntityExecAndPersistError<A, PEErr, PSErr
                 write!(f, "entity exec error, precondition failed: {}", p),
             EntityExecAndPersistError::Exec(_, e) =>
                 write!(f, "entity exec error, command was rejected: {}", e),
-            EntityExecAndPersistError::Persist(e) => Display::fmt(&e, f),
+            EntityExecAndPersistError::Persist(e) => fmt::Display::fmt(&e, f),
         }
     }
 }
@@ -776,12 +776,12 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            EntityError::Load(e) => Display::fmt(&e, f),
+            EntityError::Load(e) => fmt::Display::fmt(&e, f),
             EntityError::PreconditionFailed(p) =>
                 write!(f, "entity error, precondition failed: {}", p),
             EntityError::Exec(_, e) =>
                 write!(f, "entity error, command was rejected: {}", e),
-            EntityError::Persist(e) => Display::fmt(&e, f),
+            EntityError::Persist(e) => fmt::Display::fmt(&e, f),
         }
     }
 }

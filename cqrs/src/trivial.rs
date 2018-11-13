@@ -1,6 +1,6 @@
 use std::iter::Empty;
 use void::Void;
-use super::*;
+use cqrs_core::{Aggregate, EventSource, EventSink, SnapshotSource, SnapshotSink, EventNumber, VersionedEvent, Since, VersionedAggregate, VersionedAggregateView, Precondition};
 
 #[derive(Debug, Default, PartialEq, Clone, Copy)]
 pub struct NullStore;
@@ -32,7 +32,7 @@ where
 
 impl<A> SnapshotSource<A> for NullStore
 where
-    A: PersistableAggregate,
+    A: Aggregate,
 {
     type Error = Void;
 
@@ -46,7 +46,7 @@ where
 
 impl<A> SnapshotSink<A> for NullStore
 where
-    A: PersistableAggregate,
+    A: Aggregate,
 {
     type Error = Void;
 

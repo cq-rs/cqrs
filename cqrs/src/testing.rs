@@ -1,6 +1,6 @@
-use std::iter::Empty;
+use std::{io, iter::Empty};
 use void::Void;
-use super::*;
+use cqrs_core::{Aggregate, PersistableAggregate, SerializableEvent, EventDeserializeError};
 
 /// A test aggregate with no state
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -32,24 +32,13 @@ impl Aggregate for TestAggregate {
     }
 }
 
-
 impl PersistableAggregate for TestAggregate {
     type SnapshotError = &'static str;
 
-    fn snapshot(&self) -> Vec<u8> {
-        Default::default()
-    }
+    fn snapshot_to_writer<W: io::Write>(&self, _writer: W) -> io::Result<()> { Ok(()) }
 
-    fn snapshot_in_place(&self, snapshot: &mut Vec<u8>) {
-        debug_assert!(snapshot.is_empty());
-    }
-
-    fn restore(snapshot: &[u8]) -> Result<Self, Self::SnapshotError> {
-        if !snapshot.is_empty() {
-            Err("invalid snapshot")
-        } else {
-            Ok(TestAggregate)
-        }
+    fn restore_from_reader<R: io::Read>(_reader: R) -> Result<Self, Self::SnapshotError> {
+        Ok(TestAggregate)
     }
 }
 
@@ -62,17 +51,13 @@ impl SerializableEvent for TestEvent {
         EVENT_TYPE
     }
 
-    fn deserialize(event_type: &str, payload: &[u8]) -> Result<Self, EventDeserializeError<Self>> {
+    fn serialize_to_writer<W: io::Write>(&self, _writer: W) -> io::Result<()> {Ok(())}
+
+    fn deserialize_from_reader<R: io::Read>(event_type: &str, _reader: R) -> Result<Self, EventDeserializeError<Self>> {
         if event_type != EVENT_TYPE {
             Err(EventDeserializeError::new_unknown_event_type(event_type))
-        } else if !payload.is_empty() {
-            Err(EventDeserializeError::InvalidPayload("invalid payload"))
         } else {
             Ok(TestEvent)
         }
-    }
-
-    fn serialize_in_place(&self, payload: &mut Vec<u8>) {
-        debug_assert!(payload.is_empty());
     }
 }

@@ -11,6 +11,7 @@
     trivial_casts,
     trivial_numeric_casts,
     unsafe_code,
+    unused_must_use,
 )]
 
 extern crate cqrs_core;
@@ -46,6 +47,7 @@ impl Config {
 mod store {
     use cqrs_core::{Aggregate, EventNumber, EventSource, EventSink, PersistableAggregate, SnapshotSource, SnapshotSink, VersionedAggregate, VersionedAggregateView, Precondition, VersionedEvent, Since, Version, SerializableEvent, EventDeserializeError};
     use redis::PipelineCommands;
+    use std::collections::VecDeque;
     use super::*;
 
 
@@ -78,6 +80,31 @@ mod store {
         _phantom: PhantomData<A>,
     }
 
+    impl<'conn, C, A> SnapshotStore<'conn, C, A>
+    where
+        A: Aggregate,
+        A::Event: SerializableEvent,
+        C: ConnectionLike + 'conn,
+    {
+        fn serialize_event(event: &A::Event) -> Result<Vec<u8>, redis::RedisError> {
+            let mut buffer = Vec::new();
+            let event_type = event.event_type();
+            let len = event_type.len();
+            debug_assert!(len < u8::max_value() as usize);
+            buffer.push(len as u8);
+            buffer.extend_from_slice(event_type.as_ref());
+
+            {
+                use std::io::{Cursor, Seek, SeekFrom};
+                let mut cursor = Cursor::new(&mut buffer);
+                cursor.seek(SeekFrom::End(0)).map_err(redis::RedisError::from)?;
+                event.serialize_to_writer(&mut cursor)?;
+            }
+
+            Ok(buffer)
+        }
+    }
+
     impl<'conn, A, C> SnapshotSink<A> for SnapshotStore<'conn, C, A>
     where
         C: ConnectionLike + 'conn,
@@ -93,7 +120,7 @@ mod store {
             key.push_str(id);
 
             let snapshot_ver = aggregate.version.get();
-            let raw = aggregate.payload.snapshot();
+            let raw = aggregate.payload.snapshot().map_err(redis::RedisError::from)?;
 
             let _: () =
                 redis::pipe()
@@ -150,7 +177,71 @@ mod store {
         cursor: u64,
         remaining: u64,
         first_read: bool,
-        buffer: Vec<Vec<u8>>,
+        buffer: VecDeque<Vec<u8>>,
+    }
+
+    impl<'conn, C, E> RedisEventIterator<'conn, C, E>
+    where
+        C: ConnectionLike + 'conn,
+        E: SerializableEvent + 'static,
+    {
+        fn read_event_from_buffer(&mut self, buffer: &[u8]) -> Result<VersionedEvent<E>, EventDeserializeError<E>> {
+            use std::io::Read;
+            use std::str;
+
+            let sequence = Version::new(self.cursor + self.index).next_event();
+            let mut buffer_ref: &[u8] = buffer.as_ref();
+            let mut len = [0u8; 1];
+            buffer_ref.read_exact(&mut len).unwrap();
+            let (event_type_raw, payload) = buffer_ref.split_at(len[0] as usize);
+            let event_type =
+                match str::from_utf8(event_type_raw) {
+                    Ok(e) => e,
+                    Err(_) =>
+                        return Err(EventDeserializeError::UnknownEventType(String::from("<invalid utf-8>"))),
+                };
+            let data = E::deserialize(event_type, payload);
+            let event = data.map(|event| {
+                VersionedEvent {
+                    sequence,
+                    event,
+                }
+            });
+
+            log::trace!("entity {}: loaded event; sequence: {}", &self.key, sequence);
+            self.index += 1;
+            self.remaining -= 1;
+            event
+        }
+
+        fn get_next_buffer(&mut self) -> Result<Option<Vec<u8>>, redis::RedisError> {
+            if let Some(buffer) = self.buffer.pop_front() {
+                Ok(Some(buffer))
+            } else if !self.first_read && self.index + 1 < PAGE_SIZE {
+                Ok(None)
+            } else {
+                self.load_page()?;
+                if let Some(buffer) = self.buffer.pop_front() {
+                    Ok(Some(buffer))
+                } else {
+                    Ok(None)
+                }
+            }
+        }
+
+        fn load_page(&mut self) -> Result<(), redis::RedisError> {
+            self.first_read = false;
+            self.cursor += self.index;
+            self.index = 0;
+            let mut values: Vec<Vec<Vec<u8>>> =
+                redis::pipe()
+                    .lrange(&self.key, self.cursor as isize, (self.cursor + PAGE_SIZE.min(self.remaining) - 1) as isize)
+                    .query(self.conn)?;
+
+            self.buffer.clear();
+            self.buffer.extend(values.pop().unwrap());
+            Ok(())
+        }
     }
 
     const PAGE_SIZE: u64 = 100;
@@ -163,65 +254,14 @@ mod store {
         type Item = Result<VersionedEvent<E>, LoadError<EventDeserializeError<E>>>;
 
         fn next(&mut self) -> Option<Self::Item> {
-            use std::io::Read;
             if self.remaining == 0 {
                 self.buffer.clear();
                 None
-            } else if let Some(raw) = self.buffer.pop() {
-                let sequence = Version::new(self.cursor + self.index).next_event();
-                log::trace!("entity {}: loaded event; sequence: {}", &self.key, sequence);
-                let mut raw_ref: &[u8] = raw.as_ref();
-                let mut len = [0u8; 1];
-                raw_ref.read_exact(&mut len).unwrap();
-                let (event_type_raw, payload) = raw_ref.split_at(len[0] as usize);
-                let data = E::deserialize(::std::str::from_utf8(event_type_raw).unwrap(), payload);
-                let event = data.map(|event| {
-                    VersionedEvent {
-                        sequence,
-                        event,
-                    }
-                });
-                self.index += 1;
-                self.remaining -= 1;
-                Some(event.map_err(LoadError::Deserialize))
-            } else if !self.first_read && self.index + 1 < PAGE_SIZE {
-                None
             } else {
-                self.first_read = false;
-                self.cursor += self.index;
-                self.index = 0;
-                let values: Result<Vec<Vec<Vec<u8>>>, _> =
-                    redis::pipe()
-                        .lrange(&self.key, self.cursor as isize, (self.cursor + PAGE_SIZE.min(self.remaining) - 1) as isize)
-                        .query(self.conn);
-
-                if let Err(e) = values {
-                    return Some(Err(e.into()));
-                }
-
-                let mut values = values.unwrap();
-
-                self.buffer = values.pop().unwrap();
-                self.buffer.reverse();
-                if let Some(mut raw) = self.buffer.pop() {
-                    let sequence = EventNumber::new(self.cursor + self.index + 1).unwrap();
-                    log::trace!("entity {}: loaded event; sequence: {}", &self.key, sequence);
-                    let mut raw_ref: &[u8] = raw.as_ref();
-                    let mut len = [0u8; 1];
-                    raw_ref.read_exact(&mut len).unwrap();
-                    let (event_type_raw, payload) = raw_ref.split_at(len[0] as usize);
-                    let data = E::deserialize(::std::str::from_utf8(event_type_raw).unwrap(), payload);
-                    let event = data.map(|event| {
-                        VersionedEvent {
-                            sequence,
-                            event,
-                        }
-                    });
-                    self.index += 1;
-                    self.remaining -= 1;
-                    Some(event.map_err(LoadError::Deserialize))
-                } else {
-                    None
+                match self.get_next_buffer() {
+                    Ok(Some(buffer)) => Some(self.read_event_from_buffer(&buffer).map_err(LoadError::Deserialize)),
+                    Ok(None) => None,
+                    Err(e) => Some(Err(LoadError::Redis(e))),
                 }
             }
         }
@@ -259,7 +299,7 @@ mod store {
                     index: 0,
                     remaining: max_count.unwrap_or(u64::max_value()),
                     first_read: true,
-                    buffer: Vec::default(),
+                    buffer: VecDeque::default(),
                 }))
             } else {
                 Ok(None)
@@ -297,17 +337,8 @@ mod store {
                         Ok(Some(None))
                     } else {
                         for e in events.iter() {
+                            pipe.rpush(&key, Self::serialize_event(e)?);
                             log::trace!("entity {}; appending event", id);
-                            let mut serialized = Vec::new();
-                            e.serialize_in_place(&mut serialized);
-                            let event_type = e.event_type();
-                            let len = event_type.len();
-                            debug_assert!(len < u8::max_value() as usize);
-                            let mut data = Vec::with_capacity(serialized.len() + len + 1);
-                            data.push(len as u8);
-                            data.extend_from_slice(event_type.as_ref());
-                            data.extend_from_slice(&serialized);
-                            pipe.rpush(&key, data);
                         }
                         pipe.query(self.store.conn)
                     }
@@ -324,17 +355,8 @@ mod store {
                     last_event_number = len.0;
 
                     for e in events.iter() {
+                        pipe.rpush(&key, Self::serialize_event(e)?);
                         log::trace!("entity {}; appending event", id);
-                        let mut serialized = Vec::new();
-                        e.serialize_in_place(&mut serialized);
-                        let event_type = e.event_type();
-                        let len = event_type.len();
-                        debug_assert!(len < u8::max_value() as usize);
-                        let mut data = Vec::with_capacity(serialized.len() + len + 1);
-                        data.push(len as u8);
-                        data.extend_from_slice(event_type.as_ref());
-                        data.extend_from_slice(&serialized);
-                        pipe.rpush(&key, data);
                     }
                     pipe.query(self.store.conn)
                 })?;

@@ -1,9 +1,9 @@
 use std::{fmt, marker::PhantomData};
-use cqrs_core::{Aggregate, SerializableEvent, EventNumber, EventSource, EventSink, Precondition, VersionedEvent, Since, Version, EventDeserializeError, SnapshotSink, SnapshotSource, PersistableAggregate, VersionedAggregate, VersionedAggregateView};
+use cqrs_core::{Aggregate, PersistableAggregate, SerializableEvent, EventDeserializeError, EventNumber, EventSource, EventSink, Precondition, VersionedEvent, Since, Version, SnapshotSink, SnapshotSource, VersionedAggregate, VersionedAggregateView};
 use fallible_iterator::FallibleIterator;
 use postgres::Connection;
 use error::{LoadError, PersistError};
-use util::RawJson;
+use util::{RawJson, PostgresEventView, PostgresSnapshotView};
 
 pub struct PostgresStore<'conn, A>
 where A: Aggregate,
@@ -48,7 +48,7 @@ impl<'conn, A> PostgresStore<'conn, A>
 impl<'conn, A> EventSink<A> for PostgresStore<'conn, A>
 where
     A: Aggregate,
-    A::Event: SerializableEvent,
+    A::Event: SerializableEvent + fmt::Debug,
 {
     type Error = PersistError;
 
@@ -81,13 +81,10 @@ where
         let mut next_sequence = Version::Number(first_sequence);
 
         let stmt = trans.prepare_cached("INSERT INTO events (entity_type, entity_id, sequence, event_type, payload, timestamp) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)")?;
-        let mut payload_buffer = RawJson(Vec::new());
         for event in events {
-            event.serialize_in_place(&mut payload_buffer.0);
-            let _modified_count = stmt.execute(&[&A::entity_type(), &id, &(next_sequence.get() as i64), &event.event_type(), &payload_buffer])?;
-            trace!("entity {}: inserted event; sequence: {}, payload: {}", id, next_sequence, payload_buffer);
+            let _modified_count = stmt.execute(&[&A::entity_type(), &id, &(next_sequence.get() as i64), &event.event_type(), &PostgresEventView(event)])?;
+            trace!("entity {}: inserted event; sequence: {}", id, next_sequence);
             next_sequence = next_sequence.incr();
-            payload_buffer.0.clear();
         }
 
         trans.commit()?;
@@ -118,7 +115,7 @@ where
             let sequence: i64 = row.get("sequence");
             let raw: RawJson = row.get("payload");
             trace!("entity {}: loaded event; sequence: {}, type: {}, payload: {}", id, sequence, event_type, raw);
-            Ok(cqrs_core::VersionedEvent {
+            Ok(VersionedEvent {
                 sequence: EventNumber::new(sequence as u64).expect("Sequence number should be non-zero"),
                 event: A::Event::deserialize(&event_type, &raw.0).map_err(LoadError::Deserialize)?,
             })
@@ -164,22 +161,21 @@ where
 
 impl<'conn, A> SnapshotSink<A> for PostgresStore<'conn, A>
 where
-    A: PersistableAggregate,
+    A: PersistableAggregate + fmt::Debug,
 {
     type Error = PersistError;
 
     fn persist_snapshot(&self, id: &str, aggregate: VersionedAggregateView<A>) -> Result<(), Self::Error> {
         let stmt = self.conn.prepare_cached("INSERT INTO snapshots (entity_type, entity_id, sequence, payload) VALUES ($1, $2, $3, $4)")?;
-        let raw = RawJson(aggregate.payload.snapshot());
-        let _modified_count = stmt.execute(&[&A::entity_type(), &id, &(aggregate.version.get() as i64), &raw])?;
-        trace!("entity {}: persisted snapshot; payload: {}", id, raw);
+        let _modified_count = stmt.execute(&[&A::entity_type(), &id, &(aggregate.version.get() as i64), &PostgresSnapshotView(aggregate.payload)])?;
+        trace!("entity {}: persisted snapshot", id);
         Ok(())
     }
 }
 
 impl<'conn, A> SnapshotSource<A> for PostgresStore<'conn, A>
 where
-    A: PersistableAggregate,
+    A: PersistableAggregate
 {
     type Error = LoadError<A::SnapshotError>;
 

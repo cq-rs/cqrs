@@ -1,6 +1,6 @@
 use std::fmt;
 use std::num::NonZeroU64;
-use aggregate::PersistableAggregate;
+use aggregate::SerializableEvent;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EventNumber(NonZeroU64);
@@ -188,26 +188,30 @@ impl fmt::Display for Precondition {
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct VersionedEvent<Event>
-{
+pub struct VersionedEvent<E> {
     pub sequence: EventNumber,
-    pub event: Event,
+    pub event: E,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct VersionedAggregate<A>
-where A: PersistableAggregate
-{
+pub struct VersionedAggregate<A> {
     pub version: Version,
     pub payload: A,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct VersionedAggregateView<'a, A>
-    where A: PersistableAggregate + 'a
-{
+pub struct VersionedAggregateView<'a, A: 'a> {
     pub version: Version,
     pub payload: &'a A,
+}
+
+impl<'a, A: Clone + 'a> From<VersionedAggregateView<'a, A>> for VersionedAggregate<A> {
+    fn from(view: VersionedAggregateView<'a, A>) -> Self {
+        VersionedAggregate {
+            version: view.version,
+            payload: view.payload.to_owned(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -227,14 +231,14 @@ impl From<Version> for Since {
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub enum EventDeserializeError<E>
-where E: super::SerializableEvent
+    where E: SerializableEvent
 {
     UnknownEventType(String),
     InvalidPayload(E::PayloadError),
 }
 
 impl<E> EventDeserializeError<E>
-where E: super::SerializableEvent
+    where E: SerializableEvent
 {
     pub fn new_unknown_event_type(event_type: impl Into<String>) -> Self {
         EventDeserializeError::UnknownEventType(event_type.into())
@@ -242,8 +246,7 @@ where E: super::SerializableEvent
 }
 
 impl<E> fmt::Debug for EventDeserializeError<E>
-where
-    E: super::SerializableEvent,
+    where E: SerializableEvent
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
@@ -260,14 +263,14 @@ where
 }
 
 impl<E> fmt::Display for EventDeserializeError<E>
-where E: super::SerializableEvent
+    where E: SerializableEvent
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             EventDeserializeError::UnknownEventType(ref evt_type) =>
-                write!(f, "event deserialize error; unknown event type: {}", evt_type),
+                write!(f, "unable to deserialize event; unknown event type: {}", evt_type),
             EventDeserializeError::InvalidPayload(ref err) =>
-                write!(f, "event deserialize error; invalid payload: {}", err),
+                write!(f, "unable to deserialize event; invalid payload: {}", err),
         }
     }
 }
