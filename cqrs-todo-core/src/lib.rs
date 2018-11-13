@@ -174,13 +174,13 @@ pub struct TodoData {
 }
 
 impl TodoData {
-    pub fn new(description: domain::Description, reminder: Option<domain::Reminder>, status: TodoStatus) -> Self {
+    fn new(description: domain::Description, reminder: Option<domain::Reminder>, status: TodoStatus) -> Self {
         TodoData {
             description, reminder, status,
         }
     }
 
-    pub fn with_description(description: domain::Description) -> Self {
+    fn with_description(description: domain::Description) -> Self {
         TodoData {
             description,
             reminder: None,
@@ -188,7 +188,7 @@ impl TodoData {
         }
     }
 
-    pub fn apply(&mut self, event: Event) {
+    fn apply(&mut self, event: Event) {
         match event {
             Event::TextUpdated(description) => self.description = description,
             Event::ReminderUpdated(reminder) => self.reminder = reminder,
@@ -198,7 +198,7 @@ impl TodoData {
         }
     }
 
-    pub fn execute(&self, command: Command) -> Result<Events, error::CommandError> {
+    fn execute(&self, command: Command) -> Result<Events, error::CommandError> {
         match command {
             Command::UpdateText(description) => Ok(self.execute_update_description(description)),
             Command::SetReminder(reminder) => Ok(self.execute_set_reminder(reminder)),
@@ -206,19 +206,19 @@ impl TodoData {
             Command::ToggleCompletion => Ok(self.execute_toggle_completion()),
             Command::MarkCompleted => Ok(self.execute_mark_completed()),
             Command::ResetCompleted => Ok(self.execute_reset_completed()),
-            Command::Create(description, reminder_opt) => self.execute_create(description, reminder_opt),
+            Command::Create(ref description, ref reminder_opt) => self.execute_create(description, reminder_opt.as_ref()),
         }
     }
 
-    pub fn execute_create(&self, description: domain::Description, reminder_opt: Option<domain::Reminder>) -> Result<Events, error::CommandError> {
-        if self.description == description && self.reminder == reminder_opt {
+    fn execute_create(&self, description: &domain::Description, reminder_opt: Option<&domain::Reminder>) -> Result<Events, error::CommandError> {
+        if &self.description == description && self.reminder.as_ref() == reminder_opt {
             Ok(SmallVec::new())
         } else {
             Err(error::CommandError::AlreadyCreated)
         }
     }
 
-    pub fn execute_update_description(&self, description: domain::Description) -> Events {
+    fn execute_update_description(&self, description: domain::Description) -> Events {
         let mut events = SmallVec::new();
         if self.description != description {
             events.push(Event::TextUpdated(description));
@@ -226,7 +226,7 @@ impl TodoData {
         events
     }
 
-    pub fn execute_set_reminder(&self, reminder: domain::Reminder) -> Events {
+    fn execute_set_reminder(&self, reminder: domain::Reminder) -> Events {
         let mut events = SmallVec::new();
         if let Some(existing) = self.reminder {
             if existing != reminder {
@@ -238,7 +238,7 @@ impl TodoData {
         events
     }
 
-    pub fn execute_cancel_reminder(&self) -> Events {
+    fn execute_cancel_reminder(&self) -> Events {
         let mut events = SmallVec::new();
         if self.reminder.is_some() {
             events.push(Event::ReminderUpdated(None));
@@ -246,7 +246,7 @@ impl TodoData {
         events
     }
 
-    pub fn execute_toggle_completion(&self) -> Events {
+    fn execute_toggle_completion(&self) -> Events {
         let mut events = SmallVec::new();
         match self.status {
             TodoStatus::NotCompleted => events.push(Event::Completed),
@@ -255,7 +255,7 @@ impl TodoData {
         events
     }
 
-    pub fn execute_mark_completed(&self) -> Events {
+    fn execute_mark_completed(&self) -> Events {
         let mut events = SmallVec::new();
         match self.status {
             TodoStatus::NotCompleted => events.push(Event::Completed),
@@ -264,7 +264,7 @@ impl TodoData {
         events
     }
 
-    pub fn execute_reset_completed(&self) -> Events {
+    fn execute_reset_completed(&self) -> Events {
         let mut events = SmallVec::new();
         match self.status {
             TodoStatus::NotCompleted => {},
@@ -289,29 +289,27 @@ impl Default for TodoAggregate {
 type Events = SmallVec<[Event; 1]>;
 
 impl TodoAggregate {
-    pub fn apply_event(&mut self, event: Event) {
+    fn apply_event(&mut self, event: Event) {
         match *self {
             TodoAggregate::Uninitialized => self.apply_to_uninitialized(event),
             TodoAggregate::Created(ref mut data) => data.apply(event),
         }
     }
 
-    pub fn apply_to_uninitialized(&mut self, event: Event) {
-        match event {
-            Event::Created(initial_description) =>
-                *self = TodoAggregate::Created(TodoData::with_description(initial_description)),
-            _ => {}
+    fn apply_to_uninitialized(&mut self, event: Event) {
+        if let Event::Created(initial_description) = event {
+            *self = TodoAggregate::Created(TodoData::with_description(initial_description));
         }
     }
 
-    pub fn execute_command(&self, command: Command) -> Result<Events, error::CommandError> {
+    fn execute_command(&self, command: Command) -> Result<Events, error::CommandError> {
         match *self {
             TodoAggregate::Uninitialized => self.execute_on_uninitialized(command),
             TodoAggregate::Created(ref data) => data.execute(command),
         }
     }
 
-    pub fn execute_on_uninitialized(&self, command: Command) -> Result<Events, error::CommandError> {
+    fn execute_on_uninitialized(&self, command: Command) -> Result<Events, error::CommandError> {
         match command {
             Command::Create(description, reminder_opt) => {
                 let mut events = SmallVec::new();
@@ -359,7 +357,8 @@ impl PersistableAggregate for TodoAggregate {
     type SnapshotError = serde_json::Error;
 
     fn snapshot_to_writer<W: io::Write>(&self, writer: W) -> io::Result<()> {
-        Ok(serde_json::to_writer(writer, &self)?)
+        serde_json::to_writer(writer, &self)?;
+        Ok(())
     }
 
     fn restore(snapshot: &[u8]) -> Result<Self, <Self as PersistableAggregate>::SnapshotError> {
@@ -410,14 +409,16 @@ impl SerializableEvent for Event {
         Ok(event)
     }
 
-    fn serialize_to_writer<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
-        Ok(match *self {
+    fn serialize_to_writer<W: io::Write>(&self, writer: W) -> io::Result<()> {
+        match *self {
             Event::Created(ref x) => serde_json::to_writer(writer, x)?,
             Event::ReminderUpdated(ref x) => serde_json::to_writer(writer, x)?,
             Event::TextUpdated(ref x) => serde_json::to_writer(writer, x)?,
-            Event::Completed => {writer.write(b"{}")?;},
-            Event::Uncompleted => {writer.write(b"{}")?;},
-        })
+            Event::Completed => serde_json::to_writer(writer, &())?,
+            Event::Uncompleted => serde_json::to_writer(writer, &())?,
+        };
+
+        Ok(())
     }
 }
 

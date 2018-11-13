@@ -41,7 +41,7 @@ where
         self.version = self.version.incr();
     }
 
-    pub fn to_entity_with_id<I: AsRef<str>>(self, id: I) -> Entity<I, A> {
+    pub fn into_entity_with_id<I: AsRef<str>>(self, id: I) -> Entity<I, A> {
         Entity::new(id, self)
     }
 }

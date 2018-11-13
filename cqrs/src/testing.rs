@@ -42,7 +42,7 @@ impl PersistableAggregate for TestAggregate {
     }
 }
 
-const EVENT_TYPE: &'static str = "test";
+const EVENT_TYPE: &str = "test";
 
 impl SerializableEvent for TestEvent {
     type PayloadError = &'static str;

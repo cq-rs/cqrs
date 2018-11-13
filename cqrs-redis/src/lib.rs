@@ -122,11 +122,10 @@ mod store {
             let snapshot_ver = aggregate.version.get();
             let raw = aggregate.payload.snapshot().map_err(redis::RedisError::from)?;
 
-            let _: () =
-                redis::pipe()
-                    .hset(&key, "version", snapshot_ver)
-                    .hset(&key, "snapshot", raw)
-                    .query(self.store.conn)?;
+            redis::pipe()
+                .hset(&key, "version", snapshot_ver)
+                .hset(&key, "snapshot", raw)
+                .query(self.store.conn)?;
             Ok(())
         }
     }
@@ -152,10 +151,8 @@ mod store {
                     .query(self.store.conn)?;
             Ok(match result {
                 (Some(snapshot_ver), Some(raw)) => {
-                    let version = Version::new(snapshot_ver);
-
                     Some(VersionedAggregate {
-                        version: version,
+                        version: Version::new(snapshot_ver),
                         payload: A::restore(&raw).map_err(LoadError::Deserialize)?,
                     })
                 },
@@ -185,15 +182,14 @@ mod store {
         C: ConnectionLike + 'conn,
         E: SerializableEvent + 'static,
     {
-        fn read_event_from_buffer(&mut self, buffer: &[u8]) -> Result<VersionedEvent<E>, EventDeserializeError<E>> {
+        fn read_event_from_buffer(&mut self, mut buffer: &[u8]) -> Result<VersionedEvent<E>, EventDeserializeError<E>> {
             use std::io::Read;
             use std::str;
 
             let sequence = Version::new(self.cursor + self.index).next_event();
-            let mut buffer_ref: &[u8] = buffer.as_ref();
             let mut len = [0u8; 1];
-            buffer_ref.read_exact(&mut len).unwrap();
-            let (event_type_raw, payload) = buffer_ref.split_at(len[0] as usize);
+            buffer.read_exact(&mut len).unwrap();
+            let (event_type_raw, payload) = buffer.split_at(len[0] as usize);
             let event_type =
                 match str::from_utf8(event_type_raw) {
                     Ok(e) => e,
@@ -333,7 +329,7 @@ mod store {
                     last_event_number = len;
                     let current_version = Version::new(len);
 
-                    if let Err(_) = precondition.verify(if exists { Some(current_version) } else { None }) {
+                    if precondition.verify(if exists { Some(current_version) } else { None }).is_err() {
                         Ok(Some(None))
                     } else {
                         for e in events.iter() {
@@ -347,7 +343,7 @@ mod store {
                     return Err(PersistError::PreconditionFailed(precondition))
                 }
             } else {
-                let _: () = redis::transaction(self.store.conn, &[&key], |pipe| {
+                redis::transaction(self.store.conn, &[&key], |pipe| {
                     let len: (u64,) =
                         redis::pipe()
                             .llen(&key)

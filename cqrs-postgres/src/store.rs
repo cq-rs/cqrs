@@ -67,7 +67,7 @@ where
 
         trace!("entity {}: current version: {:?}", id, current_version);
 
-        if events.len() == 0 {
+        if events.is_empty() {
             return Ok(current_version.unwrap_or_default().next_event())
         }
 
