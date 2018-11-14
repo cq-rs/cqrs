@@ -8,14 +8,14 @@ use std::collections::hash_map::Entry;
 
 use cqrs::{EventNumber, Precondition, VersionedEvent, Version};
 use cqrs::{EventSource, EventSink, Since};
-use cqrs_todo_core::{TodoAggregate, Event};
+use cqrs_todo_core::{TodoAggregate, TodoEvent};
 use void::Void;
 
 #[derive(Debug)]
-struct EventMap(RefCell<HashMap<String, Vec<cqrs::VersionedEvent<cqrs_todo_core::Event>>>>);
+struct EventMap(RefCell<HashMap<String, Vec<cqrs::VersionedEvent<cqrs_todo_core::TodoEvent>>>>);
 
 impl EventSource<TodoAggregate> for EventMap {
-    type Events = Vec<Result<VersionedEvent<Event>, Void>>;
+    type Events = Vec<Result<VersionedEvent<TodoEvent>, Void>>;
     type Error = Void;
 
     fn read_events(&self, id: &str, since: Since, max_count: Option<u64>) -> Result<Option<Self::Events>, Self::Error> {
@@ -33,7 +33,7 @@ impl EventSource<TodoAggregate> for EventMap {
 impl EventSink<TodoAggregate> for EventMap {
     type Error = Void;
 
-    fn append_events(&self, id: &str, events: &[Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
+    fn append_events(&self, id: &str, events: &[TodoEvent], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
         let mut borrow = self.0.borrow_mut();
         let entry = borrow.entry(id.into());
 
@@ -72,19 +72,19 @@ fn main_test() {
     let id = "test";
 
     assert_eq!(em.read_events(id, Since::BeginningOfStream, None), Ok(None));
-    let event_num = em.append_events(id, &[cqrs_todo_core::Event::Completed], Some(Precondition::New)).unwrap();
+    let event_num = em.append_events(id, &[cqrs_todo_core::TodoEvent::Completed], Some(Precondition::New)).unwrap();
     assert_eq!(event_num, EventNumber::MIN_VALUE);
-    let event_num = em.append_events(id, &[cqrs_todo_core::Event::Uncompleted], Some(Precondition::ExpectedVersion(Version::Number(EventNumber::MIN_VALUE)))).unwrap();
+    let event_num = em.append_events(id, &[cqrs_todo_core::TodoEvent::Uncompleted], Some(Precondition::ExpectedVersion(Version::Number(EventNumber::MIN_VALUE)))).unwrap();
     assert_eq!(event_num, EventNumber::MIN_VALUE.incr());
 
     let expected_events = vec![
         Ok(VersionedEvent {
             sequence: EventNumber::MIN_VALUE,
-            event: cqrs_todo_core::Event::Completed,
+            event: cqrs_todo_core::TodoEvent::Completed,
         }),
         Ok(VersionedEvent {
             sequence: EventNumber::MIN_VALUE.incr(),
-            event: cqrs_todo_core::Event::Uncompleted,
+            event: cqrs_todo_core::TodoEvent::Uncompleted,
         }),
     ];
 

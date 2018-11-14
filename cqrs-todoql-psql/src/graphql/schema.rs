@@ -1,7 +1,7 @@
 use base64;
 use cqrs::{Entity, Precondition, Version, EntityStore, EntitySink, EntitySource};
 use cqrs_postgres::PostgresStore;
-use cqrs_todo_core::{domain, TodoAggregate, TodoStatus, Command};
+use cqrs_todo_core::{domain, TodoAggregate, TodoStatus, TodoCommand};
 use chrono::{DateTime, Utc};
 use juniper::{ID, FieldResult, Value};
 
@@ -68,7 +68,7 @@ graphql_object!(Query: Context |&self| {
         let id = id.to_string();
 
         let entity = store.rehydrate(&id)?
-            .map(|agg| TodoQL(agg.to_entity_with_id(id)));
+            .map(|agg| TodoQL(agg.into_entity_with_id(id)));
 
         Ok(entity)
     }
@@ -157,7 +157,7 @@ graphql_object!(TodoEdge: Context |&self| {
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
         let entity = store.rehydrate(&id)?
-            .map(|agg| TodoQL(agg.to_entity_with_id(id)));
+            .map(|agg| TodoQL(agg.into_entity_with_id(id)));
 
         Ok(entity)
     }
@@ -190,7 +190,7 @@ graphql_object!(Mutations: Context |&self| {
             } else { None };
 
 
-        let command = Command::Create(description, reminder);
+        let command = TodoCommand::Create(description, reminder);
 
         let new_id = context.id_provider.new_id();
 
@@ -203,7 +203,7 @@ graphql_object!(Mutations: Context |&self| {
             command,
             Some(Precondition::New),
             10,
-        )?.to_entity_with_id(new_id.clone());
+        )?.into_entity_with_id(new_id.clone());
 
         context.stream_index.write().push(new_id);
 
@@ -229,7 +229,7 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let description = domain::Description::new(text)?;
 
-        let command = Command::UpdateText(description);
+        let command = TodoCommand::UpdateText(description);
 
         let id = self.0.to_string();
 
@@ -241,7 +241,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             10,
-        )?.map(move |agg| agg.to_entity_with_id(id));
+        )?.map(move |agg| agg.into_entity_with_id(id));
 
         Ok(entity.map(TodoQL))
     }
@@ -253,7 +253,7 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let reminder = domain::Reminder::new(time, Utc::now())?;
 
-        let command = Command::SetReminder(reminder);
+        let command = TodoCommand::SetReminder(reminder);
 
         let id = self.0.to_string();
 
@@ -265,7 +265,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             10,
-        )?.map(move |agg| agg.to_entity_with_id(id));
+        )?.map(move |agg| agg.into_entity_with_id(id));
 
         Ok(entity.map(TodoQL))
     }
@@ -275,7 +275,7 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let precondition = expect_exists_or(expected_version);
 
-        let command = Command::CancelReminder;
+        let command = TodoCommand::CancelReminder;
 
         let id = self.0.to_string();
 
@@ -287,7 +287,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             10,
-        )?.map(move |agg| agg.to_entity_with_id(id));
+        )?.map(move |agg| agg.into_entity_with_id(id));
 
         Ok(entity.map(TodoQL))
     }
@@ -297,7 +297,7 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let precondition = expect_exists_or(expected_version);
 
-        let command = Command::ToggleCompletion;
+        let command = TodoCommand::ToggleCompletion;
 
         let id = self.0.to_string();
 
@@ -309,7 +309,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             10,
-        )?.map(move |agg| agg.to_entity_with_id(id));
+        )?.map(move |agg| agg.into_entity_with_id(id));
 
         Ok(entity.map(TodoQL))
     }
@@ -319,7 +319,7 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let precondition = expect_exists_or(expected_version);
 
-        let command = Command::ResetCompleted;
+        let command = TodoCommand::ResetCompleted;
 
         let id = self.0.to_string();
 
@@ -331,7 +331,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             10,
-        )?.map(move |agg| agg.to_entity_with_id(id));
+        )?.map(move |agg| agg.into_entity_with_id(id));
 
         Ok(entity.map(TodoQL))
     }
@@ -341,7 +341,7 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let precondition = expect_exists_or(expected_version);
 
-        let command = Command::MarkCompleted;
+        let command = TodoCommand::MarkCompleted;
 
         let id = self.0.to_string();
 
@@ -353,7 +353,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             10,
-        )?.map(move |agg| agg.to_entity_with_id(id));
+        )?.map(move |agg| agg.into_entity_with_id(id));
 
         Ok(entity.map(TodoQL))
     }

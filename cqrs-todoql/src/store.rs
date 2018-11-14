@@ -1,12 +1,12 @@
 use cqrs::{EventNumber, Precondition, VersionedEvent, VersionedAggregate, VersionedAggregateView};
 use cqrs::Since;
-use cqrs::{EventSink, EventSource, SnapshotSink, SnapshotSource, SerializableEvent, EventDeserializeError};
+use cqrs::{EventSink, EventSource, SnapshotSink, SnapshotSource};
 use cqrs::trivial::NullStore;
 use cqrs::memory::{EventStore,StateStore};
 
 use cqrs_redis;
 use cqrs_redis::{LoadError, PersistError};
-use cqrs_todo_core::{Event, TodoAggregate};
+use cqrs_todo_core::{TodoEvent, TodoAggregate};
 
 use r2d2;
 use r2d2_redis::RedisConnectionManager;
@@ -35,8 +35,8 @@ impl MemoryOrNullEventStore {
 }
 
 impl EventSource<TodoAggregate> for MemoryOrNullEventStore {
-    type Events = Vec<Result<VersionedEvent<Event>, Self::Error>>;
-    type Error = LoadError<EventDeserializeError<Event>>;
+    type Events = Vec<Result<VersionedEvent<TodoEvent>, Self::Error>>;
+    type Error = LoadError;
 
     fn read_events(&self, id: &str, since: Since, max_count: Option<u64>) -> Result<Option<Self::Events>, Self::Error> {
         match *self {
@@ -56,7 +56,7 @@ impl EventSource<TodoAggregate> for MemoryOrNullEventStore {
 impl EventSink<TodoAggregate> for MemoryOrNullEventStore {
     type Error = PersistError;
 
-    fn append_events(&self, id: &str, events: &[Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
+    fn append_events(&self, id: &str, events: &[TodoEvent], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
         match *self {
             MemoryOrNullEventStore::Memory(ref mem) => Ok(mem.append_events(id, events, precondition).map_err(|::cqrs::memory::PreconditionFailed(p)| PersistError::PreconditionFailed(p))?),
             MemoryOrNullEventStore::Null => Ok(EventSink::<TodoAggregate>::append_events(&NullStore, id, events, precondition).void_unwrap()),
@@ -93,7 +93,7 @@ impl MemoryOrNullSnapshotStore {
 }
 
 impl SnapshotSource<TodoAggregate> for MemoryOrNullSnapshotStore {
-    type Error = LoadError<<Event as SerializableEvent>::PayloadError>;
+    type Error = LoadError;
 
     fn get_snapshot(&self, id: &str) -> Result<Option<VersionedAggregate<TodoAggregate>>, Self::Error> {
         match *self {

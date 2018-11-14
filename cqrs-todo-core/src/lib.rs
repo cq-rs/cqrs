@@ -16,15 +16,13 @@
 
 extern crate cqrs_core;
 extern crate chrono;
-extern crate smallvec;
+extern crate arrayvec;
 extern crate serde;
 #[macro_use] extern crate serde_derive;
-extern crate serde_json;
-#[macro_use] extern crate log;
+extern crate log;
 
-use smallvec::SmallVec;
-use cqrs_core::{Aggregate, PersistableAggregate, SerializableEvent, EventDeserializeError};
-use std::io;
+use arrayvec::ArrayVec;
+use cqrs_core::{Aggregate, Event};
 
 pub mod domain {
     use chrono::{DateTime,Utc};
@@ -141,7 +139,7 @@ pub mod error {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Event {
+pub enum TodoEvent {
     Created(domain::Description),
     TextUpdated(domain::Description),
     ReminderUpdated(Option<domain::Reminder>),
@@ -150,7 +148,7 @@ pub enum Event {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Command {
+pub enum TodoCommand {
     Create(domain::Description, Option<domain::Reminder>),
     UpdateText(domain::Description),
     SetReminder(domain::Reminder),
@@ -188,87 +186,87 @@ impl TodoData {
         }
     }
 
-    fn apply(&mut self, event: Event) {
+    fn apply(&mut self, event: TodoEvent) {
         match event {
-            Event::TextUpdated(description) => self.description = description,
-            Event::ReminderUpdated(reminder) => self.reminder = reminder,
-            Event::Completed => self.status = TodoStatus::Completed,
-            Event::Uncompleted => self.status = TodoStatus::NotCompleted,
-            Event::Created(_) => {},
+            TodoEvent::TextUpdated(description) => self.description = description,
+            TodoEvent::ReminderUpdated(reminder) => self.reminder = reminder,
+            TodoEvent::Completed => self.status = TodoStatus::Completed,
+            TodoEvent::Uncompleted => self.status = TodoStatus::NotCompleted,
+            TodoEvent::Created(_) => {},
         }
     }
 
-    fn execute(&self, command: Command) -> Result<Events, error::CommandError> {
+    fn execute(&self, command: TodoCommand) -> Result<Events, error::CommandError> {
         match command {
-            Command::UpdateText(description) => Ok(self.execute_update_description(description)),
-            Command::SetReminder(reminder) => Ok(self.execute_set_reminder(reminder)),
-            Command::CancelReminder => Ok(self.execute_cancel_reminder()),
-            Command::ToggleCompletion => Ok(self.execute_toggle_completion()),
-            Command::MarkCompleted => Ok(self.execute_mark_completed()),
-            Command::ResetCompleted => Ok(self.execute_reset_completed()),
-            Command::Create(ref description, ref reminder_opt) => self.execute_create(description, reminder_opt.as_ref()),
+            TodoCommand::UpdateText(description) => Ok(self.execute_update_description(description)),
+            TodoCommand::SetReminder(reminder) => Ok(self.execute_set_reminder(reminder)),
+            TodoCommand::CancelReminder => Ok(self.execute_cancel_reminder()),
+            TodoCommand::ToggleCompletion => Ok(self.execute_toggle_completion()),
+            TodoCommand::MarkCompleted => Ok(self.execute_mark_completed()),
+            TodoCommand::ResetCompleted => Ok(self.execute_reset_completed()),
+            TodoCommand::Create(ref description, ref reminder_opt) => self.execute_create(description, reminder_opt.as_ref()),
         }
     }
 
     fn execute_create(&self, description: &domain::Description, reminder_opt: Option<&domain::Reminder>) -> Result<Events, error::CommandError> {
         if &self.description == description && self.reminder.as_ref() == reminder_opt {
-            Ok(SmallVec::new())
+            Ok(Events::new())
         } else {
             Err(error::CommandError::AlreadyCreated)
         }
     }
 
     fn execute_update_description(&self, description: domain::Description) -> Events {
-        let mut events = SmallVec::new();
+        let mut events = Events::new();
         if self.description != description {
-            events.push(Event::TextUpdated(description));
+            events.push(TodoEvent::TextUpdated(description));
         }
         events
     }
 
     fn execute_set_reminder(&self, reminder: domain::Reminder) -> Events {
-        let mut events = SmallVec::new();
+        let mut events = Events::new();
         if let Some(existing) = self.reminder {
             if existing != reminder {
-                events.push(Event::ReminderUpdated(Some(reminder)));
+                events.push(TodoEvent::ReminderUpdated(Some(reminder)));
             }
         } else {
-            events.push(Event::ReminderUpdated(Some(reminder)));
+            events.push(TodoEvent::ReminderUpdated(Some(reminder)));
         }
         events
     }
 
     fn execute_cancel_reminder(&self) -> Events {
-        let mut events = SmallVec::new();
+        let mut events = Events::new();
         if self.reminder.is_some() {
-            events.push(Event::ReminderUpdated(None));
+            events.push(TodoEvent::ReminderUpdated(None));
         }
         events
     }
 
     fn execute_toggle_completion(&self) -> Events {
-        let mut events = SmallVec::new();
+        let mut events = Events::new();
         match self.status {
-            TodoStatus::NotCompleted => events.push(Event::Completed),
-            TodoStatus::Completed => events.push(Event::Uncompleted),
+            TodoStatus::NotCompleted => events.push(TodoEvent::Completed),
+            TodoStatus::Completed => events.push(TodoEvent::Uncompleted),
         }
         events
     }
 
     fn execute_mark_completed(&self) -> Events {
-        let mut events = SmallVec::new();
+        let mut events = Events::new();
         match self.status {
-            TodoStatus::NotCompleted => events.push(Event::Completed),
+            TodoStatus::NotCompleted => events.push(TodoEvent::Completed),
             TodoStatus::Completed => {},
         }
         events
     }
 
     fn execute_reset_completed(&self) -> Events {
-        let mut events = SmallVec::new();
+        let mut events = Events::new();
         match self.status {
             TodoStatus::NotCompleted => {},
-            TodoStatus::Completed => events.push(Event::Uncompleted),
+            TodoStatus::Completed => events.push(TodoEvent::Uncompleted),
         }
         events
     }
@@ -286,36 +284,36 @@ impl Default for TodoAggregate {
     }
 }
 
-type Events = SmallVec<[Event; 1]>;
+type Events = ArrayVec<[TodoEvent; 2]>;
 
 impl TodoAggregate {
-    fn apply_event(&mut self, event: Event) {
+    fn apply_event(&mut self, event: TodoEvent) {
         match *self {
             TodoAggregate::Uninitialized => self.apply_to_uninitialized(event),
             TodoAggregate::Created(ref mut data) => data.apply(event),
         }
     }
 
-    fn apply_to_uninitialized(&mut self, event: Event) {
-        if let Event::Created(initial_description) = event {
+    fn apply_to_uninitialized(&mut self, event: TodoEvent) {
+        if let TodoEvent::Created(initial_description) = event {
             *self = TodoAggregate::Created(TodoData::with_description(initial_description));
         }
     }
 
-    fn execute_command(&self, command: Command) -> Result<Events, error::CommandError> {
+    fn execute_command(&self, command: TodoCommand) -> Result<Events, error::CommandError> {
         match *self {
             TodoAggregate::Uninitialized => self.execute_on_uninitialized(command),
             TodoAggregate::Created(ref data) => data.execute(command),
         }
     }
 
-    fn execute_on_uninitialized(&self, command: Command) -> Result<Events, error::CommandError> {
+    fn execute_on_uninitialized(&self, command: TodoCommand) -> Result<Events, error::CommandError> {
         match command {
-            Command::Create(description, reminder_opt) => {
-                let mut events = SmallVec::new();
-                events.push(Event::Created(description));
+            TodoCommand::Create(description, reminder_opt) => {
+                let mut events = Events::new();
+                events.push(TodoEvent::Created(description));
                 if let Some(reminder) = reminder_opt {
-                    events.push(Event::ReminderUpdated(Some(reminder)));
+                    events.push(TodoEvent::ReminderUpdated(Some(reminder)));
                 }
                 Ok(events)
             }
@@ -332,18 +330,18 @@ impl TodoAggregate {
 }
 
 impl Aggregate for TodoAggregate {
-    type Event = Event;
-    type Command = Command;
+    type Event = TodoEvent;
+    type Command = TodoCommand;
     type Events = Events;
     type Error = error::CommandError;
 
     fn apply(&mut self, event: Self::Event) {
-        trace!("apply {:?}", event);
+        log::trace!("apply {:?}", event);
         self.apply_event(event);
     }
 
-    fn execute(&self, command: Command) -> Result<Self::Events, Self::Error> {
-        trace!("execute {:?}", command);
+    fn execute(&self, command: TodoCommand) -> Result<Self::Events, Self::Error> {
+        log::trace!("execute {:?}", command);
         self.execute_command(command)
     }
 
@@ -353,72 +351,15 @@ impl Aggregate for TodoAggregate {
     }
 }
 
-impl PersistableAggregate for TodoAggregate {
-    type SnapshotError = serde_json::Error;
-
-    fn snapshot_to_writer<W: io::Write>(&self, writer: W) -> io::Result<()> {
-        serde_json::to_writer(writer, &self)?;
-        Ok(())
-    }
-
-    fn restore(snapshot: &[u8]) -> Result<Self, <Self as PersistableAggregate>::SnapshotError> {
-        Ok(serde_json::from_slice(snapshot)?)
-    }
-
-    fn restore_from_reader<R: io::Read>(reader: R) -> Result<Self, <Self as PersistableAggregate>::SnapshotError> {
-        Ok(serde_json::from_reader(reader)?)
-    }
-}
-
-impl SerializableEvent for Event {
-    type PayloadError = serde_json::Error;
-
+impl Event for TodoEvent {
     fn event_type(&self) -> &'static str {
         match *self {
-            Event::Created(_) => "todo_created",
-            Event::ReminderUpdated(_) => "todo_reminder_updated",
-            Event::TextUpdated(_) => "todo_text_updated",
-            Event::Completed => "todo_completed",
-            Event::Uncompleted => "todo_uncompleted",
+            TodoEvent::Created(_) => "todo_created",
+            TodoEvent::ReminderUpdated(_) => "todo_reminder_updated",
+            TodoEvent::TextUpdated(_) => "todo_text_updated",
+            TodoEvent::Completed => "todo_completed",
+            TodoEvent::Uncompleted => "todo_uncompleted",
         }
-    }
-
-    fn deserialize(event_type: &str, payload: &[u8]) -> Result<Self, EventDeserializeError<Self>> {
-        let event = match event_type {
-            "todo_created" => Event::Created(serde_json::from_slice(payload).map_err(EventDeserializeError::InvalidPayload)?),
-            "todo_reminder_updated" => Event::ReminderUpdated(serde_json::from_slice(payload).map_err(EventDeserializeError::InvalidPayload)?),
-            "todo_text_updated" => Event::TextUpdated(serde_json::from_slice(payload).map_err(EventDeserializeError::InvalidPayload)?),
-            "todo_completed" => Event::Completed,
-            "todo_uncompleted" => Event::Uncompleted,
-            _ => Err(EventDeserializeError::new_unknown_event_type(event_type))?,
-        };
-
-        Ok(event)
-    }
-
-    fn deserialize_from_reader<R: io::Read>(event_type: &str, reader: R) -> Result<Self, EventDeserializeError<Self>> {
-        let event = match event_type {
-            "todo_created" => Event::Created(serde_json::from_reader(reader).map_err(EventDeserializeError::InvalidPayload)?),
-            "todo_reminder_updated" => Event::ReminderUpdated(serde_json::from_reader(reader).map_err(EventDeserializeError::InvalidPayload)?),
-            "todo_text_updated" => Event::TextUpdated(serde_json::from_reader(reader).map_err(EventDeserializeError::InvalidPayload)?),
-            "todo_completed" => Event::Completed,
-            "todo_uncompleted" => Event::Uncompleted,
-            _ => Err(EventDeserializeError::new_unknown_event_type(event_type))?,
-        };
-
-        Ok(event)
-    }
-
-    fn serialize_to_writer<W: io::Write>(&self, writer: W) -> io::Result<()> {
-        match *self {
-            Event::Created(ref x) => serde_json::to_writer(writer, x)?,
-            Event::ReminderUpdated(ref x) => serde_json::to_writer(writer, x)?,
-            Event::TextUpdated(ref x) => serde_json::to_writer(writer, x)?,
-            Event::Completed => serde_json::to_writer(writer, &())?,
-            Event::Uncompleted => serde_json::to_writer(writer, &())?,
-        };
-
-        Ok(())
     }
 }
 
@@ -431,13 +372,14 @@ mod tests {
         let now = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
         let reminder = now + Duration::seconds(10000);
 
-        let mut events = SmallVec::<[Event;6]>::new();
-        events.push(Event::Completed);
-        events.push(Event::Created(domain::Description::new("Hello!").unwrap()));
-        events.push(Event::ReminderUpdated(Some(domain::Reminder::new(reminder, now).unwrap())));
-        events.push(Event::TextUpdated(domain::Description::new("New text").unwrap()));
-        events.push(Event::Created(domain::Description::new("Ignored!").unwrap()));
-        events.push(Event::ReminderUpdated(None));
+        let events = ArrayVec::from([
+            TodoEvent::Completed,
+            TodoEvent::Created(domain::Description::new("Hello!").unwrap()),
+            TodoEvent::ReminderUpdated(Some(domain::Reminder::new(reminder, now).unwrap())),
+            TodoEvent::TextUpdated(domain::Description::new("New text").unwrap()),
+            TodoEvent::Created(domain::Description::new("Ignored!").unwrap()),
+            TodoEvent::ReminderUpdated(None),
+        ]);
 
         let mut agg = TodoAggregate::default();
         for event in events {
@@ -464,7 +406,7 @@ mod tests {
     fn cancel_reminder_on_default_aggregate() {
         let agg = TodoAggregate::default();
 
-        let cmd = Command::CancelReminder;
+        let cmd = TodoCommand::CancelReminder;
 
         let result = agg.execute(cmd).unwrap_err();
 
@@ -475,7 +417,7 @@ mod tests {
     fn cancel_reminder_on_basic_aggregate() {
         let agg = create_basic_aggregate();
 
-        let cmd = Command::CancelReminder;
+        let cmd = TodoCommand::CancelReminder;
 
         let result = agg.execute(cmd).unwrap();
 
@@ -489,12 +431,12 @@ mod tests {
         let now = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
         let reminder_time = now + Duration::seconds(20000);
         let reminder = domain::Reminder::new(reminder_time, now).unwrap();
-        let cmd = Command::SetReminder(reminder);
+        let cmd = TodoCommand::SetReminder(reminder);
 
         let result = agg.execute(cmd).unwrap();
 
         let mut expected = Events::new();
-        expected.push(Event::ReminderUpdated(Some(reminder)));
+        expected.push(TodoEvent::ReminderUpdated(Some(reminder)));
         assert_eq!(expected, result);
     }
 }

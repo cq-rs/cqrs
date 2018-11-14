@@ -1,6 +1,5 @@
 use std::fmt;
 use std::num::NonZeroU64;
-use aggregate::SerializableEvent;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EventNumber(NonZeroU64);
@@ -225,52 +224,6 @@ impl From<Version> for Since {
         match v {
             Version::Initial => Since::BeginningOfStream,
             Version::Number(x) => Since::Event(x),
-        }
-    }
-}
-
-#[derive(Clone, Hash, PartialEq, Eq)]
-pub enum EventDeserializeError<E>
-    where E: SerializableEvent
-{
-    UnknownEventType(String),
-    InvalidPayload(E::PayloadError),
-}
-
-impl<E> EventDeserializeError<E>
-    where E: SerializableEvent
-{
-    pub fn new_unknown_event_type(event_type: impl Into<String>) -> Self {
-        EventDeserializeError::UnknownEventType(event_type.into())
-    }
-}
-
-impl<E> fmt::Debug for EventDeserializeError<E>
-    where E: SerializableEvent
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            EventDeserializeError::UnknownEventType(ref evt_type) =>
-                f.debug_tuple("UnknownEventType")
-                    .field(evt_type)
-                    .finish(),
-            EventDeserializeError::InvalidPayload(ref err) =>
-                f.debug_tuple("InvalidPayload")
-                    .field(err)
-                    .finish(),
-        }
-    }
-}
-
-impl<E> fmt::Display for EventDeserializeError<E>
-    where E: SerializableEvent
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            EventDeserializeError::UnknownEventType(ref evt_type) =>
-                write!(f, "unable to deserialize event; unknown event type: {}", evt_type),
-            EventDeserializeError::InvalidPayload(ref err) =>
-                write!(f, "unable to deserialize event; invalid payload: {}", err),
         }
     }
 }

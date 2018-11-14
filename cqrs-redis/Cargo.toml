@@ -7,3 +7,5 @@ authors = ["Marcus Griep <marcus@griep.us>"]
 cqrs-core = { path = "../cqrs-core" }
 log = "0.4"
 redis = "0.9"
+serde = "1.0"
+rmp-serde = "0.13"

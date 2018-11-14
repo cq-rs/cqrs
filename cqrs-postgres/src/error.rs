@@ -1,4 +1,3 @@
-use cqrs_core::CqrsError;
 use std::fmt;
 
 #[derive(Debug)]
@@ -28,30 +27,4 @@ impl From<cqrs_core::Precondition> for PersistError {
     }
 }
 
-#[derive(Debug)]
-pub enum LoadError<E>
-where E: CqrsError
-{
-    Postgres(postgres::Error),
-    Deserialize(E),
-}
-
-impl<E> fmt::Display for LoadError<E>
-where E: CqrsError
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            LoadError::Postgres(ref e) => write!(f, "postgres error: {}", e),
-            LoadError::Deserialize(ref e) => write!(f, "deserialization error: {}", e),
-        }
-    }
-}
-
-impl<E> From<postgres::Error> for LoadError<E>
-where E: CqrsError
-{
-    fn from(err: postgres::Error) -> Self {
-        LoadError::Postgres(err)
-    }
-}
-
+pub type LoadError = postgres::Error;

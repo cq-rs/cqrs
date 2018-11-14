@@ -17,12 +17,15 @@
 extern crate cqrs_core;
 extern crate log;
 extern crate redis;
+extern crate serde;
+extern crate rmp_serde as rmps;
 
 mod error;
 
 pub use error::{LoadError, PersistError};
 
 use std::marker::PhantomData;
+use serde::{de::DeserializeOwned, Serialize};
 use redis::ConnectionLike;
 
 pub use store::{Store, SnapshotStore};
@@ -45,7 +48,7 @@ impl Config {
 }
 
 mod store {
-    use cqrs_core::{Aggregate, EventNumber, EventSource, EventSink, PersistableAggregate, SnapshotSource, SnapshotSink, VersionedAggregate, VersionedAggregateView, Precondition, VersionedEvent, Since, Version, SerializableEvent, EventDeserializeError};
+    use cqrs_core::{Aggregate, EventNumber, EventSource, EventSink, SnapshotSource, SnapshotSink, VersionedAggregate, VersionedAggregateView, Precondition, VersionedEvent, Since, Version};
     use redis::PipelineCommands;
     use std::collections::VecDeque;
     use super::*;
@@ -83,32 +86,18 @@ mod store {
     impl<'conn, C, A> SnapshotStore<'conn, C, A>
     where
         A: Aggregate,
-        A::Event: SerializableEvent,
+        A::Event: Serialize,
         C: ConnectionLike + 'conn,
     {
-        fn serialize_event(event: &A::Event) -> Result<Vec<u8>, redis::RedisError> {
-            let mut buffer = Vec::new();
-            let event_type = event.event_type();
-            let len = event_type.len();
-            debug_assert!(len < u8::max_value() as usize);
-            buffer.push(len as u8);
-            buffer.extend_from_slice(event_type.as_ref());
-
-            {
-                use std::io::{Cursor, Seek, SeekFrom};
-                let mut cursor = Cursor::new(&mut buffer);
-                cursor.seek(SeekFrom::End(0)).map_err(redis::RedisError::from)?;
-                event.serialize_to_writer(&mut cursor)?;
-            }
-
-            Ok(buffer)
+        fn serialize_event(event: &A::Event) -> Result<Vec<u8>, rmps::encode::Error> {
+            rmps::to_vec(event)
         }
     }
 
     impl<'conn, A, C> SnapshotSink<A> for SnapshotStore<'conn, C, A>
     where
         C: ConnectionLike + 'conn,
-        A: PersistableAggregate,
+        A: Aggregate + Serialize,
     {
         type Error = PersistError;
 
@@ -120,7 +109,7 @@ mod store {
             key.push_str(id);
 
             let snapshot_ver = aggregate.version.get();
-            let raw = aggregate.payload.snapshot().map_err(redis::RedisError::from)?;
+            let raw = rmps::to_vec_named(aggregate.payload)?;
 
             redis::pipe()
                 .hset(&key, "version", snapshot_ver)
@@ -133,9 +122,9 @@ mod store {
     impl<'conn, A, C> SnapshotSource<A> for SnapshotStore<'conn, C, A>
     where
         C: ConnectionLike + 'conn,
-        A: PersistableAggregate,
+        A: Aggregate + DeserializeOwned,
     {
-        type Error = LoadError<A::SnapshotError>;
+        type Error = LoadError;
 
         fn get_snapshot(&self, id: &str) -> Result<Option<VersionedAggregate<A>>, Self::Error> {
             let mut key = String::with_capacity(self.store.config.key_prefix.len() + id.len() + 10);
@@ -153,7 +142,7 @@ mod store {
                 (Some(snapshot_ver), Some(raw)) => {
                     Some(VersionedAggregate {
                         version: Version::new(snapshot_ver),
-                        payload: A::restore(&raw).map_err(LoadError::Deserialize)?,
+                        payload: rmps::from_slice(&raw)?,
                     })
                 },
                 _ => None
@@ -165,7 +154,7 @@ mod store {
     pub struct RedisEventIterator<'conn, C, E>
     where
         C: ConnectionLike + 'conn,
-        E: SerializableEvent,
+        E: DeserializeOwned,
     {
         conn: &'conn C,
         _event: PhantomData<E>,
@@ -180,34 +169,23 @@ mod store {
     impl<'conn, C, E> RedisEventIterator<'conn, C, E>
     where
         C: ConnectionLike + 'conn,
-        E: SerializableEvent + 'static,
+        E: DeserializeOwned,
     {
-        fn read_event_from_buffer(&mut self, mut buffer: &[u8]) -> Result<VersionedEvent<E>, EventDeserializeError<E>> {
-            use std::io::Read;
-            use std::str;
-
+        fn read_event_from_buffer(&mut self, buffer: &[u8]) -> Result<VersionedEvent<E>, LoadError> {
             let sequence = Version::new(self.cursor + self.index).next_event();
-            let mut len = [0u8; 1];
-            buffer.read_exact(&mut len).unwrap();
-            let (event_type_raw, payload) = buffer.split_at(len[0] as usize);
-            let event_type =
-                match str::from_utf8(event_type_raw) {
-                    Ok(e) => e,
-                    Err(_) =>
-                        return Err(EventDeserializeError::UnknownEventType(String::from("<invalid utf-8>"))),
-                };
-            let data = E::deserialize(event_type, payload);
-            let event = data.map(|event| {
+
+            let data = rmps::from_slice(buffer);
+            let event = data.map(|event: E| {
                 VersionedEvent {
                     sequence,
                     event,
                 }
-            });
+            })?;
 
             log::trace!("entity {}: loaded event; sequence: {}", &self.key, sequence);
             self.index += 1;
             self.remaining -= 1;
-            event
+            Ok(event)
         }
 
         fn get_next_buffer(&mut self) -> Result<Option<Vec<u8>>, redis::RedisError> {
@@ -245,9 +223,9 @@ mod store {
     impl<'conn, C, E> Iterator for RedisEventIterator<'conn, C, E>
     where
         C: ConnectionLike + 'conn,
-        E: SerializableEvent + 'static,
+        E: DeserializeOwned,
     {
-        type Item = Result<VersionedEvent<E>, LoadError<EventDeserializeError<E>>>;
+        type Item = Result<VersionedEvent<E>, LoadError>;
 
         fn next(&mut self) -> Option<Self::Item> {
             if self.remaining == 0 {
@@ -255,7 +233,7 @@ mod store {
                 None
             } else {
                 match self.get_next_buffer() {
-                    Ok(Some(buffer)) => Some(self.read_event_from_buffer(&buffer).map_err(LoadError::Deserialize)),
+                    Ok(Some(buffer)) => Some(self.read_event_from_buffer(&buffer)),
                     Ok(None) => None,
                     Err(e) => Some(Err(LoadError::Redis(e))),
                 }
@@ -266,11 +244,11 @@ mod store {
     impl<'conn, C, A> EventSource<A> for SnapshotStore<'conn, C, A>
     where
         A: Aggregate,
-        A::Event: SerializableEvent + 'static,
+        A::Event: DeserializeOwned,
         C: ConnectionLike + 'conn,
     {
         type Events = RedisEventIterator<'conn, C, A::Event>;
-        type Error = LoadError<EventDeserializeError<A::Event>>;
+        type Error = LoadError;
 
         fn read_events(&self, id: &str, since: Since, max_count: Option<u64>) -> Result<Option<Self::Events>, Self::Error> {
             let mut key = String::with_capacity(self.store.config.key_prefix.len() + id.len() + 1);
@@ -306,7 +284,7 @@ mod store {
     impl<'conn, C, A> EventSink<A> for SnapshotStore<'conn, C, A>
     where
         A: Aggregate,
-        A::Event: SerializableEvent,
+        A::Event: Serialize,
         C: ConnectionLike + 'conn,
     {
         type Error = PersistError;
@@ -333,7 +311,7 @@ mod store {
                         Ok(Some(None))
                     } else {
                         for e in events.iter() {
-                            pipe.rpush(&key, Self::serialize_event(e)?);
+                            pipe.rpush(&key, Self::serialize_event(e).expect("event serialization must not fail"));
                             log::trace!("entity {}; appending event", id);
                         }
                         pipe.query(self.store.conn)
@@ -351,7 +329,7 @@ mod store {
                     last_event_number = len.0;
 
                     for e in events.iter() {
-                        pipe.rpush(&key, Self::serialize_event(e)?);
+                        pipe.rpush(&key, Self::serialize_event(e).expect("event serialization must not fail"));
                         log::trace!("entity {}; appending event", id);
                     }
                     pipe.query(self.store.conn)

@@ -78,7 +78,7 @@ mod helper {
     use chrono::{Duration,Utc,TimeZone};
     use cqrs::{Version, VersionedAggregateView};
     use cqrs::{EventSink, SnapshotSink};
-    use cqrs_todo_core::{Event, TodoAggregate, TodoData, TodoStatus, domain};
+    use cqrs_todo_core::{TodoEvent, TodoAggregate, TodoData, TodoStatus, domain};
     use cqrs_postgres::PostgresStore;
     use r2d2_postgres::postgres::Connection;
 
@@ -86,12 +86,12 @@ mod helper {
         let epoch = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
         let reminder_time = epoch + Duration::seconds(10000);
         let mut events = Vec::new();
-        events.push(Event::Completed);
-        events.push(Event::Created(domain::Description::new("Hello!").unwrap()));
-        events.push(Event::ReminderUpdated(Some(domain::Reminder::new(reminder_time, epoch).unwrap())));
-        events.push(Event::TextUpdated(domain::Description::new("New text").unwrap()));
-        events.push(Event::Created(domain::Description::new("Ignored!").unwrap()));
-        events.push(Event::ReminderUpdated(None));
+        events.push(TodoEvent::Completed);
+        events.push(TodoEvent::Created(domain::Description::new("Hello!").unwrap()));
+        events.push(TodoEvent::ReminderUpdated(Some(domain::Reminder::new(reminder_time, epoch).unwrap())));
+        events.push(TodoEvent::TextUpdated(domain::Description::new("New text").unwrap()));
+        events.push(TodoEvent::Created(domain::Description::new("Ignored!").unwrap()));
+        events.push(TodoEvent::ReminderUpdated(None));
 
         let store = PostgresStore::<TodoAggregate>::new(&*conn);
 
