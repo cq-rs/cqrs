@@ -8,7 +8,7 @@ pub struct Json<T>(pub T);
 impl<T> FromSql for Json<T>
 where T: DeserializeOwned
 {
-    fn from_sql(ty: &Type, mut raw: &[u8]) -> Result<Json<T>, Box<Error + Sync + Send>> {
+    fn from_sql(ty: &Type, mut raw: &[u8]) -> Result<Json<T>, Box<dyn Error + Sync + Send>> {
         use std::io::Read;
         if *ty == JSONB {
             let mut b = [0; 1];
@@ -29,7 +29,7 @@ where T: DeserializeOwned
 impl<T> ToSql for Json<T>
 where T: Serialize + fmt::Debug
 {
-    fn to_sql(&self, ty: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
+    fn to_sql(&self, ty: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
         if *ty == JSONB {
             out.push(1);
         }
