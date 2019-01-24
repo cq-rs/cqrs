@@ -1,7 +1,7 @@
+use crate::TodoStore;
 use base64;
 use cqrs::{Entity, Precondition, Version, EntityStore, EntitySink, EntitySource};
-use cqrs_postgres::PostgresStore;
-use cqrs_todo_core::{domain, TodoAggregate, TodoStatus, TodoCommand};
+use cqrs_todo_core::{domain, TodoAggregate, TodoStatus, TodoCommand, TodoMetadata};
 use chrono::{DateTime, Utc};
 use juniper::{ID, FieldResult, Value};
 
@@ -63,7 +63,7 @@ graphql_object!(Query: Context |&self| {
         let context = executor.context();
 
         let conn = context.backend.get()?;
-        let store = PostgresStore::<TodoAggregate>::new(&*conn);
+        let store = TodoStore::new(&*conn);
 
         let id = id.to_string();
 
@@ -154,7 +154,7 @@ graphql_object!(TodoEdge: Context |&self| {
         let id = self.agg_id.to_string();
 
         let conn = context.backend.get()?;
-        let store = PostgresStore::<TodoAggregate>::new(&*conn);
+        let store = TodoStore::new(&*conn);
 
         let entity = store.rehydrate(&id)?
             .map(|agg| TodoQL(agg.into_entity_with_id(id)));
@@ -195,13 +195,18 @@ graphql_object!(Mutations: Context |&self| {
         let new_id = context.id_provider.new_id();
 
         let conn = context.backend.get()?;
-        let store = PostgresStore::<TodoAggregate>::new(&*conn);
+        let store = TodoStore::new(&*conn);
+
+        let metadata = TodoMetadata {
+            initiated_by: String::from("prefill"),
+        };
 
         let entity = store.exec_and_persist(
             &new_id,
             Default::default(),
             command,
             Some(Precondition::New),
+            metadata,
             10,
         )?.into_entity_with_id(new_id.clone());
 
@@ -234,12 +239,17 @@ graphql_object!(TodoMutQL: Context |&self| {
         let id = self.0.to_string();
 
         let conn = context.backend.get()?;
-        let store = PostgresStore::<TodoAggregate>::new(&*conn);
+        let store = TodoStore::new(&*conn);
+
+        let metadata = TodoMetadata {
+            initiated_by: String::from("prefill"),
+        };
 
         let entity = store.load_exec_and_persist(
             &id,
             command,
             Some(precondition),
+            metadata,
             10,
         )?.map(move |agg| agg.into_entity_with_id(id));
 
@@ -258,12 +268,17 @@ graphql_object!(TodoMutQL: Context |&self| {
         let id = self.0.to_string();
 
         let conn = context.backend.get()?;
-        let store = PostgresStore::<TodoAggregate>::new(&*conn);
+        let store = TodoStore::new(&*conn);
+
+        let metadata = TodoMetadata {
+            initiated_by: String::from("prefill"),
+        };
 
         let entity = store.load_exec_and_persist(
             &id,
             command,
             Some(precondition),
+            metadata,
             10,
         )?.map(move |agg| agg.into_entity_with_id(id));
 
@@ -280,12 +295,17 @@ graphql_object!(TodoMutQL: Context |&self| {
         let id = self.0.to_string();
 
         let conn = context.backend.get()?;
-        let store = PostgresStore::<TodoAggregate>::new(&*conn);
+        let store = TodoStore::new(&*conn);
+
+        let metadata = TodoMetadata {
+            initiated_by: String::from("prefill"),
+        };
 
         let entity = store.load_exec_and_persist(
             &id,
             command,
             Some(precondition),
+            metadata,
             10,
         )?.map(move |agg| agg.into_entity_with_id(id));
 
@@ -302,12 +322,17 @@ graphql_object!(TodoMutQL: Context |&self| {
         let id = self.0.to_string();
 
         let conn = context.backend.get()?;
-        let store = PostgresStore::<TodoAggregate>::new(&*conn);
+        let store = TodoStore::new(&*conn);
+
+        let metadata = TodoMetadata {
+            initiated_by: String::from("prefill"),
+        };
 
         let entity = store.load_exec_and_persist(
             &id,
             command,
             Some(precondition),
+            metadata,
             10,
         )?.map(move |agg| agg.into_entity_with_id(id));
 
@@ -324,12 +349,17 @@ graphql_object!(TodoMutQL: Context |&self| {
         let id = self.0.to_string();
 
         let conn = context.backend.get()?;
-        let store = PostgresStore::<TodoAggregate>::new(&*conn);
+        let store = TodoStore::new(&*conn);
+
+        let metadata = TodoMetadata {
+            initiated_by: String::from("prefill"),
+        };
 
         let entity = store.load_exec_and_persist(
             &id,
             command,
             Some(precondition),
+            metadata,
             10,
         )?.map(move |agg| agg.into_entity_with_id(id));
 
@@ -346,12 +376,17 @@ graphql_object!(TodoMutQL: Context |&self| {
         let id = self.0.to_string();
 
         let conn = context.backend.get()?;
-        let store = PostgresStore::<TodoAggregate>::new(&*conn);
+        let store = TodoStore::new(&*conn);
+
+        let metadata = TodoMetadata {
+            initiated_by: String::from("prefill"),
+        };
 
         let entity = store.load_exec_and_persist(
             &id,
             command,
             Some(precondition),
+            metadata,
             10,
         )?.map(move |agg| agg.into_entity_with_id(id));
 

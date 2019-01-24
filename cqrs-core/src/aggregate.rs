@@ -16,13 +16,13 @@ pub trait Event {
     fn event_type(&self) -> &'static str;
 }
 
-pub trait SerializableEvent {
+pub trait SerializableEvent: Event {
     type Error: CqrsError;
 
-    fn serialize_event_to_buffer(&self, buffer: &mut Vec<u8>) -> Result<&'static str, Self::Error>;
+    fn serialize_event_to_buffer(&self, buffer: &mut Vec<u8>) -> Result<(), Self::Error>;
 }
 
-pub trait DeserializableEvent: Sized {
+pub trait DeserializableEvent: Event + Sized {
     type Error: CqrsError;
 
     fn deserialize_event_from_buffer(data: &[u8], event_type: &str) -> Result<Option<Self>, Self::Error>;

@@ -1,20 +1,22 @@
 use std::{fmt, marker::PhantomData};
-use cqrs_core::{Aggregate, Event, EventNumber, EventSource, EventSink, Precondition, VersionedEvent, Since, Version, SnapshotSink, SnapshotSource, VersionedAggregate, VersionedAggregateView};
+use cqrs_core::{Aggregate, Event, EventNumber, EventSource, EventSink, Precondition, VersionedEvent, Since, Version, SerializableEvent, DeserializableEvent, SnapshotSink, SnapshotSource, VersionedAggregate, VersionedAggregateView};
 use fallible_iterator::FallibleIterator;
 use postgres::Connection;
 use error::{LoadError, PersistError};
-use util::Json;
+use util::{BorrowedJson, Json, RawJsonPersist, RawJsonRead};
 use serde::{de::DeserializeOwned, Serialize};
 
-pub struct PostgresStore<'conn, A>
-where A: Aggregate,
+pub struct PostgresStore<'conn, A, M>
+where
+    A: Aggregate,
 {
     conn: &'conn Connection,
-    _phantom: PhantomData<A>,
+    _phantom: PhantomData<(A, M)>,
 }
 
-impl<'conn, A> fmt::Debug for PostgresStore<'conn, A>
-where A: Aggregate,
+impl<'conn, A, M> fmt::Debug for PostgresStore<'conn, A, M>
+where
+    A: Aggregate,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("PostgresStore")
@@ -23,8 +25,9 @@ where A: Aggregate,
     }
 }
 
-impl<'conn, A> PostgresStore<'conn, A>
-    where A: Aggregate,
+impl<'conn, A, M> PostgresStore<'conn, A, M>
+where
+    A: Aggregate,
 {
     pub fn new(conn: &'conn Connection) -> Self {
         PostgresStore {
@@ -41,18 +44,20 @@ impl<'conn, A> PostgresStore<'conn, A>
 //   sequence bigint CHECK (sequence > 0) NOT NULL,
 //   event_type text NOT NULL,
 //   payload jsonb NOT NULL,
+//   metadata jsonb NOT NULL,
 //   timestamp timestamp with time zone DEFAULT (CURRENT_TIMESTAMP),
 //   UNIQUE (entity_type, entity_id, sequence)
 // );
 
-impl<'conn, A> EventSink<A> for PostgresStore<'conn, A>
+impl<'conn, A, M> EventSink<A, M> for PostgresStore<'conn, A, M>
 where
     A: Aggregate,
-    A::Event: Serialize + fmt::Debug,
+    A::Event: SerializableEvent + fmt::Debug,
+    M: Serialize + fmt::Debug,
 {
-    type Error = PersistError;
+    type Error = PersistError<<A::Event as SerializableEvent>::Error>;
 
-    fn append_events(&self, id: &str, events: &[A::Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
+    fn append_events(&self, id: &str, events: &[A::Event], precondition: Option<Precondition>, metadata: M) -> Result<EventNumber, Self::Error> {
         let trans = self.conn.transaction()?;
 
         let check_stmt = trans.prepare_cached("SELECT MAX(sequence) FROM events WHERE entity_type = $1 AND entity_id = $2")?;
@@ -79,10 +84,14 @@ where
 
         let first_sequence = current_version.unwrap_or_default().next_event();
         let mut next_sequence = Version::Number(first_sequence);
+        let mut buffer = Vec::with_capacity(128);
 
-        let stmt = trans.prepare_cached("INSERT INTO events (entity_type, entity_id, sequence, event_type, payload, timestamp) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)")?;
+        let stmt = trans.prepare_cached("INSERT INTO events (entity_type, entity_id, sequence, event_type, payload, metadata, timestamp) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)")?;
         for event in events {
-            let _modified_count = stmt.execute(&[&A::entity_type(), &id, &(next_sequence.get() as i64), &event.event_type(), &Json(event)])?;
+            buffer.clear();
+            event.serialize_event_to_buffer(&mut buffer).map_err(PersistError::SerializationError)?;
+            let modified_count = stmt.execute(&[&A::entity_type(), &id, &(next_sequence.get() as i64), &event.event_type(), &RawJsonPersist(&buffer), &BorrowedJson(&metadata)])?;
+            debug_assert!(modified_count > 0);
             log::trace!("entity {}: inserted event; sequence: {}", id, next_sequence);
             next_sequence = next_sequence.incr();
         }
@@ -93,13 +102,13 @@ where
     }
 }
 
-impl<'conn, A> EventSource<A> for PostgresStore<'conn, A>
+impl<'conn, A, M> EventSource<A> for PostgresStore<'conn, A, M>
 where
     A: Aggregate,
-    A::Event: DeserializeOwned,
+    A::Event: DeserializableEvent,
 {
     type Events = Vec<Result<VersionedEvent<A::Event>, Self::Error>>;
-    type Error = LoadError;
+    type Error = LoadError<<A::Event as DeserializableEvent>::Error>;
 
     fn read_events(&self, id: &str, since: Since, max_count: Option<u64>) -> Result<Option<Self::Events>, Self::Error> {
         let last_sequence = match since {
@@ -113,11 +122,12 @@ where
         let handle_row = |row: postgres::rows::Row| {
             let event_type: String = row.get("event_type");
             let sequence: i64 = row.get("sequence");
-            let raw: Json<A::Event> = row.get("payload");
+            let raw: RawJsonRead = row.get("payload");
+            let event = A::Event::deserialize_event_from_buffer(&raw.0, &event_type).map_err(LoadError::DeserializationError)?.ok_or_else(|| LoadError::UnknownEventType(event_type.clone()))?;
             log::trace!("entity {}: loaded event; sequence: {}, type: {}", id, sequence, event_type);
             Ok(VersionedEvent {
                 sequence: EventNumber::new(sequence as u64).expect("Sequence number should be non-zero"),
-                event: raw.0,
+                event,
             })
         };
 
@@ -159,11 +169,11 @@ where
 //   UNIQUE (entity_type, entity_id, sequence)
 // );
 
-impl<'conn, A> SnapshotSink<A> for PostgresStore<'conn, A>
+impl<'conn, A, M> SnapshotSink<A> for PostgresStore<'conn, A, M>
 where
     A: Aggregate + Serialize + fmt::Debug,
 {
-    type Error = PersistError;
+    type Error = PersistError<serde_json::Error>;
 
     fn persist_snapshot(&self, id: &str, aggregate: VersionedAggregateView<A>) -> Result<(), Self::Error> {
         let stmt = self.conn.prepare_cached("INSERT INTO snapshots (entity_type, entity_id, sequence, payload) VALUES ($1, $2, $3, $4)")?;
@@ -173,10 +183,11 @@ where
     }
 }
 
-impl<'conn, A> SnapshotSource<A> for PostgresStore<'conn, A>
-where A: Aggregate + DeserializeOwned
+impl<'conn, A, M> SnapshotSource<A> for PostgresStore<'conn, A, M>
+where
+    A: Aggregate + DeserializeOwned
 {
-    type Error = LoadError;
+    type Error = postgres::Error;
 
     fn get_snapshot(&self, id: &str) -> Result<Option<VersionedAggregate<A>>, Self::Error> {
         let stmt = self.conn.prepare_cached("SELECT sequence, payload FROM snapshots WHERE entity_type = $1 AND entity_id = $2 ORDER BY sequence DESC LIMIT 1")?;

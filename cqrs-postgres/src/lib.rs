@@ -35,21 +35,21 @@ pub use error::{LoadError, PersistError};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cqrs_todo_core::TodoAggregate;
+    use cqrs_todo_core::{TodoAggregate, TodoMetadata};
     use static_assertions::assert_impl;
 
     #[test]
     fn postgres_store_is_an_entity_store() {
-        assert_impl!(PostgresStore<TodoAggregate>, cqrs::EntityStore<TodoAggregate>);
+        assert_impl!(PostgresStore<TodoAggregate, TodoMetadata>, cqrs::EntityStore<TodoAggregate, TodoMetadata>);
     }
 
     #[test]
     fn postgres_store_is_an_entity_source() {
-        assert_impl!(PostgresStore<TodoAggregate>, cqrs::EntitySource<TodoAggregate>);
+        assert_impl!(PostgresStore<TodoAggregate, TodoMetadata>, cqrs::EntitySource<TodoAggregate>);
     }
 
     #[test]
     fn postgres_store_is_an_entity_sink() {
-        assert_impl!(PostgresStore<TodoAggregate>, cqrs::EntitySink<TodoAggregate>);
+        assert_impl!(PostgresStore<TodoAggregate, TodoMetadata>, cqrs::EntitySink<TodoAggregate, TodoMetadata>);
     }
 }

@@ -35,6 +35,8 @@ mod graphql;
 
 use r2d2_postgres::PostgresConnectionManager;
 
+type TodoStore<'conn> = cqrs_postgres::PostgresStore<'conn, cqrs_todo_core::TodoAggregate, cqrs_todo_core::TodoMetadata>;
+
 pub fn start_todo_server(conn_str: &str) -> iron::Listening {
     let pool = r2d2::Pool::new(PostgresConnectionManager::new(conn_str, r2d2_postgres::TlsMode::None).unwrap()).unwrap();
 
@@ -78,8 +80,8 @@ mod helper {
     use chrono::{Duration,Utc,TimeZone};
     use cqrs::{Version, VersionedAggregateView};
     use cqrs::{EventSink, SnapshotSink};
-    use cqrs_todo_core::{TodoEvent, TodoAggregate, TodoData, TodoStatus, domain};
-    use cqrs_postgres::PostgresStore;
+    use cqrs_todo_core::{TodoEvent, TodoAggregate, TodoData, TodoMetadata, TodoStatus, domain};
+    use super::TodoStore;
     use r2d2_postgres::postgres::Connection;
 
     pub fn prefill(id: &str, conn: impl ::std::ops::Deref<Target=Connection>) {
@@ -93,9 +95,13 @@ mod helper {
         events.push(TodoEvent::Created(domain::Description::new("Ignored!").unwrap()));
         events.push(TodoEvent::ReminderUpdated(None));
 
-        let store = PostgresStore::<TodoAggregate>::new(&*conn);
+        let store = TodoStore::new(&*conn);
 
-        store.append_events(id, &events, None).unwrap();
+        let metadata = TodoMetadata {
+            initiated_by: String::from("prefill"),
+        };
+
+        store.append_events(id, &events, None, metadata).unwrap();
         store.persist_snapshot(id, VersionedAggregateView {
             version: Version::new(1),
             payload: &TodoAggregate::Created(TodoData {

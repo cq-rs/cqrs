@@ -374,32 +374,27 @@ impl Event for TodoEvent {
 impl SerializableEvent for TodoEvent {
     type Error = serde_json::Error;
 
-    fn serialize_event_to_buffer(&self, buffer: &mut Vec<u8>) -> Result<&'static str, Self::Error> {
+    fn serialize_event_to_buffer(&self, buffer: &mut Vec<u8>) -> Result<(), Self::Error> {
         buffer.clear();
         buffer.reserve(128);
         match *self {
             TodoEvent::Created(ref inner) => {
                 serde_json::to_writer(buffer, inner)?;
-                Ok("todo_created")
             },
             TodoEvent::ReminderUpdated(ref inner) => {
                 serde_json::to_writer(buffer, inner)?;
-                Ok("todo_reminder_updated")
             },
             TodoEvent::TextUpdated(ref inner) => {
                 serde_json::to_writer(buffer, inner)?;
-                Ok("todo_text_updated")
             },
             TodoEvent::Completed => {
                 *buffer = vec![b'{', b'}'];
-                Ok("todo_completed")
             },
             TodoEvent::Uncompleted => {
                 *buffer = vec![b'{', b'}'];
-                Ok("todo_uncompleted")
             },
         }
-
+        Ok(())
     }
 }
 
@@ -496,55 +491,58 @@ mod tests {
         assert_eq!(expected, result);
     }
 
-    #[derive(Serialize)]
-    struct RawEventWithName {
-        event_name: &'static str,
-        raw: String,
+    #[test]
+    fn ensure_created_event_stays_same() -> Result<(), serde_json::Error> {
+        let description = domain::Description::new("test description").unwrap();
+        run_snapshot_test("text_updated_event", TodoEvent::Created(description))
     }
 
     #[test]
-    fn ensure_created_event_stays_same() {
-        let event = TodoEvent::Created(domain::Description::new("test description").unwrap());
-        let mut buffer = Vec::default();
-        let event_name = event.serialize_event_to_buffer(&mut buffer).unwrap();
-
-        insta::assert_ron_snapshot_matches!("created_event", RawEventWithName { event_name, raw: String::from_utf8(buffer).unwrap() });
+    fn ensure_reminder_updated_event_stays_same() -> Result<(), serde_json::Error> {
+        let current_time = Utc.ymd(2000, 1, 1).and_hms(0, 0, 0);
+        let reminder_time = Utc.ymd(2100, 1, 1).and_hms(0, 0, 0);
+        let reminder = domain::Reminder::new(reminder_time, current_time).unwrap();
+        run_snapshot_test("reminder_updated_event", TodoEvent::ReminderUpdated(Some(reminder)))
     }
 
     #[test]
-    fn ensure_reminder_updated_event_stays_same() {
-        let event = TodoEvent::ReminderUpdated(Some(domain::Reminder::new(Utc.ymd(2100, 1, 1).and_hms(0, 0, 0), Utc.ymd(2000, 1, 1).and_hms(0, 0, 0)).unwrap()));
-        let mut buffer = Vec::default();
-        let event_name = event.serialize_event_to_buffer(&mut buffer).unwrap();
-
-        insta::assert_ron_snapshot_matches!("reminder_updated_event", RawEventWithName { event_name, raw: String::from_utf8(buffer).unwrap() });
+    fn ensure_reminder_removed_event_stays_same() -> Result<(), serde_json::Error> {
+        run_snapshot_test("reminder_updated_event", TodoEvent::ReminderUpdated(None))
     }
 
     #[test]
-    fn ensure_text_updated_event_stays_same() {
-        let event = TodoEvent::TextUpdated(domain::Description::new("alt test description").unwrap());
-        let mut buffer = Vec::default();
-        let event_name = event.serialize_event_to_buffer(&mut buffer).unwrap();
-
-        insta::assert_ron_snapshot_matches!("text_updated_event", RawEventWithName { event_name, raw: String::from_utf8(buffer).unwrap() });
+    fn ensure_text_updated_event_stays_same() -> Result<(), serde_json::Error> {
+        let new_description = domain::Description::new("alt test description").unwrap();
+        run_snapshot_test("text_updated_event", TodoEvent::TextUpdated(new_description))
     }
 
     #[test]
-    fn ensure_completed_event_stays_same() {
-        let event = TodoEvent::Completed;
-        let mut buffer = Vec::default();
-        let event_name = event.serialize_event_to_buffer(&mut buffer).unwrap();
-
-        insta::assert_ron_snapshot_matches!("completed_event", RawEventWithName { event_name, raw: String::from_utf8(buffer).unwrap() });
+    fn ensure_completed_event_stays_same() -> Result<(), serde_json::Error> {
+        run_snapshot_test("completed_event", TodoEvent::Completed)
     }
 
     #[test]
-    fn ensure_uncompleted_event_stays_same() {
-        let event = TodoEvent::Uncompleted;
-        let mut buffer = Vec::default();
-        let event_name = event.serialize_event_to_buffer(&mut buffer).unwrap();
+    fn ensure_uncompleted_event_stays_same() -> Result<(), serde_json::Error> {
+        run_snapshot_test("uncompleted_event", TodoEvent::Uncompleted)
+    }
 
-        insta::assert_ron_snapshot_matches!("uncompleted_event", RawEventWithName { event_name, raw: String::from_utf8(buffer).unwrap() });
+    fn run_snapshot_test<E: SerializableEvent>(name: &'static str, event: E) -> Result<(), serde_json::Error> {
+        let mut buffer = Vec::default();
+        event.serialize_event_to_buffer(&mut buffer)?;
+
+        #[derive(Serialize)]
+        struct RawEventWithType {
+            event_type: &'static str,
+            raw: String,
+        }
+
+        let data = RawEventWithName {
+            event_name: event.event_type(),
+            raw: String::from_utf8(buffer).unwrap(),
+        };
+
+        insta::assert_ron_snapshot_matches!(name, data);
+        Ok(())
     }
 
     #[test]
