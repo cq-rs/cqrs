@@ -23,6 +23,6 @@ mod aggregate;
 mod store;
 mod types;
 
-pub use aggregate::{Aggregate, Event};
+pub use aggregate::{Aggregate, Event, SerializableEvent, DeserializableEvent};
 pub use store::{EventSource, EventSink, SnapshotSource, SnapshotSink};
 pub use types::{CqrsError, EventNumber, Version, Precondition, VersionedEvent, Since, VersionedAggregate, VersionedAggregateView};

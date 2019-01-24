@@ -53,6 +53,10 @@ mod tests {
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
     pub struct TestCommand;
 
+    /// A test metadata with no data
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    pub struct TestMetadata;
+
     impl Aggregate for TestAggregate {
         type Event = TestEvent;
         type Events = Empty<Self::Event>;
@@ -71,8 +75,14 @@ mod tests {
         }
     }
 
+    impl crate::aggregate::Event for TestEvent {
+        fn event_type(&self) -> &'static str {
+            "test"
+        }
+    }
+
     assert_obj_safe!(event_source_object_safety; EventSource<TestAggregate, Events=Empty<()>, Error=Void>);
-    assert_obj_safe!(event_sink_object_safety; EventSink<TestAggregate, Error=Void>);
+    assert_obj_safe!(event_sink_object_safety; EventSink<TestAggregate, TestMetadata, Error=Void>);
     assert_obj_safe!(snapshot_source_object_safety; SnapshotSource<TestAggregate, Error=Void>);
     assert_obj_safe!(snapshot_sink_object_safety; SnapshotSink<TestAggregate, Error=Void>);
 }

@@ -18,11 +18,14 @@ extern crate cqrs_core;
 extern crate chrono;
 extern crate arrayvec;
 extern crate serde;
-#[macro_use] extern crate serde_derive;
+#[macro_use]
+extern crate serde_derive;
+#[cfg(test)]
+extern crate pretty_assertions;
 extern crate log;
 
 use arrayvec::ArrayVec;
-use cqrs_core::{Aggregate, Event};
+use cqrs_core::{Aggregate, Event, SerializableEvent, DeserializableEvent};
 
 pub mod domain {
     use chrono::{DateTime,Utc};
@@ -368,10 +371,58 @@ impl Event for TodoEvent {
     }
 }
 
+impl SerializableEvent for TodoEvent {
+    type Error = serde_json::Error;
+
+    fn serialize_event_to_buffer(&self, buffer: &mut Vec<u8>) -> Result<&'static str, Self::Error> {
+        buffer.clear();
+        buffer.reserve(128);
+        match *self {
+            TodoEvent::Created(ref inner) => {
+                serde_json::to_writer(buffer, inner)?;
+                Ok("todo_created")
+            },
+            TodoEvent::ReminderUpdated(ref inner) => {
+                serde_json::to_writer(buffer, inner)?;
+                Ok("todo_reminder_updated")
+            },
+            TodoEvent::TextUpdated(ref inner) => {
+                serde_json::to_writer(buffer, inner)?;
+                Ok("todo_text_updated")
+            },
+            TodoEvent::Completed => {
+                *buffer = vec![b'{', b'}'];
+                Ok("todo_completed")
+            },
+            TodoEvent::Uncompleted => {
+                *buffer = vec![b'{', b'}'];
+                Ok("todo_uncompleted")
+            },
+        }
+
+    }
+}
+
+impl DeserializableEvent for TodoEvent {
+    type Error = serde_json::Error;
+
+    fn deserialize_event_from_buffer(data: &[u8], event_type: &str) -> Result<Option<Self>, Self::Error> {
+        match event_type {
+            "todo_created" => Ok(Some(TodoEvent::Created(serde_json::from_slice(data)?))),
+            "todo_reminder_updated" => Ok(Some(TodoEvent::ReminderUpdated(serde_json::from_slice(data)?))),
+            "todo_text_updated" => Ok(Some(TodoEvent::TextUpdated(serde_json::from_slice(data)?))),
+            "todo_completed" => Ok(Some(TodoEvent::Completed)),
+            "todo_uncompleted" => Ok(Some(TodoEvent::Uncompleted)),
+            _ => Ok(None)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     pub use super::*;
     use chrono::{Utc,TimeZone,Duration};
+    use pretty_assertions::assert_eq;
 
     fn create_basic_aggregate() -> TodoAggregate {
         let now = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
@@ -443,5 +494,128 @@ mod tests {
         let mut expected = Events::new();
         expected.push(TodoEvent::ReminderUpdated(Some(reminder)));
         assert_eq!(expected, result);
+    }
+
+    #[derive(Serialize)]
+    struct RawEventWithName {
+        event_name: &'static str,
+        raw: String,
+    }
+
+    #[test]
+    fn ensure_created_event_stays_same() {
+        let event = TodoEvent::Created(domain::Description::new("test description").unwrap());
+        let mut buffer = Vec::default();
+        let event_name = event.serialize_event_to_buffer(&mut buffer).unwrap();
+
+        insta::assert_ron_snapshot_matches!("created_event", RawEventWithName { event_name, raw: String::from_utf8(buffer).unwrap() });
+    }
+
+    #[test]
+    fn ensure_reminder_updated_event_stays_same() {
+        let event = TodoEvent::ReminderUpdated(Some(domain::Reminder::new(Utc.ymd(2100, 1, 1).and_hms(0, 0, 0), Utc.ymd(2000, 1, 1).and_hms(0, 0, 0)).unwrap()));
+        let mut buffer = Vec::default();
+        let event_name = event.serialize_event_to_buffer(&mut buffer).unwrap();
+
+        insta::assert_ron_snapshot_matches!("reminder_updated_event", RawEventWithName { event_name, raw: String::from_utf8(buffer).unwrap() });
+    }
+
+    #[test]
+    fn ensure_text_updated_event_stays_same() {
+        let event = TodoEvent::TextUpdated(domain::Description::new("alt test description").unwrap());
+        let mut buffer = Vec::default();
+        let event_name = event.serialize_event_to_buffer(&mut buffer).unwrap();
+
+        insta::assert_ron_snapshot_matches!("text_updated_event", RawEventWithName { event_name, raw: String::from_utf8(buffer).unwrap() });
+    }
+
+    #[test]
+    fn ensure_completed_event_stays_same() {
+        let event = TodoEvent::Completed;
+        let mut buffer = Vec::default();
+        let event_name = event.serialize_event_to_buffer(&mut buffer).unwrap();
+
+        insta::assert_ron_snapshot_matches!("completed_event", RawEventWithName { event_name, raw: String::from_utf8(buffer).unwrap() });
+    }
+
+    #[test]
+    fn ensure_uncompleted_event_stays_same() {
+        let event = TodoEvent::Uncompleted;
+        let mut buffer = Vec::default();
+        let event_name = event.serialize_event_to_buffer(&mut buffer).unwrap();
+
+        insta::assert_ron_snapshot_matches!("uncompleted_event", RawEventWithName { event_name, raw: String::from_utf8(buffer).unwrap() });
+    }
+
+    #[test]
+    fn roundtrip_created() -> Result<(), serde_json::Error> {
+        let original = TodoEvent::Created(domain::Description::new("test description").unwrap());
+        let mut buffer = Vec::default();
+        let event_name = original.serialize_event_to_buffer(&mut buffer)?;
+
+        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, event_name)?;
+        assert_eq!(Some(original), roundtrip);
+
+        Ok(())
+    }
+
+    #[test]
+    fn roundtrip_reminder_updated() -> Result<(), serde_json::Error> {
+        let original = TodoEvent::ReminderUpdated(Some(domain::Reminder::new(Utc.ymd(2100, 1, 1).and_hms(0, 0, 0), Utc.ymd(2000, 1, 1).and_hms(0, 0, 0)).unwrap()));
+        let mut buffer = Vec::default();
+        let event_name = original.serialize_event_to_buffer(&mut buffer)?;
+
+        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, event_name)?;
+        assert_eq!(Some(original), roundtrip);
+
+        Ok(())
+    }
+
+    #[test]
+    fn roundtrip_reminder_updated_none() -> Result<(), serde_json::Error> {
+        let original = TodoEvent::ReminderUpdated(None);
+        let mut buffer = Vec::default();
+        let event_name = original.serialize_event_to_buffer(&mut buffer)?;
+
+        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, event_name)?;
+        assert_eq!(Some(original), roundtrip);
+
+        Ok(())
+    }
+
+    #[test]
+    fn roundtrip_text_updated() -> Result<(), serde_json::Error> {
+        let original = TodoEvent::TextUpdated(domain::Description::new("alt test description").unwrap());
+        let mut buffer = Vec::default();
+        let event_name = original.serialize_event_to_buffer(&mut buffer)?;
+
+        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, event_name)?;
+        assert_eq!(Some(original), roundtrip);
+
+        Ok(())
+    }
+
+    #[test]
+    fn roundtrip_completed() -> Result<(), serde_json::Error> {
+        let original = TodoEvent::Completed;
+        let mut buffer = Vec::default();
+        let event_name = original.serialize_event_to_buffer(&mut buffer)?;
+
+        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, event_name)?;
+        assert_eq!(Some(original), roundtrip);
+
+        Ok(())
+    }
+
+    #[test]
+    fn roundtrip_uncompleted() -> Result<(), serde_json::Error> {
+        let original = TodoEvent::Uncompleted;
+        let mut buffer = Vec::default();
+        let event_name = original.serialize_event_to_buffer(&mut buffer)?;
+
+        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, event_name)?;
+        assert_eq!(Some(original), roundtrip);
+
+        Ok(())
     }
 }

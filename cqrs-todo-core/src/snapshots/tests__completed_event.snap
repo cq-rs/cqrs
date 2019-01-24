@@ -1,0 +1,10 @@
+---
+created: "2019-01-24T17:38:40.675611+00:00"
+creator: insta@0.5.2
+expression: "RawEventWithName{event_name, raw: String::from_utf8(buffer).unwrap(),}"
+source: cqrs-todo-core/src/lib.rs
+---
+RawEventWithName(
+  event_name: "todo_completed",
+  raw: "{}",
+)
