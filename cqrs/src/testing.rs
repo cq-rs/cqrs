@@ -10,6 +10,10 @@ pub struct TestAggregate;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TestEvent;
 
+/// A test metadata with no data
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TestMetadata;
+
 /// A test command with no data
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TestCommand;

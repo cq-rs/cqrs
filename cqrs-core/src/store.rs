@@ -8,18 +8,18 @@ pub trait EventSource<A: Aggregate> {
     fn read_events(&self, id: &str, since: Since, max_count: Option<u64>) -> Result<Option<Self::Events>, Self::Error>;
 }
 
-pub trait EventSink<A: Aggregate> {
+pub trait EventSink<A: Aggregate, M> {
     type Error: CqrsError;
 
-    fn append_events(&self, id: &str, events: &[A::Event], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error>;
+    fn append_events(&self, id: &str, events: &[A::Event], precondition: Option<Precondition>, metadata: M) -> Result<EventNumber, Self::Error>;
 
-    fn append_events_from_iterator<I>(&self, id: &str, event_iter: I, precondition: Option<Precondition>) -> Result<EventNumber, Self::Error>
+    fn append_events_from_iterator<I>(&self, id: &str, event_iter: I, precondition: Option<Precondition>, metadata: M) -> Result<EventNumber, Self::Error>
         where
             I: IntoIterator<Item=A::Event>,
             Self: Sized,
     {
         let events: Vec<A::Event> = event_iter.into_iter().collect();
-        self.append_events(id, &events, precondition)
+        self.append_events(id, &events, precondition, metadata)
     }
 }
 

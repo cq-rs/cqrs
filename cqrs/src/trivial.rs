@@ -18,14 +18,14 @@ where
     }
 }
 
-impl<A> EventSink<A> for NullStore
+impl<A, M> EventSink<A, M> for NullStore
 where
     A: Aggregate,
 {
     type Error = Void;
 
     #[inline]
-    fn append_events(&self, _id: &str, _events: &[A::Event], _expect: Option<Precondition>) -> Result<EventNumber, Self::Error> {
+    fn append_events(&self, _id: &str, _events: &[A::Event], _expect: Option<Precondition>, _metadata: M) -> Result<EventNumber, Self::Error> {
         Ok(EventNumber::MIN_VALUE)
     }
 }

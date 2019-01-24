@@ -8,7 +8,7 @@ use std::collections::hash_map::Entry;
 
 use cqrs::{EventNumber, Precondition, VersionedEvent, Version};
 use cqrs::{EventSource, EventSink, Since};
-use cqrs_todo_core::{TodoAggregate, TodoEvent};
+use cqrs_todo_core::{TodoAggregate, TodoEvent, TodoMetadata};
 use void::Void;
 
 #[derive(Debug)]
@@ -30,10 +30,10 @@ impl EventSource<TodoAggregate> for EventMap {
     }
 }
 
-impl EventSink<TodoAggregate> for EventMap {
+impl EventSink<TodoAggregate, TodoMetadata> for EventMap {
     type Error = Void;
 
-    fn append_events(&self, id: &str, events: &[TodoEvent], precondition: Option<Precondition>) -> Result<EventNumber, Self::Error> {
+    fn append_events(&self, id: &str, events: &[TodoEvent], precondition: Option<Precondition>, _metadata: TodoMetadata) -> Result<EventNumber, Self::Error> {
         let mut borrow = self.0.borrow_mut();
         let entry = borrow.entry(id.into());
 
@@ -70,11 +70,14 @@ impl EventSink<TodoAggregate> for EventMap {
 fn main_test() {
     let em = EventMap(RefCell::new(HashMap::default()));
     let id = "test";
+    let metadata = TodoMetadata {
+        initiated_by: String::from("test"),
+    };
 
     assert_eq!(em.read_events(id, Since::BeginningOfStream, None), Ok(None));
-    let event_num = em.append_events(id, &[cqrs_todo_core::TodoEvent::Completed], Some(Precondition::New)).unwrap();
+    let event_num = em.append_events(id, &[cqrs_todo_core::TodoEvent::Completed], Some(Precondition::New), metadata.clone()).unwrap();
     assert_eq!(event_num, EventNumber::MIN_VALUE);
-    let event_num = em.append_events(id, &[cqrs_todo_core::TodoEvent::Uncompleted], Some(Precondition::ExpectedVersion(Version::Number(EventNumber::MIN_VALUE)))).unwrap();
+    let event_num = em.append_events(id, &[cqrs_todo_core::TodoEvent::Uncompleted], Some(Precondition::ExpectedVersion(Version::Number(EventNumber::MIN_VALUE))), metadata).unwrap();
     assert_eq!(event_num, EventNumber::MIN_VALUE.incr());
 
     let expected_events = vec![

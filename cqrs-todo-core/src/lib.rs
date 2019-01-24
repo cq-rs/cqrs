@@ -139,6 +139,11 @@ pub mod error {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TodoMetadata {
+    pub initiated_by: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TodoEvent {
     Created(domain::Description),
     TextUpdated(domain::Description),
