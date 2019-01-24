@@ -1,10 +1,10 @@
 ---
-created: "2019-01-24T17:34:26.310983+00:00"
+created: "2019-01-24T19:00:09.860849+00:00"
 creator: insta@0.5.2
-expression: "RawEventWithName{event_name, raw: String::from_utf8(buffer).unwrap(),}"
+expression: data
 source: cqrs-todo-core/src/lib.rs
 ---
-RawEventWithName(
-  event_name: "todo_created",
+RawEventWithType(
+  event_type: "todo_created",
   raw: "{\"text\":\"test description\"}",
 )

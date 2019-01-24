@@ -494,7 +494,7 @@ mod tests {
     #[test]
     fn ensure_created_event_stays_same() -> Result<(), serde_json::Error> {
         let description = domain::Description::new("test description").unwrap();
-        run_snapshot_test("text_updated_event", TodoEvent::Created(description))
+        run_snapshot_test("created_event", TodoEvent::Created(description))
     }
 
     #[test]
@@ -507,7 +507,7 @@ mod tests {
 
     #[test]
     fn ensure_reminder_removed_event_stays_same() -> Result<(), serde_json::Error> {
-        run_snapshot_test("reminder_updated_event", TodoEvent::ReminderUpdated(None))
+        run_snapshot_test("reminder_updated_none_event", TodoEvent::ReminderUpdated(None))
     }
 
     #[test]
@@ -526,7 +526,7 @@ mod tests {
         run_snapshot_test("uncompleted_event", TodoEvent::Uncompleted)
     }
 
-    fn run_snapshot_test<E: SerializableEvent>(name: &'static str, event: E) -> Result<(), serde_json::Error> {
+    fn run_snapshot_test<E: SerializableEvent>(name: &'static str, event: E) -> Result<(), E::Error> {
         let mut buffer = Vec::default();
         event.serialize_event_to_buffer(&mut buffer)?;
 
@@ -536,8 +536,8 @@ mod tests {
             raw: String,
         }
 
-        let data = RawEventWithName {
-            event_name: event.event_type(),
+        let data = RawEventWithType {
+            event_type: event.event_type(),
             raw: String::from_utf8(buffer).unwrap(),
         };
 
@@ -549,9 +549,9 @@ mod tests {
     fn roundtrip_created() -> Result<(), serde_json::Error> {
         let original = TodoEvent::Created(domain::Description::new("test description").unwrap());
         let mut buffer = Vec::default();
-        let event_name = original.serialize_event_to_buffer(&mut buffer)?;
+        original.serialize_event_to_buffer(&mut buffer)?;
 
-        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, event_name)?;
+        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, original.event_type())?;
         assert_eq!(Some(original), roundtrip);
 
         Ok(())
@@ -561,9 +561,9 @@ mod tests {
     fn roundtrip_reminder_updated() -> Result<(), serde_json::Error> {
         let original = TodoEvent::ReminderUpdated(Some(domain::Reminder::new(Utc.ymd(2100, 1, 1).and_hms(0, 0, 0), Utc.ymd(2000, 1, 1).and_hms(0, 0, 0)).unwrap()));
         let mut buffer = Vec::default();
-        let event_name = original.serialize_event_to_buffer(&mut buffer)?;
+        original.serialize_event_to_buffer(&mut buffer)?;
 
-        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, event_name)?;
+        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, original.event_type())?;
         assert_eq!(Some(original), roundtrip);
 
         Ok(())
@@ -573,9 +573,9 @@ mod tests {
     fn roundtrip_reminder_updated_none() -> Result<(), serde_json::Error> {
         let original = TodoEvent::ReminderUpdated(None);
         let mut buffer = Vec::default();
-        let event_name = original.serialize_event_to_buffer(&mut buffer)?;
+        original.serialize_event_to_buffer(&mut buffer)?;
 
-        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, event_name)?;
+        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, original.event_type())?;
         assert_eq!(Some(original), roundtrip);
 
         Ok(())
@@ -585,9 +585,9 @@ mod tests {
     fn roundtrip_text_updated() -> Result<(), serde_json::Error> {
         let original = TodoEvent::TextUpdated(domain::Description::new("alt test description").unwrap());
         let mut buffer = Vec::default();
-        let event_name = original.serialize_event_to_buffer(&mut buffer)?;
+        original.serialize_event_to_buffer(&mut buffer)?;
 
-        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, event_name)?;
+        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, original.event_type())?;
         assert_eq!(Some(original), roundtrip);
 
         Ok(())
@@ -597,9 +597,9 @@ mod tests {
     fn roundtrip_completed() -> Result<(), serde_json::Error> {
         let original = TodoEvent::Completed;
         let mut buffer = Vec::default();
-        let event_name = original.serialize_event_to_buffer(&mut buffer)?;
+        original.serialize_event_to_buffer(&mut buffer)?;
 
-        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, event_name)?;
+        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, original.event_type())?;
         assert_eq!(Some(original), roundtrip);
 
         Ok(())
@@ -609,9 +609,9 @@ mod tests {
     fn roundtrip_uncompleted() -> Result<(), serde_json::Error> {
         let original = TodoEvent::Uncompleted;
         let mut buffer = Vec::default();
-        let event_name = original.serialize_event_to_buffer(&mut buffer)?;
+        original.serialize_event_to_buffer(&mut buffer)?;
 
-        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, event_name)?;
+        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, original.event_type())?;
         assert_eq!(Some(original), roundtrip);
 
         Ok(())

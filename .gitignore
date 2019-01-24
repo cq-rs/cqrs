@@ -2,3 +2,4 @@ target/
 .idea/
 *.g.*
 Cargo.lock
+*.new
