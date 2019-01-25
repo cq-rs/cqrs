@@ -3,6 +3,7 @@ members = [
     "cqrs",
     "cqrs-core",
     "cqrs-postgres",
+    "cqrs-proptest",
     "cqrs-redis",
     "cqrs-todo-core",
     "cqrs-todoql",

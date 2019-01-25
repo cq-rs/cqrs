@@ -19,6 +19,8 @@
 extern crate cqrs_core;
 extern crate hashbrown;
 extern crate parking_lot;
+#[cfg(feature = "proptest")]
+extern crate proptest;
 extern crate void;
 
 pub mod memory;

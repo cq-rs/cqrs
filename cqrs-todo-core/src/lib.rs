@@ -15,6 +15,8 @@
 )]
 
 extern crate cqrs_core;
+#[cfg(test)]
+extern crate cqrs_proptest;
 extern crate chrono;
 extern crate arrayvec;
 extern crate serde;
@@ -22,6 +24,8 @@ extern crate serde;
 extern crate serde_derive;
 #[cfg(test)]
 extern crate pretty_assertions;
+#[cfg(test)]
+extern crate proptest;
 extern crate log;
 
 use arrayvec::ArrayVec;
@@ -172,7 +176,7 @@ pub enum TodoStatus {
     NotCompleted,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TodoData {
     pub description: domain::Description,
     pub reminder: Option<domain::Reminder>,
@@ -280,7 +284,7 @@ impl TodoData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TodoAggregate {
     Created(TodoData),
     Uninitialized,
@@ -541,7 +545,7 @@ mod tests {
             raw: String::from_utf8(buffer).unwrap(),
         };
 
-        insta::assert_ron_snapshot_matches!(name, data);
+        insta::assert_json_snapshot_matches!(name, data);
         Ok(())
     }
 
@@ -615,5 +619,85 @@ mod tests {
         assert_eq!(Some(original), roundtrip);
 
         Ok(())
+    }
+
+    mod property_tests {
+        use super::*;
+        use cqrs_core::{Aggregate, Event};
+        use cqrs_proptest::AggregateFromEventSequence;
+        use proptest::prelude::*;
+        use proptest::{proptest_helper, prop_oneof, proptest};
+        use pretty_assertions::assert_eq;
+        use std::fmt;
+
+        impl Arbitrary for domain::Description {
+            type Parameters = proptest::string::StringParam;
+
+            fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
+                let s: &'static str = args.into();
+                s.prop_filter_map("invalid description", |d| {
+                    domain::Description::new(d).ok()
+                }).boxed()
+            }
+
+            type Strategy = BoxedStrategy<Self>;
+        }
+
+        impl Arbitrary for domain::Reminder {
+            type Parameters = ();
+
+            fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
+                let current_time = Utc.ymd(2000, 1, 1).and_hms(0, 0, 0);
+
+                (2000..2500_i32, 1..=366_u32, 0..86400_u32).prop_filter_map("invalid date", move |(y, o, s)| {
+                    let time = chrono::NaiveTime::from_num_seconds_from_midnight(s, 0);
+                    let date = Utc.yo_opt(y, o).single()?.and_time(time)?;
+                    domain::Reminder::new(date, current_time).ok()
+                }).boxed()
+            }
+
+            type Strategy = BoxedStrategy<Self>;
+        }
+
+        impl Arbitrary for TodoEvent {
+            type Parameters = ();
+
+            fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
+                prop_oneof! [
+                    any::<domain::Description>().prop_map(TodoEvent::Created),
+                    any::<Option<domain::Reminder>>().prop_map(TodoEvent::ReminderUpdated),
+                    any::<domain::Description>().prop_map(TodoEvent::TextUpdated),
+                    Just(TodoEvent::Completed),
+                    Just(TodoEvent::Uncompleted),
+                ].boxed()
+            }
+
+            type Strategy = BoxedStrategy<Self>;
+        }
+
+        fn verify_serializable_roundtrips_through_serialization<V: serde::Serialize + for<'de> serde::Deserialize<'de> + Eq + fmt::Debug>(original: V) {
+            let data = serde_json::to_string(&original).expect("serialization");
+            let roundtrip: V = serde_json::from_str(&data).expect("deserialization");
+            assert_eq!(original, roundtrip);
+        }
+
+        type ArbitraryTodoAggregate = AggregateFromEventSequence<TodoAggregate>;
+
+        proptest! {
+            #[test]
+            fn can_create_arbitrary_aggregate(agg in any::<ArbitraryTodoAggregate>()) {
+            }
+
+            #[test]
+            fn arbitrary_aggregate_roundtrips_through_serialization(arg in any::<ArbitraryTodoAggregate>()) {
+                verify_serializable_roundtrips_through_serialization(dbg!(arg.into_aggregate()));
+            }
+
+            #[test]
+            fn arbitrary_event_roundtrips_through_serialization(event in any::<TodoEvent>()) {
+                let roundtrip = cqrs_proptest::roundtrip_through_serialization(&event);
+                assert_eq!(event, roundtrip);
+            }
+        }
     }
 }

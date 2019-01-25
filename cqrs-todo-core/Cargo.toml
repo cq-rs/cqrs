@@ -14,8 +14,10 @@ serde_json = "1.0"
 void = "1.0"
 
 [dev-dependencies]
+cqrs-proptest = { path = "../cqrs-proptest" }
 insta = "0.5"
 pretty_assertions = "0.5"
+proptest = "0.8"
 
 [features]
 default = []

@@ -43,3 +43,8 @@ impl Event for TestEvent {
         EVENT_TYPE
     }
 }
+
+#[cfg(feature = "proptest")]
+pub mod proptest {
+
+}
