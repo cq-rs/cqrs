@@ -1,3 +1,5 @@
+//! A basic, in-memory event stream.
+
 use std::hash::BuildHasher;
 use std::fmt;
 use std::iter;
@@ -6,7 +8,7 @@ use std::sync::Arc;
 use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use void::Void;
-use cqrs_core::{Aggregate, EventSource, EventSink, SnapshotSource, SnapshotSink, EventNumber, VersionedEvent, Since, Version, VersionedAggregate, VersionedAggregateView, Precondition};
+use cqrs_core::{Aggregate, AggregateId, EventSource, EventSink, SnapshotSource, SnapshotSink, EventNumber, VersionedEvent, Since, Version, VersionedAggregate, VersionedAggregateView, Precondition};
 
 #[derive(Debug, Default)]
 struct EventStream<Event, Metadata> {
@@ -14,6 +16,7 @@ struct EventStream<Event, Metadata> {
     metadata: Vec<Arc<Metadata>>,
 }
 
+/// An in-memory event store
 #[derive(Debug)]
 pub struct EventStore<A, M, Hasher = DefaultHashBuilder>
 where
@@ -45,6 +48,7 @@ where
     A::Event: Clone,
     Hasher: BuildHasher,
 {
+    /// Constructs a new event store with the specified hasher.
     pub fn with_hasher(hasher: Hasher) -> Self {
         EventStore {
             inner: RwLock::new(HashMap::with_hasher(hasher)),
@@ -62,10 +66,13 @@ where
     type Events = Vec<Result<VersionedEvent<A::Event>, Void>>;
     type Error = Void;
 
-    fn read_events(&self, id: &str, since: Since, max_count: Option<u64>) -> Result<Option<Self::Events>, Self::Error> {
+    fn read_events<I>(&self, id: &I, since: Since, max_count: Option<u64>) -> Result<Option<Self::Events>, Self::Error>
+    where
+        I: AggregateId<Aggregate=A>,
+    {
         let table = self.inner.read();
 
-        let stream = table.get(id);
+        let stream = table.get(id.as_ref());
 
         let result =
             stream.map(|stream| {
@@ -106,6 +113,7 @@ where
     }
 }
 
+/// An error indicating that a precondition has failed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PreconditionFailed(pub Precondition);
 
@@ -129,12 +137,15 @@ where
 {
     type Error = PreconditionFailed;
 
-    fn append_events(&self, id: &str, events: &[A::Event], precondition: Option<Precondition>, metadata: M) -> Result<EventNumber, Self::Error> {
+    fn append_events<I>(&self, id: &I, events: &[A::Event], precondition: Option<Precondition>, metadata: M) -> Result<EventNumber, Self::Error>
+    where
+        I: AggregateId<Aggregate=A>,
+    {
         let table = self.inner.upgradable_read();
 
-        if table.contains_key(id) {
+        if table.contains_key(id.as_ref()) {
             let table = RwLockUpgradableReadGuard::downgrade(table);
-            let stream = table.get(id).unwrap().upgradable_read();
+            let stream = table.get(id.as_ref()).unwrap().upgradable_read();
 
             let mut sequence = Version::new(stream.events.len() as u64).next_event();
             let first_sequence = sequence;
@@ -153,7 +164,7 @@ where
                     sequence,
                     event: event.to_owned(),
                 };
-                sequence = sequence.incr();
+                sequence.incr();
                 versioned_event
             }));
 
@@ -174,7 +185,7 @@ where
                         sequence,
                         event: event.to_owned(),
                     };
-                    sequence = sequence.incr();
+                    sequence.incr();
                     versioned_event
                 }).collect(),
                 metadata: metadata_stream,
@@ -183,13 +194,14 @@ where
             let stream = RwLock::new(new_stream);
 
             let mut table = RwLockUpgradableReadGuard::upgrade(table);
-            table.insert(id.into(), stream);
+            table.insert(id.as_ref().into(), stream);
 
             Ok(EventNumber::MIN_VALUE)
         }
     }
 }
 
+/// An in-memory store for aggregate snapshots.
 #[derive(Debug)]
 pub struct StateStore<A, Hasher = DefaultHashBuilder>
 where
@@ -218,6 +230,7 @@ where
     A: Aggregate + Clone,
     Hasher: BuildHasher,
 {
+    /// Constructs a new snapshot store with a specific hasher.
     pub fn with_hasher(hasher: Hasher) -> Self {
         StateStore {
             inner: RwLock::new(HashMap::with_hasher(hasher)),
@@ -233,11 +246,15 @@ where
 {
     type Error = Void;
 
-    fn get_snapshot(&self, id: &str) -> Result<Option<VersionedAggregate<A>>, Self::Error> where Self: Sized {
+    fn get_snapshot<I>(&self, id: &I) -> Result<Option<VersionedAggregate<A>>, Self::Error>
+    where
+        I: AggregateId<Aggregate=A>,
+        Self: Sized,
+    {
         let table = self.inner.read();
 
         let snapshot =
-            table.get(id)
+            table.get(id.as_ref())
                 .map(|data| data.read().to_owned());
 
         Ok(snapshot)
@@ -251,15 +268,19 @@ where
 {
     type Error = Void;
 
-    fn persist_snapshot(&self, id: &str, view: VersionedAggregateView<A>) -> Result<(), Self::Error> where Self: Sized {
+    fn persist_snapshot<I>(&self, id: &I, view: VersionedAggregateView<A>) -> Result<(), Self::Error>
+    where
+        I: AggregateId<Aggregate=A>,
+        Self: Sized,
+    {
         let table = self.inner.upgradable_read();
 
-        if table.contains_key(id) {
+        if table.contains_key(id.as_ref()) {
             let table = RwLockUpgradableReadGuard::downgrade(table);
-            *table.get(id).unwrap().write() = view.into();
+            *table.get(id.as_ref()).unwrap().write() = view.into();
         } else {
             let mut table = RwLockUpgradableReadGuard::upgrade(table);
-            table.insert(id.into(), RwLock::new(view.into()));
+            table.insert(id.as_ref().into(), RwLock::new(view.into()));
         };
 
         Ok(())

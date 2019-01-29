@@ -2,12 +2,86 @@
 //!
 //! `cqrs-proptest` contains various utilities for building property tests with the
 //! `proptest` crate and aggregates from `cqrs` or `cqrs-core`.
+//!
+//! ## Examples
+//!
+//! ```
+//! use cqrs_core::{Aggregate, Event};
+//! use cqrs_proptest::AggregateFromEventSequence;
+//! use proptest::{prelude::*, strategy::{TupleUnion, ValueTree, W}, test_runner::TestRunner, prop_oneof};
+//!
+//! #[derive(Debug, Default)]
+//! struct MyAggregate {
+//!     active: bool
+//! }
+//!
+//! impl Aggregate for MyAggregate {
+//!     type Event = MyEvent;
+//!     type Events = Vec<MyEvent>;
+//!     type Command = ();
+//!     type Error = String;
+//!
+//!     fn entity_type() -> &'static str {
+//!         "my_aggregate"
+//!     }
+//!
+//!     fn apply(&mut self, event: Self::Event) {
+//!         match event {
+//!             MyEvent::Created => self.active = true,
+//!             MyEvent::Deleted => self.active = false,
+//!         }
+//!     }
+//!
+//!     fn execute(&self, _: Self::Command) -> Result<Self::Events, Self::Error> {
+//!         Ok(Vec::default())
+//!     }
+//! }
+//!
+//! #[derive(Clone, Copy, Debug)]
+//! enum MyEvent {
+//!     Created,
+//!     Deleted,
+//! }
+//!
+//! impl Event for MyEvent {
+//!     fn event_type(&self) -> &'static str {
+//!         match *self {
+//!             MyEvent::Created => "created",
+//!             MyEvent::Deleted => "deleted",
+//!         }
+//!     }
+//! }
+//!
+//! impl Arbitrary for MyEvent {
+//!     type Parameters = ();
+//!
+//!     fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+//!         prop_oneof![
+//!             Just(MyEvent::Created),
+//!             Just(MyEvent::Deleted),
+//!         ]
+//!     }
+//!
+//!     type Strategy = TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
+//! }
+//!
+//! any::<AggregateFromEventSequence<MyAggregate>>()
+//!     .new_tree(&mut TestRunner::default())
+//!     .unwrap()
+//!     .current()
+//!     .into_aggregate();
+//!
+//! let parameters = (prop::collection::SizeRange::from(1..10), ());
+//! any_with::<AggregateFromEventSequence<MyAggregate>>(parameters)
+//!     .new_tree(&mut TestRunner::default())
+//!     .unwrap()
+//!     .current();
+//! ```
 
 #![warn(
     unused_import_braces,
     unused_imports,
     unused_qualifications,
-    missing_docs,
 )]
 
 #![deny(
@@ -17,6 +91,7 @@
     trivial_numeric_casts,
     unsafe_code,
     unused_must_use,
+    missing_docs,
 )]
 
 use cqrs_core::{Aggregate, CqrsError, Event, SerializableEvent, DeserializableEvent};
@@ -201,8 +276,6 @@ pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEven
 }
 
 /// A wrapper for an aggregate that was generated from an arbitrary sequence of events.
-///
-/// # Examples
 ///
 /// # Examples
 ///

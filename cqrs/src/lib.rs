@@ -1,10 +1,12 @@
-//! This is documented.
+//! # cqrs
+//!
+//! `cqrs` defines the types for interacting with entities in the CQRS system
+
 
 #![warn(
     unused_import_braces,
     unused_imports,
     unused_qualifications,
-    missing_docs,
 )]
 
 #![deny(
@@ -14,13 +16,12 @@
     trivial_numeric_casts,
     unsafe_code,
     unused_must_use,
+    missing_docs,
 )]
 
 extern crate cqrs_core;
 extern crate hashbrown;
 extern crate parking_lot;
-#[cfg(feature = "proptest")]
-extern crate proptest;
 extern crate void;
 
 pub mod memory;
@@ -28,7 +29,9 @@ pub mod trivial;
 
 mod entity;
 
-mod testing;
+//mod testing;
 
+#[doc(inline)]
 pub use entity::{Entity, EntitySink, EntitySource, EntityStore, CompositeEntitySink, CompositeEntitySource, CompositeEntityStore};
+#[doc(inline)]
 pub use cqrs_core::*;

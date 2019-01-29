@@ -6,7 +6,6 @@
     unused_import_braces,
     unused_imports,
     unused_qualifications,
-    missing_docs,
 )]
 
 #![deny(
@@ -16,9 +15,9 @@
     trivial_numeric_casts,
     unsafe_code,
     unused_must_use,
+    missing_docs,
 )]
 
-#[cfg(test)] #[macro_use] extern crate static_assertions;
 #[cfg(test)] extern crate void;
 
 mod aggregate;
@@ -26,7 +25,7 @@ mod store;
 mod types;
 
 #[doc(inline)]
-pub use aggregate::{Aggregate, AggregateCommand, AggregateEvent, Event, SerializableEvent, DeserializableEvent};
+pub use aggregate::{Aggregate, AggregateCommand, AggregateEvent, AggregateId, Event, Events, SerializableEvent, DeserializableEvent, ExecuteTarget, AggregateIdentifiedBy, ApplyTarget, CommandError, EventFor, ProducedEvent, ProducedEvents};
 #[doc(inline)]
 pub use store::{EventSource, EventSink, SnapshotSource, SnapshotSink};
 #[doc(inline)]

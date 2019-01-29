@@ -6,6 +6,5 @@ authors = ["Marcus Griep <marcus@griep.us>"]
 [dependencies]
 
 [dev-dependencies]
-static_assertions = "0.2"
 void = "1.0"
 
