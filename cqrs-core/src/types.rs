@@ -1,30 +1,33 @@
 use std::fmt;
 use std::num::NonZeroU64;
 
+/// Represents an event sequence number, starting at 1
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EventNumber(NonZeroU64);
 
 impl EventNumber {
+    /// The minimum [EventNumber].
     #[allow(unsafe_code)]
     pub const MIN_VALUE: EventNumber =
-        // One is absolutely non-zero.
+        // One is absolutely non-zero, and this is required for this to be usable in a `const` context.
         EventNumber(unsafe {NonZeroU64::new_unchecked(1)});
 
+    /// Attempts to create a new event number from a given number. Will return non if the given number is `0`.
     #[inline]
     pub fn new(x: u64) -> Option<Self> {
         Some(EventNumber(NonZeroU64::new(x)?))
     }
 
+    /// Extracts the event number as a plain `u64`.
     #[inline]
     pub fn get(self) -> u64 {
         self.0.get()
     }
 
+    /// Increments the event number to the next value.
     #[inline]
-    #[must_use]
-    pub fn incr(self) -> Self {
-        let x = self.0.get();
-        EventNumber(NonZeroU64::new(x + 1).unwrap())
+    pub fn incr(&mut self) {
+        self.0 = NonZeroU64::new(self.0.get() + 1).unwrap();
     }
 }
 
@@ -49,13 +52,20 @@ impl fmt::Display for EventNumber {
 //    }
 //}
 
+/// An aggregate version.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Version {
+    /// The version of an aggregate that has not had any events applied to it.
     Initial,
+    /// The version of the last event applied to the aggregate.
     Number(EventNumber),
 }
 
 impl Version {
+    /// Creates a new `Version` from a number.
+    ///
+    /// The number `0` gets interpreted as being `Version::Initial`, while any other number is interpreted as the
+    /// latest event number applied.
     #[inline]
     pub fn new(number: u64) -> Self {
         NonZeroU64::new(number)
@@ -64,23 +74,25 @@ impl Version {
             .unwrap_or(Version::Initial)
     }
 
+    /// Increments the version number to the next in sequence.
     #[inline]
-    #[must_use]
-    pub fn incr(self) -> Self {
-        match self {
-            Version::Initial => Version::Number(EventNumber::MIN_VALUE),
-            Version::Number(en) => Version::Number(en.incr()),
+    pub fn incr(&mut self) {
+        match *self {
+            Version::Initial => *self = Version::Number(EventNumber::MIN_VALUE),
+            Version::Number(ref mut en) => en.incr(),
         }
     }
 
+    /// Returns the next event number in the sequence.
     #[inline]
     pub fn next_event(self) -> EventNumber {
         match self {
             Version::Initial => EventNumber::MIN_VALUE,
-            Version::Number(en) => en.incr(),
+            Version::Number(mut en) => {en.incr(); en},
         }
     }
 
+    /// Gets the version number as a raw `u64`.
     #[inline]
     pub fn get(self) -> u64 {
         match self {
@@ -89,6 +101,7 @@ impl Version {
         }
     }
 
+    /// Gets the version number as an [EventNumber], returning `None` if the current verison is [Version::Initial].
     #[inline]
     pub fn event_number(self) -> Option<EventNumber> {
         match self {
@@ -148,14 +161,20 @@ impl ::std::ops::Sub for Version {
     }
 }
 
+/// A precondition that must be upheld for a command to be executed or for events to be persisted.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Precondition {
+    /// Requires that the target aggregate must not have had any events previously applied to it.
     New,
+    /// Requires that the target event at least exist, whether as a snapshot, or as having had at least one event applied.
     Exists,
+    /// Requires that the target aggregate have the exact version specified.
     ExpectedVersion(Version),
 }
 
 impl Precondition {
+    /// Verifies that the precondition holds, given the `current_version`. If the precondition is violated, an error is
+    /// returned with the precondition.
     pub fn verify(self, current_version: Option<Version>) -> Result<(), Self> {
         match (self, current_version) {
             (Precondition::ExpectedVersion(Version::Initial), None) => Ok(()),
@@ -186,21 +205,33 @@ impl fmt::Display for Precondition {
     }
 }
 
+/// A structured tuple combining an event number and an event.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct VersionedEvent<E> {
+    /// The event number.
     pub sequence: EventNumber,
+
+    /// The event.
     pub event: E,
 }
 
+/// A structured tuple combining an aggregate and its current version.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct VersionedAggregate<A> {
+    /// The current version of the aggregate.
     pub version: Version,
+
+    /// The aggregate.
     pub payload: A,
 }
 
+/// A structured tuple combining a reference to an aggregate and its current version.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct VersionedAggregateView<'a, A: 'a> {
+    /// The current version of the referenced aggregate.
     pub version: Version,
+
+    /// A reference to the aggregate.
     pub payload: &'a A,
 }
 
@@ -213,9 +244,15 @@ impl<'a, A: Clone + 'a> From<VersionedAggregateView<'a, A>> for VersionedAggrega
     }
 }
 
+/// The starting point when reading a stream of values from an [EventSource].
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Since {
+    /// Begins reading events from the very beginning of the stream.
     BeginningOfStream,
+
+    /// Begins reading events after the given [EventNumber].
+    ///
+    /// E.g. if the event number were 4, then reading should begin at event number 5.
     Event(EventNumber),
 }
 
@@ -228,6 +265,7 @@ impl From<Version> for Since {
     }
 }
 
+/// Represents a common trait that all errors handled by CQRS should implement.
 pub trait CqrsError: fmt::Debug + fmt::Display + Send + Sync + 'static {}
 
 impl<T> CqrsError for T
