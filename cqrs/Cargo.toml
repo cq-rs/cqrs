@@ -5,11 +5,11 @@ authors = ["Marcus Griep <marcus@griep.us>"]
 license = "Apache-2.0"
 
 [dependencies]
-cqrs-core = { path = "../cqrs-core" }
+cqrs-core = { path = "../cqrs-core", version = "0.1.0-alpha.0" }
 hashbrown = "0.1"
 parking_lot = "0.7"
 void = "1.0"
 
 [dev-dependencies]
 static_assertions = "0.3"
-cqrs-todo-core = { path = "../cqrs-todo-core" }
+cqrs-todo-core = { path = "../cqrs-todo-core", version = "0.1.0-alpha.0" }

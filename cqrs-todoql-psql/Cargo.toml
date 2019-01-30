@@ -7,9 +7,9 @@ publish = false
 
 [dependencies]
 base64 = "0.10"
-cqrs = { path = "../cqrs" }
-cqrs-todo-core = { path = "../cqrs-todo-core" }
-cqrs-postgres = { path = "../cqrs-postgres" }
+cqrs = { path = "../cqrs", version = "0.1.0-alpha.0" }
+cqrs-todo-core = { path = "../cqrs-todo-core", version = "0.1.0-alpha.0" }
+cqrs-postgres = { path = "../cqrs-postgres", version = "0.1.0-alpha.0" }
 clap = "2.32"
 chrono = "0.4"
 env_logger = "0.6"

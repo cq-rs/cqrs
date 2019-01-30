@@ -6,7 +6,7 @@ edition = "2018"
 license = "Apache-2.0"
 
 [dependencies]
-cqrs-core = { path = "../cqrs-core" }
+cqrs-core = { path = "../cqrs-core", version = "0.1.0-alpha.0" }
 proptest = "0.8"
 
 [dev-dependencies]
