@@ -57,11 +57,6 @@ where
         self.state.apply(event);
         self.version.incr();
     }
-
-    /// Converts `self` into an [Entity] with the associated identifier.
-    pub fn into_entity_with_id<I: AggregateId<Aggregate = A>>(self, id: I) -> Entity<I, A> {
-        Entity::new(id, self)
-    }
 }
 
 impl<A> AsRef<A> for HydratedAggregate<A>

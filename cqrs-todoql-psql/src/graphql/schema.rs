@@ -70,7 +70,7 @@ graphql_object!(Query: Context |&self| {
         let id = TodoId(id.to_string());
 
         let entity = store.rehydrate(&id)?
-            .map(|agg| TodoQL(agg.into_entity_with_id(id)));
+            .map(|agg| TodoQL(Entity::new(id, agg)));
 
         Ok(entity)
     }
@@ -139,7 +139,7 @@ graphql_object!(TodoEdge: Context |&self| {
         let store = TodoStore::new(&*conn);
 
         let entity = store.rehydrate(&id)?
-            .map(|agg| TodoQL(agg.into_entity_with_id(id)));
+            .map(|agg| TodoQL(Entity::new(id, agg)));
 
         Ok(entity)
     }
@@ -223,15 +223,15 @@ graphql_object!(Mutations: Context |&self| {
             initiated_by: String::from("graphql"),
         };
 
-        let entity = store.exec_and_persist(
+        let aggregate = store.exec_and_persist(
             &new_id,
             Default::default(),
             command,
             Some(Precondition::New),
             metadata,
-        )?.into_entity_with_id(new_id.clone());
+        )?;
 
-        Ok(TodoQL(entity))
+        Ok(TodoQL(Entity::new(new_id, aggregate)))
     }
 
 });
@@ -269,7 +269,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             metadata,
-        )?.map(move |agg| agg.into_entity_with_id(id));
+        )?.map(move |agg| Entity::new(id, agg));
 
         Ok(entity.map(TodoQL))
     }
@@ -297,7 +297,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             metadata,
-        )?.map(move |agg| agg.into_entity_with_id(id));
+        )?.map(move |agg| Entity::new(id, agg));
 
         Ok(entity.map(TodoQL))
     }
@@ -323,7 +323,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             metadata,
-        )?.map(move |agg| agg.into_entity_with_id(id));
+        )?.map(move |agg| Entity::new(id, agg));
 
         Ok(entity.map(TodoQL))
     }
@@ -349,7 +349,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             metadata,
-        )?.map(move |agg| agg.into_entity_with_id(id));
+        )?.map(move |agg| Entity::new(id, agg));
 
         Ok(entity.map(TodoQL))
     }
@@ -375,7 +375,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             metadata,
-        )?.map(move |agg| agg.into_entity_with_id(id));
+        )?.map(move |agg| Entity::new(id, agg));
 
         Ok(entity.map(TodoQL))
     }
@@ -401,7 +401,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             metadata,
-        )?.map(move |agg| agg.into_entity_with_id(id));
+        )?.map(move |agg| Entity::new(id, agg));
 
         Ok(entity.map(TodoQL))
     }
