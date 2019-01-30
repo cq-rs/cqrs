@@ -5,7 +5,7 @@ pub trait Aggregate: Default {
     /// A static string representing the type of the aggregate.
     ///
     /// Note: This should effectively be a constant value, and should never change.
-    fn entity_type() -> &'static str;
+    fn aggregate_type() -> &'static str;
 
     /// The event type that can be applied to this aggregate.
     type Event: AggregateEvent<Aggregate = Self>;

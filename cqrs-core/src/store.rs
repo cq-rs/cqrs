@@ -128,7 +128,7 @@ mod tests {
     impl Aggregate for TestAggregate {
         type Event = TestEvent;
 
-        fn entity_type() -> &'static str {
+        fn aggregate_type() -> &'static str {
             "test"
         }
     }

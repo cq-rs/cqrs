@@ -84,7 +84,7 @@ where
             FROM events \
             WHERE entity_type = $1",
         )?;
-        let rows = stmt.query(&[&A::entity_type()])?;
+        let rows = stmt.query(&[&A::aggregate_type()])?;
         Ok(rows
             .iter()
             .next()
@@ -102,7 +102,7 @@ where
             ORDER BY MIN(event_id) ASC \
             OFFSET $2 LIMIT $3",
         )?;
-        let rows = stmt.query(&[&A::entity_type(), &(i64::from(offset)), &(i64::from(limit))])?;
+        let rows = stmt.query(&[&A::aggregate_type(), &(i64::from(offset)), &(i64::from(limit))])?;
         Ok(rows.iter().map(|r| r.get(0)).collect())
     }
 
@@ -120,7 +120,7 @@ where
             FROM events \
             WHERE entity_type = $1 AND entity_id LIKE $2",
         )?;
-        let rows = stmt.query(&[&A::entity_type(), &pattern])?;
+        let rows = stmt.query(&[&A::aggregate_type(), &pattern])?;
         Ok(rows
             .iter()
             .next()
@@ -151,7 +151,7 @@ where
             OFFSET $3 LIMIT $4",
         )?;
         let rows = stmt.query(&[
-            &A::entity_type(),
+            &A::aggregate_type(),
             &pattern,
             &(i64::from(offset)),
             &(i64::from(limit)),
@@ -168,7 +168,7 @@ where
             FROM events \
             WHERE entity_type = $1 AND entity_id SIMILAR TO $2",
         )?;
-        let rows = stmt.query(&[&A::entity_type(), &regex])?;
+        let rows = stmt.query(&[&A::aggregate_type(), &regex])?;
         Ok(rows
             .iter()
             .next()
@@ -194,7 +194,7 @@ where
             OFFSET $3 LIMIT $4",
         )?;
         let rows = stmt.query(&[
-            &A::entity_type(),
+            &A::aggregate_type(),
             &regex,
             &(i64::from(offset)),
             &(i64::from(limit)),
@@ -214,7 +214,7 @@ where
             FROM events \
             WHERE entity_type = $1 AND entity_id ~ $2",
         )?;
-        let rows = stmt.query(&[&A::entity_type(), &regex])?;
+        let rows = stmt.query(&[&A::aggregate_type(), &regex])?;
         Ok(rows
             .iter()
             .next()
@@ -240,7 +240,7 @@ where
             OFFSET $3 LIMIT $4",
         )?;
         let rows = stmt.query(&[
-            &A::entity_type(),
+            &A::aggregate_type(),
             &regex,
             &(i64::from(offset)),
             &(i64::from(limit)),
@@ -274,7 +274,7 @@ where
             "SELECT MAX(sequence) FROM events WHERE entity_type = $1 AND entity_id = $2",
         )?;
 
-        let result = check_stmt.query(&[&A::entity_type(), &id.as_ref()])?;
+        let result = check_stmt.query(&[&A::aggregate_type(), &id.as_ref()])?;
         let current_version = result.iter().next().and_then(|r| {
             let max_sequence: Option<i64> = r.get(0);
             max_sequence.map(|x| Version::new(x as u64))
@@ -310,7 +310,7 @@ where
                 .serialize_event_to_buffer(&mut buffer)
                 .map_err(PersistError::SerializationError)?;
             let modified_count = stmt.execute(&[
-                &A::entity_type(),
+                &A::aggregate_type(),
                 &id.as_ref(),
                 &(next_sequence.get() as i64),
                 &event.event_type(),
@@ -394,7 +394,7 @@ where
                 rows = stmt.lazy_query(
                     &trans,
                     &[
-                        &A::entity_type(),
+                        &A::aggregate_type(),
                         &id.as_ref(),
                         &last_sequence,
                         &(max_count.min(i64::max_value() as u64) as i64),
@@ -410,7 +410,7 @@ where
                 )?;
                 rows = stmt.lazy_query(
                     &trans,
-                    &[&A::entity_type(), &id.as_ref(), &last_sequence],
+                    &[&A::aggregate_type(), &id.as_ref(), &last_sequence],
                     100,
                 )?;
             }
@@ -464,7 +464,7 @@ where
             VALUES ($1, $2, $3, $4)",
         )?;
         let _modified_count = stmt.execute(&[
-            &A::entity_type(),
+            &A::aggregate_type(),
             &id.as_ref(),
             &(version.get() as i64),
             &Json(aggregate),
@@ -497,7 +497,7 @@ where
             ORDER BY sequence DESC \
             LIMIT 1",
         )?;
-        let rows = stmt.query(&[&A::entity_type(), &id.as_ref()])?;
+        let rows = stmt.query(&[&A::aggregate_type(), &id.as_ref()])?;
         if let Some(row) = rows.iter().next() {
             let sequence: i64 = row.get("sequence");
             let raw: Json<A> = row.get("payload");

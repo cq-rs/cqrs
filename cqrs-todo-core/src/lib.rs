@@ -66,7 +66,7 @@ impl Aggregate for TodoAggregate {
     type Event = TodoEvent;
 
     #[inline(always)]
-    fn entity_type() -> &'static str
+    fn aggregate_type() -> &'static str
     where
         Self: Sized,
     {

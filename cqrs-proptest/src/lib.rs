@@ -18,7 +18,7 @@
 //! impl Aggregate for MyAggregate {
 //!     type Event = MyEvents;
 //!
-//!     fn entity_type() -> &'static str {
+//!     fn aggregate_type() -> &'static str {
 //!         "my_aggregate"
 //!     }
 //! }
@@ -204,7 +204,7 @@ pub fn arb_events<E: Event + fmt::Debug>(
 /// impl Aggregate for MyAggregate {
 ///     type Event = MyEvents;
 ///
-///     fn entity_type() -> &'static str {
+///     fn aggregate_type() -> &'static str {
 ///         "my_aggregate"
 ///     }
 /// }
@@ -402,7 +402,7 @@ pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEven
 /// impl Aggregate for MyAggregate {
 ///     type Event = MyEvents;
 ///
-///     fn entity_type() -> &'static str {
+///     fn aggregate_type() -> &'static str {
 ///         "my_aggregate"
 ///     }
 /// }
