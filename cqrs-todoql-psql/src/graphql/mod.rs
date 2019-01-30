@@ -1,12 +1,11 @@
-use std::ops;
-use std::sync::Arc;
+use std::{ops, sync::Arc};
 
 use juniper;
-use r2d2_postgres::PostgresConnectionManager;
 use r2d2::Pool;
+use r2d2_postgres::PostgresConnectionManager;
 
-mod schema;
 pub mod endpoint;
+mod schema;
 
 pub struct InnerContext {
     pub backend: Pool<PostgresConnectionManager>,
@@ -23,7 +22,7 @@ impl InnerContext {
 }
 
 pub struct Context {
-    inner: Arc<InnerContext>
+    inner: Arc<InnerContext>,
 }
 
 impl ops::Deref for Context {

@@ -1,14 +1,13 @@
 //! A basic, in-memory event stream.
 
-use std::hash::BuildHasher;
-use std::fmt;
-use std::iter;
-use std::marker::PhantomData;
-use std::sync::Arc;
+use cqrs_core::{
+    Aggregate, AggregateId, EventNumber, EventSink, EventSource, Precondition, Since, SnapshotSink,
+    SnapshotSource, Version, VersionedAggregate, VersionedEvent,
+};
 use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
+use std::{fmt, hash::BuildHasher, iter, marker::PhantomData, sync::Arc};
 use void::Void;
-use cqrs_core::{Aggregate, AggregateId, EventSource, EventSink, SnapshotSource, SnapshotSink, EventNumber, VersionedEvent, Since, Version, VersionedAggregate, Precondition};
 
 #[derive(Debug, Default)]
 struct EventStream<Event, Metadata> {
@@ -66,51 +65,55 @@ where
     A::Event: Clone,
     Hasher: BuildHasher,
 {
-    type Events = Vec<Result<VersionedEvent<A::Event>, Void>>;
     type Error = Void;
+    type Events = Vec<Result<VersionedEvent<A::Event>, Void>>;
 
-    fn read_events<I>(&self, id: &I, since: Since, max_count: Option<u64>) -> Result<Option<Self::Events>, Self::Error>
+    fn read_events<I>(
+        &self,
+        id: &I,
+        since: Since,
+        max_count: Option<u64>,
+    ) -> Result<Option<Self::Events>, Self::Error>
     where
-        I: AggregateId<Aggregate=A>,
+        I: AggregateId<Aggregate = A>,
     {
         let table = self.inner.read();
 
         let stream = table.get(id.as_ref());
 
-        let result =
-            stream.map(|stream| {
-                let stream = stream.read();
-                match (since, max_count) {
-                    (Since::BeginningOfStream, None) => {
-                        stream.events.iter()
-                            .map(ToOwned::to_owned)
-                            .map(Ok)
-                            .collect()
-                    },
-                    (Since::Event(event_number), None) => {
-                        stream.events.iter()
-                            .skip(event_number.get() as usize)
-                            .map(ToOwned::to_owned)
-                            .map(Ok)
-                            .collect()
-                    },
-                    (Since::BeginningOfStream, Some(max_count)) => {
-                        stream.events.iter()
-                            .take(max_count.min(usize::max_value() as u64) as usize)
-                            .map(ToOwned::to_owned)
-                            .map(Ok)
-                            .collect()
-                    },
-                    (Since::Event(event_number), Some(max_count)) => {
-                        stream.events.iter()
-                            .skip(event_number.get() as usize)
-                            .take(max_count.min(usize::max_value() as u64) as usize)
-                            .map(ToOwned::to_owned)
-                            .map(Ok)
-                            .collect()
-                    },
-                }
-            });
+        let result = stream.map(|stream| {
+            let stream = stream.read();
+            match (since, max_count) {
+                (Since::BeginningOfStream, None) => stream
+                    .events
+                    .iter()
+                    .map(ToOwned::to_owned)
+                    .map(Ok)
+                    .collect(),
+                (Since::Event(event_number), None) => stream
+                    .events
+                    .iter()
+                    .skip(event_number.get() as usize)
+                    .map(ToOwned::to_owned)
+                    .map(Ok)
+                    .collect(),
+                (Since::BeginningOfStream, Some(max_count)) => stream
+                    .events
+                    .iter()
+                    .take(max_count.min(usize::max_value() as u64) as usize)
+                    .map(ToOwned::to_owned)
+                    .map(Ok)
+                    .collect(),
+                (Since::Event(event_number), Some(max_count)) => stream
+                    .events
+                    .iter()
+                    .skip(event_number.get() as usize)
+                    .take(max_count.min(usize::max_value() as u64) as usize)
+                    .map(ToOwned::to_owned)
+                    .map(Ok)
+                    .collect(),
+            }
+        });
 
         Ok(result)
     }
@@ -140,9 +143,15 @@ where
 {
     type Error = PreconditionFailed;
 
-    fn append_events<I>(&self, id: &I, events: &[A::Event], precondition: Option<Precondition>, metadata: M) -> Result<EventNumber, Self::Error>
+    fn append_events<I>(
+        &self,
+        id: &I,
+        events: &[A::Event],
+        precondition: Option<Precondition>,
+        metadata: M,
+    ) -> Result<EventNumber, Self::Error>
     where
-        I: AggregateId<Aggregate=A>,
+        I: AggregateId<Aggregate = A>,
     {
         let table = self.inner.upgradable_read();
 
@@ -160,7 +169,9 @@ where
             let stream = &mut RwLockUpgradableReadGuard::upgrade(stream);
 
             let metadata = Arc::new(metadata);
-            stream.metadata.extend(iter::repeat(metadata).take(events.len()));
+            stream
+                .metadata
+                .extend(iter::repeat(metadata).take(events.len()));
 
             stream.events.extend(events.iter().map(|event| {
                 let versioned_event = VersionedEvent {
@@ -183,14 +194,17 @@ where
             let metadata_stream = iter::repeat(metadata).take(events.len()).collect();
 
             let new_stream = EventStream {
-                events: events.iter().map(|event| {
-                    let versioned_event = VersionedEvent {
-                        sequence,
-                        event: event.to_owned(),
-                    };
-                    sequence.incr();
-                    versioned_event
-                }).collect(),
+                events: events
+                    .iter()
+                    .map(|event| {
+                        let versioned_event = VersionedEvent {
+                            sequence,
+                            event: event.to_owned(),
+                        };
+                        sequence.incr();
+                        versioned_event
+                    })
+                    .collect(),
                 metadata: metadata_stream,
             };
 
@@ -251,14 +265,12 @@ where
 
     fn get_snapshot<I>(&self, id: &I) -> Result<Option<VersionedAggregate<A>>, Self::Error>
     where
-        I: AggregateId<Aggregate=A>,
+        I: AggregateId<Aggregate = A>,
         Self: Sized,
     {
         let table = self.inner.read();
 
-        let snapshot =
-            table.get(id.as_ref())
-                .map(|data| data.read().to_owned());
+        let snapshot = table.get(id.as_ref()).map(|data| data.read().to_owned());
 
         Ok(snapshot)
     }
@@ -271,9 +283,15 @@ where
 {
     type Error = Void;
 
-    fn persist_snapshot<I>(&self, id: &I, aggregate: &A, version: Version, _last_snapshot_version: Version) -> Result<Version, Self::Error>
+    fn persist_snapshot<I>(
+        &self,
+        id: &I,
+        aggregate: &A,
+        version: Version,
+        _last_snapshot_version: Version,
+    ) -> Result<Version, Self::Error>
     where
-        I: AggregateId<Aggregate=A>,
+        I: AggregateId<Aggregate = A>,
         Self: Sized,
     {
         let table = self.inner.upgradable_read();

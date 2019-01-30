@@ -1,6 +1,6 @@
 //! Special types that may require validation to ensure they don't contain invalid values.
 
-use chrono::{DateTime,Utc};
+use chrono::{DateTime, Utc};
 use error::{InvalidDescription, InvalidReminderTime};
 use std::borrow::Borrow;
 
@@ -12,7 +12,10 @@ pub struct Reminder {
 
 impl Reminder {
     /// Creates a new reminder, verifying that the time is after the supplied `current_time`.
-    pub fn new(reminder_time: DateTime<Utc>, current_time: DateTime<Utc>) -> Result<Reminder, InvalidReminderTime> {
+    pub fn new(
+        reminder_time: DateTime<Utc>,
+        current_time: DateTime<Utc>,
+    ) -> Result<Reminder, InvalidReminderTime> {
         if reminder_time <= current_time {
             Err(InvalidReminderTime)
         } else {
@@ -41,9 +44,7 @@ impl Description {
         if text.is_empty() {
             Err(InvalidDescription)
         } else {
-            Ok(Description {
-                text,
-            })
+            Ok(Description { text })
         }
     }
 

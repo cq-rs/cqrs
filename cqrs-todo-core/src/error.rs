@@ -1,7 +1,6 @@
 //! Error types for the domain and aggregate.
 
-use std::error;
-use std::fmt;
+use std::{error, fmt};
 
 /// The provided reminder time is invalid.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

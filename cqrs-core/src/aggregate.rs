@@ -8,7 +8,7 @@ pub trait Aggregate: Default {
     fn entity_type() -> &'static str;
 
     /// The event type that can be applied to this aggregate.
-    type Event: AggregateEvent<Aggregate=Self>;
+    type Event: AggregateEvent<Aggregate = Self>;
 
     /// Consumes the event, applying its effects to the aggregate.
     fn apply(&mut self, event: Self::Event) {
@@ -17,9 +17,12 @@ pub trait Aggregate: Default {
 
     /// Consumes a command, attempting to execute it against the aggregate. If the execution is successful, a sequence
     /// of events is generated, which can be applied to the aggregate.
-    fn execute<C: AggregateCommand<Aggregate=Self>>(&self, command: C) -> Result<C::Events, C::Error>
+    fn execute<C: AggregateCommand<Aggregate = Self>>(
+        &self,
+        command: C,
+    ) -> Result<C::Events, C::Error>
     where
-        C: AggregateCommand<Aggregate=Self>,
+        C: AggregateCommand<Aggregate = Self>,
         C::Events: Events<Self::Event>,
     {
         command.execute_on(self)
@@ -85,16 +88,18 @@ pub trait AggregateEvent: Event {
 pub type ApplyTarget<E> = <E as AggregateEvent>::Aggregate;
 
 /// An iterable and sliceable list of events.
-pub trait Events<E>: IntoIterator<Item=E> + AsRef<[E]>
+pub trait Events<E>: IntoIterator<Item = E> + AsRef<[E]>
 where
-    E: Event
-{}
+    E: Event,
+{
+}
 
 impl<T, E> Events<E> for T
 where
-    T: IntoIterator<Item=E> + AsRef<[E]>,
+    T: IntoIterator<Item = E> + AsRef<[E]>,
     E: Event,
-{}
+{
+}
 
 /// An event that can be serialized to a buffer.
 pub trait SerializableEvent: Event {
@@ -111,5 +116,8 @@ pub trait DeserializableEvent: Event + Sized {
     type Error: CqrsError;
 
     /// Deserializes an event from the provided buffer, with prior knowledge about the event's type.
-    fn deserialize_event_from_buffer(data: &[u8], event_type: &str) -> Result<Option<Self>, Self::Error>;
+    fn deserialize_event_from_buffer(
+        data: &[u8],
+        event_type: &str,
+    ) -> Result<Option<Self>, Self::Error>;
 }

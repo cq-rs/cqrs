@@ -6,16 +6,15 @@
     unused_import_braces,
     unused_imports,
     unused_qualifications,
-    missing_docs,
+    missing_docs
 )]
-
 #![deny(
     missing_debug_implementations,
     missing_copy_implementations,
     trivial_casts,
     trivial_numeric_casts,
     unsafe_code,
-    unused_must_use,
+    unused_must_use
 )]
 
 extern crate cqrs_core;
@@ -25,18 +24,21 @@ extern crate postgres;
 extern crate serde;
 extern crate serde_json;
 
-#[cfg(test)] extern crate cqrs;
-#[cfg(test)] extern crate cqrs_todo_core;
-#[cfg(test)] extern crate static_assertions;
+#[cfg(test)]
+extern crate cqrs;
+#[cfg(test)]
+extern crate cqrs_todo_core;
+#[cfg(test)]
+extern crate static_assertions;
 
 mod error;
 mod store;
 mod util;
 
 #[doc(inline)]
-pub use store::PostgresStore;
-#[doc(inline)]
 pub use error::{LoadError, PersistError};
+#[doc(inline)]
+pub use store::PostgresStore;
 
 #[cfg(test)]
 mod tests {

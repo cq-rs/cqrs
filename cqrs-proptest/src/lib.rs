@@ -109,12 +109,7 @@
 //!     .current();
 //! ```
 
-#![warn(
-    unused_import_braces,
-    unused_imports,
-    unused_qualifications,
-)]
-
+#![warn(unused_import_braces, unused_imports, unused_qualifications)]
 #![deny(
     missing_debug_implementations,
     missing_copy_implementations,
@@ -122,14 +117,15 @@
     trivial_numeric_casts,
     unsafe_code,
     unused_must_use,
-    missing_docs,
+    missing_docs
 )]
 
-use cqrs_core::{Aggregate, Event, SerializableEvent, DeserializableEvent};
+use cqrs_core::{Aggregate, DeserializableEvent, Event, SerializableEvent};
 use proptest::prelude::*;
 use std::fmt;
 
-/// Produces a strategy to generate an arbitrary vector of events, given a strategy to generate an arbitrary event and a size range.
+/// Produces a strategy to generate an arbitrary vector of events, given a strategy
+/// to generate an arbitrary event and a size range.
 ///
 /// # Examples
 ///
@@ -183,11 +179,15 @@ use std::fmt;
 ///     .unwrap()
 ///     .current();
 /// ```
-pub fn arb_events<E: Event + fmt::Debug>(event_strategy: impl Strategy<Value = E>, size: impl Into<prop::collection::SizeRange>) -> impl Strategy<Value = Vec<E>> {
+pub fn arb_events<E: Event + fmt::Debug>(
+    event_strategy: impl Strategy<Value = E>,
+    size: impl Into<prop::collection::SizeRange>,
+) -> impl Strategy<Value = Vec<E>> {
     prop::collection::vec(event_strategy, size)
 }
 
-/// Produces a strategy to generate an arbitrary aggregate, given a strategy to generate an arbitrary vector of events
+/// Produces a strategy to generate an arbitrary aggregate, given a strategy to generate
+/// an arbitrary vector of events
 ///
 /// # Examples
 ///
@@ -287,7 +287,9 @@ pub fn arb_events<E: Event + fmt::Debug>(event_strategy: impl Strategy<Value = E
 ///     .unwrap()
 ///     .current();
 /// ```
-pub fn arb_aggregate<A: Aggregate + fmt::Debug, S: Strategy<Value = Vec<A::Event>>>(events_strategy: S) -> impl Strategy<Value = A>
+pub fn arb_aggregate<A: Aggregate + fmt::Debug, S: Strategy<Value = Vec<A::Event>>>(
+    events_strategy: S,
+) -> impl Strategy<Value = A>
 where
     A::Event: fmt::Debug,
 {
@@ -300,7 +302,8 @@ where
     })
 }
 
-/// Given a serializable event, constructs a buffer, serializes the event to the buffer, and then deserializes the event, returning the deserialized value.
+/// Given a serializable event, constructs a buffer, serializes the event to the buffer, and then
+/// deserializes the event, returning the deserialized value.
 ///
 /// # Examples
 ///
@@ -369,11 +372,16 @@ where
 /// let roundtrip = roundtrip_through_serialization(&original);
 /// assert_eq!(original, roundtrip);
 /// ```
-pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEvent>(original: &E) -> E {
+pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEvent>(
+    original: &E,
+) -> E {
     let mut buffer = Vec::default();
-    original.serialize_event_to_buffer(&mut buffer).expect("serialization");
+    original
+        .serialize_event_to_buffer(&mut buffer)
+        .expect("serialization");
 
-    let roundtrip = E::deserialize_event_from_buffer(&buffer, original.event_type()).expect("deserialization");
+    let roundtrip =
+        E::deserialize_event_from_buffer(&buffer, original.event_type()).expect("deserialization");
     roundtrip.expect("known event type")
 }
 
@@ -508,17 +516,21 @@ where
     A::Event: Arbitrary + 'static,
     Self: fmt::Debug,
 {
-    type Parameters = (prop::collection::SizeRange, <A::Event as Arbitrary>::Parameters);
+    type Parameters = (
+        prop::collection::SizeRange,
+        <A::Event as Arbitrary>::Parameters,
+    );
+    type Strategy = BoxedStrategy<Self>;
 
     fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
-        any_with::<Vec<A::Event>>(args).prop_map(|events| {
-            let mut aggregate = A::default();
-            for event in events {
-                aggregate.apply(event);
-            }
-            AggregateFromEventSequence(aggregate)
-        }).boxed()
+        any_with::<Vec<A::Event>>(args)
+            .prop_map(|events| {
+                let mut aggregate = A::default();
+                for event in events {
+                    aggregate.apply(event);
+                }
+                AggregateFromEventSequence(aggregate)
+            })
+            .boxed()
     }
-
-    type Strategy = BoxedStrategy<Self>;
 }

@@ -1,13 +1,17 @@
-use std::sync::Arc;
-use mount::Mount;
+use iron::{
+    self,
+    headers::ContentType,
+    mime::{Mime, SubLevel, TopLevel},
+};
 use juniper::http::graphiql::graphiql_source;
 use juniper_iron::GraphQLHandler;
-use iron;
-use iron::headers::ContentType;
-use iron::mime::{Mime, TopLevel, SubLevel};
+use mount::Mount;
+use std::sync::Arc;
 
-use super::{InnerContext, Context};
-use super::schema::{Query, Mutations};
+use super::{
+    schema::{Mutations, Query},
+    Context, InnerContext,
+};
 
 pub fn create_chain(context: InnerContext) -> iron::Chain {
     let context_arc = Arc::new(context);
@@ -20,11 +24,7 @@ pub fn create_chain(context: InnerContext) -> iron::Chain {
 
     let mut mount = Mount::new();
 
-    let graphql_endpoint = GraphQLHandler::new(
-        context_factory,
-        Query,
-        Mutations,
-    );
+    let graphql_endpoint = GraphQLHandler::new(context_factory, Query, Mutations);
 
     mount.mount("/graphql", graphql_endpoint);
     mount.mount("/graphiql", |req: &mut iron::Request| {

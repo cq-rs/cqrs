@@ -1,5 +1,5 @@
-use void::Void;
 use cqrs_core::{Aggregate, AggregateCommand, AggregateEvent, AggregateId, Event};
+use void::Void;
 
 /// A test aggregate with no state
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -29,6 +29,7 @@ impl<'a> AsRef<str> for TestId<'a> {
 
 impl Aggregate for TestAggregate {
     type Event = TestEvent;
+
     fn entity_type() -> &'static str {
         "test"
     }
@@ -40,8 +41,8 @@ impl<'a> AggregateId for TestId<'a> {
 
 impl AggregateCommand for TestCommand {
     type Aggregate = TestAggregate;
-    type Events = Vec<TestEvent>;
     type Error = Void;
+    type Events = Vec<TestEvent>;
 
     fn execute_on(self, _aggregate: &Self::Aggregate) -> Result<Self::Events, Self::Error> {
         Ok(Vec::new())

@@ -1,10 +1,13 @@
 use aggregate::{Aggregate, AggregateId};
-use types::{CqrsError, EventNumber, Precondition, VersionedEvent, Since, SnapshotRecommendation, VersionedAggregate, Version};
+use types::{
+    CqrsError, EventNumber, Precondition, Since, SnapshotRecommendation, Version,
+    VersionedAggregate, VersionedEvent,
+};
 
 /// A source for reading/loading events.
 pub trait EventSource<A: Aggregate> {
     /// Represents the sequence of events read from the event source.
-    type Events: IntoIterator<Item=Result<VersionedEvent<A::Event>, Self::Error>>;
+    type Events: IntoIterator<Item = Result<VersionedEvent<A::Event>, Self::Error>>;
 
     /// The error type.
     type Error: CqrsError;
@@ -13,9 +16,14 @@ pub trait EventSource<A: Aggregate> {
     ///
     /// Only loads events after the event number provided in `since` (See [Since]), and will only load a maximum of
     /// `max_count` events, if given. If not given, will read all remaining events.
-    fn read_events<I>(&self, id: &I, since: Since, max_count: Option<u64>) -> Result<Option<Self::Events>, Self::Error>
+    fn read_events<I>(
+        &self,
+        id: &I,
+        since: Since,
+        max_count: Option<u64>,
+    ) -> Result<Option<Self::Events>, Self::Error>
     where
-        I: AggregateId<Aggregate=A>;
+        I: AggregateId<Aggregate = A>;
 }
 
 /// A sink for writing/persisting events with associated metadata.
@@ -26,9 +34,15 @@ pub trait EventSink<A: Aggregate, M> {
     /// Appends events to a given source, with an optional precondition, and associated metadata.
     ///
     /// The associated metadata is applied to all events in the append group.
-    fn append_events<I>(&self, id: &I, events: &[A::Event], precondition: Option<Precondition>, metadata: M) -> Result<EventNumber, Self::Error>
+    fn append_events<I>(
+        &self,
+        id: &I,
+        events: &[A::Event],
+        precondition: Option<Precondition>,
+        metadata: M,
+    ) -> Result<EventNumber, Self::Error>
     where
-        I: AggregateId<Aggregate=A>;
+        I: AggregateId<Aggregate = A>;
 }
 
 /// A source for reading/loading snapshots of aggregates.
@@ -39,7 +53,7 @@ pub trait SnapshotSource<A: Aggregate> {
     /// Loads a versioned aggregate from the snapshot source.
     fn get_snapshot<I>(&self, id: &I) -> Result<Option<VersionedAggregate<A>>, Self::Error>
     where
-        I: AggregateId<Aggregate=A>;
+        I: AggregateId<Aggregate = A>;
 }
 
 /// A sink for writing/persisting snapshots of aggregates.
@@ -48,15 +62,25 @@ pub trait SnapshotSink<A: Aggregate> {
     type Error: CqrsError;
 
     /// Writes an aggregate with its version to the sink. Returns the version number of the latest snapshot.
-    fn persist_snapshot<I>(&self, id: &I, aggregate: &A, version: Version, last_snapshot_version: Version) -> Result<Version, Self::Error>
+    fn persist_snapshot<I>(
+        &self,
+        id: &I,
+        aggregate: &A,
+        version: Version,
+        last_snapshot_version: Version,
+    ) -> Result<Version, Self::Error>
     where
-        I: AggregateId<Aggregate=A>;
+        I: AggregateId<Aggregate = A>;
 }
 
 /// A strategy determining when to recommend a snapshot be taken.
 pub trait SnapshotStrategy {
     /// Gives the sink's recommendation on whether or not to perform a snapshot
-    fn snapshot_recommendation(&self, version: Version, last_snapshot_version: Version) -> SnapshotRecommendation;
+    fn snapshot_recommendation(
+        &self,
+        version: Version,
+        last_snapshot_version: Version,
+    ) -> SnapshotRecommendation;
 }
 
 /// A snapshot strategy that will never recommend taking a snapshot.
@@ -82,7 +106,7 @@ impl SnapshotStrategy for AlwaysSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AggregateEvent, AggregateCommand, Event};
+    use crate::{AggregateCommand, AggregateEvent, Event};
     use void::Void;
 
     /// A test aggregate with no state
@@ -102,11 +126,11 @@ mod tests {
     pub struct TestMetadata;
 
     impl Aggregate for TestAggregate {
+        type Event = TestEvent;
+
         fn entity_type() -> &'static str {
             "test"
         }
-
-        type Event = TestEvent;
     }
 
     impl AggregateEvent for TestEvent {
@@ -117,8 +141,8 @@ mod tests {
 
     impl AggregateCommand for TestCommand {
         type Aggregate = TestAggregate;
-        type Events = Vec<TestEvent>;
         type Error = Void;
+        type Events = Vec<TestEvent>;
 
         fn execute_on(self, _aggregate: &Self::Aggregate) -> Result<Self::Events, Self::Error> {
             Ok(Vec::default())

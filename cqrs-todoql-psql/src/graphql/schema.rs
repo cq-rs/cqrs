@@ -1,9 +1,9 @@
 use crate::TodoStore;
 use base64;
-use cqrs::{Entity, Precondition, Version, EntityStore, EntitySink, EntitySource};
-use cqrs_todo_core::{domain, commands, TodoAggregate, TodoId, TodoStatus, TodoMetadata};
 use chrono::{DateTime, Utc};
-use juniper::{ID, FieldResult, Value};
+use cqrs::{Entity, EntitySink, EntitySource, EntityStore, Precondition, Version};
+use cqrs_todo_core::{commands, domain, TodoAggregate, TodoId, TodoMetadata, TodoStatus};
+use juniper::{FieldResult, Value, ID};
 
 use super::Context;
 

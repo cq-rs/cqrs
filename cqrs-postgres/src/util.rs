@@ -1,4 +1,4 @@
-use postgres::types::{FromSql, ToSql, Type, IsNull, JSON, JSONB, BYTEA};
+use postgres::types::{FromSql, IsNull, ToSql, Type, BYTEA, JSON, JSONB};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{error::Error, fmt};
 
@@ -6,8 +6,13 @@ use std::{error::Error, fmt};
 pub struct BorrowedJson<'a, T>(pub &'a T);
 
 impl<'a, T> ToSql for BorrowedJson<'a, T>
-    where T: Serialize + fmt::Debug + 'a
+where
+    T: Serialize + fmt::Debug + 'a,
 {
+    postgres::accepts!(JSON, JSONB, BYTEA);
+
+    postgres::to_sql_checked!();
+
     fn to_sql(&self, ty: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
         if *ty == JSONB {
             out.push(1);
@@ -16,17 +21,17 @@ impl<'a, T> ToSql for BorrowedJson<'a, T>
 
         Ok(IsNull::No)
     }
-
-    postgres::accepts!(JSON, JSONB, BYTEA);
-    postgres::to_sql_checked!();
 }
 
 #[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
 pub struct Json<T>(pub T);
 
 impl<T> FromSql for Json<T>
-where T: DeserializeOwned
+where
+    T: DeserializeOwned,
 {
+    postgres::accepts!(JSON, JSONB, BYTEA);
+
     fn from_sql(ty: &Type, mut raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         use std::io::Read;
         if *ty == JSONB {
@@ -37,17 +42,18 @@ where T: DeserializeOwned
                 return Err("unsupported JSONB encoding version".into());
             }
         }
-        serde_json::from_slice(raw)
-            .map(Json)
-            .map_err(From::from)
+        serde_json::from_slice(raw).map(Json).map_err(From::from)
     }
-
-    postgres::accepts!(JSON, JSONB, BYTEA);
 }
 
 impl<T> ToSql for Json<T>
-where T: Serialize + fmt::Debug
+where
+    T: Serialize + fmt::Debug,
 {
+    postgres::accepts!(JSON, JSONB, BYTEA);
+
+    postgres::to_sql_checked!();
+
     fn to_sql(&self, ty: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
         if *ty == JSONB {
             out.push(1);
@@ -56,16 +62,16 @@ where T: Serialize + fmt::Debug
 
         Ok(IsNull::No)
     }
-
-    postgres::accepts!(JSON, JSONB, BYTEA);
-    postgres::to_sql_checked!();
 }
 
 #[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
 pub struct RawJsonPersist<'a>(pub &'a [u8]);
 
-impl<'a> ToSql for RawJsonPersist<'a>
-{
+impl<'a> ToSql for RawJsonPersist<'a> {
+    postgres::accepts!(JSON, JSONB, BYTEA);
+
+    postgres::to_sql_checked!();
+
     fn to_sql(&self, ty: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
         if *ty == JSONB {
             out.push(1);
@@ -74,16 +80,14 @@ impl<'a> ToSql for RawJsonPersist<'a>
 
         Ok(IsNull::No)
     }
-
-    postgres::accepts!(JSON, JSONB, BYTEA);
-    postgres::to_sql_checked!();
 }
 
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
 pub struct RawJsonRead(pub Vec<u8>);
 
-impl FromSql for RawJsonRead
-{
+impl FromSql for RawJsonRead {
+    postgres::accepts!(JSON, JSONB, BYTEA);
+
     fn from_sql(ty: &Type, mut raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         use std::io::Read;
         if *ty == JSONB {
@@ -96,6 +100,4 @@ impl FromSql for RawJsonRead
         }
         Ok(RawJsonRead(Vec::from(raw)))
     }
-
-    postgres::accepts!(JSON, JSONB, BYTEA);
 }

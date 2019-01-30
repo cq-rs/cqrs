@@ -1,5 +1,4 @@
-use std::fmt;
-use std::num::NonZeroU64;
+use std::{fmt, num::NonZeroU64};
 
 /// Represents an event sequence number, starting at 1
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -97,7 +96,10 @@ impl Version {
     pub fn next_event(self) -> EventNumber {
         match self {
             Version::Initial => EventNumber::MIN_VALUE,
-            Version::Number(mut en) => {en.incr(); en},
+            Version::Number(mut en) => {
+                en.incr();
+                en
+            },
         }
     }
 
@@ -159,11 +161,11 @@ impl ::std::ops::Sub for Version {
     fn sub(self, rhs: Version) -> Self::Output {
         let l = match self {
             Version::Initial => 0,
-            Version::Number(n) => n.get() as i64
+            Version::Number(n) => n.get() as i64,
         };
         let r = match rhs {
             Version::Initial => 0,
-            Version::Number(n) => n.get() as i64
+            Version::Number(n) => n.get() as i64,
         };
 
         l - r
@@ -208,8 +210,12 @@ impl fmt::Display for Precondition {
         match *self {
             Precondition::Exists => f.write_str("expect aggregate exists"),
             Precondition::New => f.write_str("expect aggregate does not exist"),
-            Precondition::ExpectedVersion(Version::Initial) => f.write_str("expect aggregate to exist in initial state"),
-            Precondition::ExpectedVersion(Version::Number(v)) => write!(f, "expect aggregate to exist with version {}", v),
+            Precondition::ExpectedVersion(Version::Initial) => {
+                f.write_str("expect aggregate to exist in initial state")
+            },
+            Precondition::ExpectedVersion(Version::Number(v)) => {
+                write!(f, "expect aggregate to exist with version {}", v)
+            },
         }
     }
 }
@@ -268,5 +274,4 @@ pub enum SnapshotRecommendation {
 /// Represents a common trait that all errors handled by CQRS should implement.
 pub trait CqrsError: fmt::Debug + fmt::Display + Send + Sync + 'static {}
 
-impl<T> CqrsError for T
-where T: fmt::Debug + fmt::Display + Send + Sync + 'static {}
+impl<T> CqrsError for T where T: fmt::Debug + fmt::Display + Send + Sync + 'static {}
