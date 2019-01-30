@@ -28,7 +28,7 @@ graphql_object!(Query: Context |&self| {
 
         let limit = {
             let limit_raw = first.map(|i| i.max(0) as u32).unwrap_or(DEFAULT_LIMIT);
-            if limit_raw <= 0 {
+            if limit_raw == 0 {
                 DEFAULT_LIMIT
             } else {
                 limit_raw.min(MAX_LIMIT)
@@ -154,7 +154,7 @@ struct PageInfo<'a>(&'a TodoPage);
 
 graphql_object!(<'a> PageInfo<'a>: Context as "PageInfo" |&self| {
     field has_next_page(&executor) -> bool {
-        (self.0.offset as u64 + self.0.edges.len() as u64) < self.0.total_count
+        self.0.edges.len() as u64 + u64::from(self.0.offset) < self.0.total_count
     }
 
     field end_cursor() -> Option<Cursor> {

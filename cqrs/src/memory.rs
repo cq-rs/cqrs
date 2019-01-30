@@ -16,6 +16,9 @@ struct EventStream<Event, Metadata> {
     metadata: Vec<Arc<Metadata>>,
 }
 
+type LockedHashMap<K, V, H> = RwLock<HashMap<K, V, H>>;
+type LockedEventStream<E, M> = RwLock<EventStream<VersionedEvent<E>, M>>;
+
 /// An in-memory event store
 #[derive(Debug)]
 pub struct EventStore<A, M, Hasher = DefaultHashBuilder>
@@ -24,7 +27,7 @@ where
     A::Event: Clone,
     Hasher: BuildHasher,
 {
-    inner: RwLock<HashMap<String, RwLock<EventStream<VersionedEvent<A::Event>, M>>, Hasher>>,
+    inner: LockedHashMap<String, LockedEventStream<A::Event, M>, Hasher>,
     _phantom: PhantomData<A>,
 }
 
@@ -159,7 +162,7 @@ where
             let metadata = Arc::new(metadata);
             stream.metadata.extend(iter::repeat(metadata).take(events.len()));
 
-            stream.events.extend(events.into_iter().map(|event| {
+            stream.events.extend(events.iter().map(|event| {
                 let versioned_event = VersionedEvent {
                     sequence,
                     event: event.to_owned(),
@@ -180,7 +183,7 @@ where
             let metadata_stream = iter::repeat(metadata).take(events.len()).collect();
 
             let new_stream = EventStream {
-                events: events.into_iter().map(|event| {
+                events: events.iter().map(|event| {
                     let versioned_event = VersionedEvent {
                         sequence,
                         event: event.to_owned(),

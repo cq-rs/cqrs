@@ -80,7 +80,7 @@ where
     /// Loads a page of entity IDs.
     pub fn get_entity_ids(&self, offset: u32, limit: u32) -> Result<Vec<String>, postgres::Error> {
         let stmt = self.conn.prepare_cached("SELECT entity_id FROM events WHERE entity_type = $1 GROUP BY entity_id ORDER BY MIN(event_id) ASC OFFSET $2 LIMIT $3")?;
-        let rows = stmt.query(&[&A::entity_type(), &(offset as i64), &(limit as i64)])?;
+        let rows = stmt.query(&[&A::entity_type(), &(i64::from(offset)), &(i64::from(limit))])?;
         Ok(rows.iter()
             .map(|r| r.get(0))
             .collect())
@@ -110,7 +110,7 @@ where
     /// See the [PostgreSQL documentation on pattern matching](https://www.postgresql.org/docs/current/functions-matching.html#FUNCTIONS-LIKE)
     pub fn get_entity_ids_matching_pattern(&self, pattern: &str, offset: u32, limit: u32) -> Result<Vec<String>, postgres::Error> {
         let stmt = self.conn.prepare_cached("SELECT entity_id FROM events WHERE entity_type = $1 AND entity_id LIKE $2 GROUP BY entity_id ORDER BY MIN(event_id) ASC OFFSET $3 LIMIT $4")?;
-        let rows = stmt.query(&[&A::entity_type(), &pattern, &(offset as i64), &(limit as i64)])?;
+        let rows = stmt.query(&[&A::entity_type(), &pattern, &(i64::from(offset)), &(i64::from(limit))])?;
         Ok(rows.iter()
             .map(|r| r.get(0))
             .collect())
@@ -130,7 +130,7 @@ where
     /// See the [PostgreSQL documentation on pattern matching](https://www.postgresql.org/docs/current/functions-matching.html#FUNCTIONS-SIMILARTO-REGEXP)
     pub fn get_entity_ids_matching_sql_regex(&self, regex: &str, offset: u32, limit: u32) -> Result<Vec<String>, postgres::Error> {
         let stmt = self.conn.prepare_cached("SELECT entity_id FROM events WHERE entity_type = $1 AND entity_id SIMILAR TO $2 GROUP BY entity_id ORDER BY MIN(event_id) ASC OFFSET $3 LIMIT $4")?;
-        let rows = stmt.query(&[&A::entity_type(), &regex, &(offset as i64), &(limit as i64)])?;
+        let rows = stmt.query(&[&A::entity_type(), &regex, &(i64::from(offset)), &(i64::from(limit))])?;
         Ok(rows.iter()
             .map(|r| r.get(0))
             .collect())
@@ -150,7 +150,7 @@ where
     /// See the [PostgreSQL documentation on pattern matching](https://www.postgresql.org/docs/current/functions-matching.html#FUNCTIONS-POSIX-REGEXP)
     pub fn get_entity_ids_matching_posix_regex(&self, regex: &str, offset: u32, limit: u32) -> Result<Vec<String>, postgres::Error> {
         let stmt = self.conn.prepare_cached("SELECT entity_id FROM events WHERE entity_type = $1 AND entity_id ~ $2 GROUP BY entity_id ORDER BY MIN(event_id) ASC OFFSET $3 LIMIT $4")?;
-        let rows = stmt.query(&[&A::entity_type(), &regex, &(offset as i64), &(limit as i64)])?;
+        let rows = stmt.query(&[&A::entity_type(), &regex, &(i64::from(offset)), &(i64::from(limit))])?;
         Ok(rows.iter()
             .map(|r| r.get(0))
             .collect())
