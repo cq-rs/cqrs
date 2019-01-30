@@ -2,6 +2,7 @@
 name = "cqrs-todo-core"
 version = "0.1.0-alpha.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
+license = "Apache-2.0"
 
 [dependencies]
 cqrs-core = { path = "../cqrs-core" }

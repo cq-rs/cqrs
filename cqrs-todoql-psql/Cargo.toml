@@ -2,6 +2,7 @@
 name = "cqrs-todoql-psql"
 version = "0.1.0-alpha.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
+license = "Apache-2.0"
 publish = false
 
 [dependencies]

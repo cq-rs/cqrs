@@ -1,8 +1,9 @@
 [package]
 name = "cqrs-proptest"
 version = "0.1.0-alpha.0"
-authors = ["Marcus Griep <mgriep@vistaprint.com>"]
+authors = ["Marcus Griep <marcus@griep.us>"]
 edition = "2018"
+license = "Apache-2.0"
 
 [dependencies]
 cqrs-core = { path = "../cqrs-core" }
