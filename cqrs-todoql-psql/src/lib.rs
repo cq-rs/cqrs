@@ -18,7 +18,6 @@ extern crate cqrs_todo_core;
 
 #[macro_use] extern crate juniper;
 extern crate juniper_iron;
-#[macro_use] extern crate juniper_codegen;
 extern crate chrono;
 extern crate base64;
 extern crate iron;
@@ -50,7 +49,7 @@ impl cqrs::SnapshotStrategy for SnapshotEvery10 {
 
 type TodoStore<'conn> = cqrs_postgres::PostgresStore<'conn, cqrs_todo_core::TodoAggregate, cqrs_todo_core::TodoMetadata, SnapshotEvery10>;
 
-pub fn start_todo_server(conn_str: &str) -> iron::Listening {
+pub fn start_todo_server(conn_str: &str, prefill_qty: usize) -> iron::Listening {
     let pool = r2d2::Pool::new(PostgresConnectionManager::new(conn_str, r2d2_postgres::TlsMode::None).unwrap()).unwrap();
 
     let hashid =
@@ -62,14 +61,16 @@ pub fn start_todo_server(conn_str: &str) -> iron::Listening {
 
     let id_provider = IdProvider(hashid, Default::default());
 
-    let id = id_provider.new_id();
+    {
+        let conn = pool.get().unwrap();
+        for _ in 0..prefill_qty {
+            let id = id_provider.new_id();
 
-    helper::prefill(&id, pool.get().unwrap());
-
-    let stream_index = vec![id];
+            helper::prefill(&id, &conn);
+        }
+    }
 
     let context = graphql::InnerContext::new(
-        stream_index,
         pool,
         id_provider,
     );
@@ -97,7 +98,7 @@ mod helper {
 
     type TodoStore<'conn> = cqrs_postgres::PostgresStore<'conn, TodoAggregate, TodoMetadata, AlwaysSnapshot>;
 
-    pub fn prefill(id: &TodoId, conn: impl ::std::ops::Deref<Target=Connection>) {
+    pub fn prefill(id: &TodoId, conn: &Connection) {
         let epoch = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
         let reminder_time = epoch + Duration::seconds(10000);
         let mut events = Vec::new();

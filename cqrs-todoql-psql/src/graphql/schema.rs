@@ -7,6 +7,7 @@ use juniper::{ID, FieldResult, Value};
 
 use super::Context;
 
+#[derive(Clone, Copy, Debug)]
 pub struct Query;
 
 graphql_object!(Query: Context |&self| {
@@ -14,48 +15,49 @@ graphql_object!(Query: Context |&self| {
         "1.0"
     }
 
-    field allTodos(&executor, first: Option<ID>, after: Option<Cursor>) -> FieldResult<TodoPage> {
+    field allTodos(&executor, first: Option<i32>, after: Option<Cursor>) -> FieldResult<TodoPage> {
         let context = executor.context();
 
-        let reader = context.stream_index.read();
-        let len = reader.len();
+        let conn = context.backend.get()?;
+        let store = TodoStore::new(&*conn);
 
-        let mut skip =
+        let total_count = store.get_entity_count()?;
+
+        const DEFAULT_LIMIT: u32 = 100;
+        const MAX_LIMIT: u32 = 1000;
+
+        let limit = {
+            let limit_raw = first.map(|i| i.max(0) as u32).unwrap_or(DEFAULT_LIMIT);
+            if limit_raw <= 0 {
+                DEFAULT_LIMIT
+            } else {
+                limit_raw.min(MAX_LIMIT)
+            }
+        };
+
+        let mut offset = {
             if let Some(Cursor(cursor)) = after {
-                cursor
-            } else { 0 };
+                cursor + 1
+            } else {
+                0
+            }
+        };
 
-        let mut also_skipped = 0;
-        let iterator =
-            reader.iter().skip_while(move |id| {
-                if let Some(ref first_id) = first {
-                    also_skipped += 1;
-                    id.0.as_str() != &**first_id
-                } else {
-                    false
-                }
-            }).skip(skip);
-
-        let mut items = Vec::default();
-        let mut end_cursor = None;
-        const MAX_PAGE_SIZE: usize = 10;
-        for agg_id in iterator.take(MAX_PAGE_SIZE) {
-            skip += 1;
-            let cursor = Cursor(skip);
-            items.push(TodoEdge {
-                agg_id: ID::from(agg_id.0.clone()),
-                cursor,
-            });
-            end_cursor = Some(cursor);
-        }
+        let entity_ids: Vec<_> =
+            store.get_entity_ids(offset, limit)?
+                .into_iter()
+                .enumerate()
+                .map(|(i, id)| TodoEdge {
+                    agg_id: ID::from(id),
+                    cursor: Cursor(i as u32 + offset)
+                })
+                .collect();
 
         Ok(TodoPage {
-            total_count: len,
-            page_info: PageInfo {
-                has_next_page: items.len() != 0 && skip + also_skipped < len,
-                end_cursor,
-            },
-            edges: items,
+            total_count,
+            offset,
+            limit,
+            edges: entity_ids,
         })
     }
 
@@ -74,6 +76,7 @@ graphql_object!(Query: Context |&self| {
     }
 });
 
+#[derive(Clone, Debug)]
 struct TodoQL(Entity<TodoId, TodoAggregate>);
 
 graphql_object!(TodoQL: Context |&self| {
@@ -98,10 +101,12 @@ graphql_object!(TodoQL: Context |&self| {
     }
 });
 
+#[derive(Debug)]
 struct TodoPage {
-    total_count: usize,
+    total_count: u64,
+    offset: u32,
+    limit: u32,
     edges: Vec<TodoEdge>,
-    page_info: PageInfo,
 }
 
 graphql_object!(TodoPage: Context |&self| {
@@ -113,39 +118,16 @@ graphql_object!(TodoPage: Context |&self| {
         Ok(&*self.edges)
     }
 
-    field page_info() -> FieldResult<&PageInfo> {
-        Ok(&self.page_info)
+    field page_info() -> FieldResult<PageInfo> {
+        Ok(PageInfo(&self))
     }
 });
 
+#[derive(Clone, Debug)]
 struct TodoEdge {
     agg_id: ID,
     cursor: Cursor,
 }
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct Cursor(usize);
-
-impl ToString for Cursor {
-    fn to_string(&self) -> String {
-        base64::encode(&self.0.to_string())
-    }
-}
-
-graphql_scalar!(Cursor {
-    description: "An opaque identifier, represented as a location in an enumeration"
-
-    resolve(&self) -> Value {
-        Value::string(self.to_string())
-    }
-
-    from_input_value(v: &InputValue) -> Option<Cursor> {
-        v.as_string_value()
-            .and_then(|v| base64::decode(v).ok())
-            .and_then(|v| String::from_utf8_lossy(&v).parse::<usize>().ok())
-            .map(Cursor)
-    }
-});
 
 graphql_object!(TodoEdge: Context |&self| {
     field node(&executor) -> FieldResult<Option<TodoQL>> {
@@ -167,12 +149,44 @@ graphql_object!(TodoEdge: Context |&self| {
     }
 });
 
-#[derive(GraphQLObject)]
-struct PageInfo {
-    has_next_page: bool,
-    end_cursor: Option<Cursor>,
+#[derive(Clone, Copy, Debug)]
+struct PageInfo<'a>(&'a TodoPage);
+
+graphql_object!(<'a> PageInfo<'a>: Context as "PageInfo" |&self| {
+    field has_next_page(&executor) -> bool {
+        (self.0.offset as u64 + self.0.edges.len() as u64) < self.0.total_count
+    }
+
+    field end_cursor() -> Option<Cursor> {
+        self.0.edges.last().map(|e| e.cursor)
+    }
+});
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Cursor(u32);
+
+impl ToString for Cursor {
+    fn to_string(&self) -> String {
+        base64::encode(&self.0.to_string())
+    }
 }
 
+graphql_scalar!(Cursor {
+    description: "An opaque identifier, represented as a location in an enumeration"
+
+    resolve(&self) -> Value {
+        Value::string(self.to_string())
+    }
+
+    from_input_value(v: &InputValue) -> Option<Cursor> {
+        v.as_string_value()
+            .and_then(|v| base64::decode(v).ok())
+            .and_then(|v| String::from_utf8_lossy(&v).parse::<u32>().ok())
+            .map(Cursor)
+    }
+});
+
+#[derive(Clone, Copy, Debug)]
 pub struct Mutations;
 
 graphql_object!(Mutations: Context |&self| {
@@ -212,8 +226,6 @@ graphql_object!(Mutations: Context |&self| {
             Some(Precondition::New),
             metadata,
         )?.into_entity_with_id(new_id.clone());
-
-        context.stream_index.write().push(new_id);
 
         Ok(TodoQL(entity))
     }

@@ -1,7 +1,5 @@
 use std::ops;
 use std::sync::Arc;
-use parking_lot::RwLock;
-use cqrs_todo_core::TodoId;
 
 use juniper;
 use r2d2_postgres::PostgresConnectionManager;
@@ -11,15 +9,13 @@ mod schema;
 pub mod endpoint;
 
 pub struct InnerContext {
-    pub stream_index: RwLock<Vec<TodoId>>,
     pub backend: Pool<PostgresConnectionManager>,
     pub id_provider: super::IdProvider,
 }
 
 impl InnerContext {
-    pub fn new(stream_index: Vec<TodoId>, backend: Pool<PostgresConnectionManager>, id_provider: super::IdProvider) -> Self {
+    pub fn new(backend: Pool<PostgresConnectionManager>, id_provider: super::IdProvider) -> Self {
         InnerContext {
-            stream_index: RwLock::new(stream_index),
             backend,
             id_provider,
         }

@@ -70,6 +70,13 @@ where
         Ok(())
     }
 
+    /// Gets the total number of entities of this type in the store.
+    pub fn get_entity_count(&self) -> Result<u64, postgres::Error> {
+        let stmt = self.conn.prepare_cached("SELECT COUNT(DISTINCT entity_id) FROM events WHERE entity_type = $1")?;
+        let rows = stmt.query(&[&A::entity_type()])?;
+        Ok(rows.iter().next().map(|r| r.get::<_, i64>(0) as u64).unwrap_or_default())
+    }
+
     /// Loads a page of entity IDs.
     pub fn get_entity_ids(&self, offset: u32, limit: u32) -> Result<Vec<String>, postgres::Error> {
         let stmt = self.conn.prepare_cached("SELECT entity_id FROM events WHERE entity_type = $1 GROUP BY entity_id ORDER BY MIN(event_id) ASC OFFSET $2 LIMIT $3")?;
@@ -77,6 +84,20 @@ where
         Ok(rows.iter()
             .map(|r| r.get(0))
             .collect())
+    }
+
+    /// Gets the total number of entities of this type matching a particular PostgreSQL pattern in the store.
+    ///
+    /// PostgreSQL pattern matching rules:
+    ///
+    /// * `_` matches any single character.
+    /// * `%` matches any number of characters.
+    ///
+    /// See the [PostgreSQL documentation on pattern matching](https://www.postgresql.org/docs/current/functions-matching.html#FUNCTIONS-LIKE)
+    pub fn get_entity_count_matching_pattern(&self, pattern: &str) -> Result<u64, postgres::Error> {
+        let stmt = self.conn.prepare_cached("SELECT COUNT(DISTINCT entity_id) FROM events WHERE entity_type = $1 AND entity_id LIKE $2")?;
+        let rows = stmt.query(&[&A::entity_type(), &pattern])?;
+        Ok(rows.iter().next().map(|r| r.get::<_, i64>(0) as u64).unwrap_or_default())
     }
 
     /// Loads a page of entity IDs matching a particular PostgreSQL pattern.
@@ -95,6 +116,15 @@ where
             .collect())
     }
 
+    /// Gets the total number of entities of this type matching a particular PostgreSQL regular expression in the store.
+    ///
+    /// See the [PostgreSQL documentation on pattern matching](https://www.postgresql.org/docs/current/functions-matching.html#FUNCTIONS-SIMILARTO-REGEXP)
+    pub fn get_entity_count_matching_sql_regex(&self, regex: &str) -> Result<u64, postgres::Error> {
+        let stmt = self.conn.prepare_cached("SELECT COUNT(DISTINCT entity_id) FROM events WHERE entity_type = $1 AND entity_id SIMILAR TO $2")?;
+        let rows = stmt.query(&[&A::entity_type(), &regex])?;
+        Ok(rows.iter().next().map(|r| r.get::<_, i64>(0) as u64).unwrap_or_default())
+    }
+
     /// Loads a page of entity IDs matching a particular PostgreSQL regular expression.
     ///
     /// See the [PostgreSQL documentation on pattern matching](https://www.postgresql.org/docs/current/functions-matching.html#FUNCTIONS-SIMILARTO-REGEXP)
@@ -104,6 +134,15 @@ where
         Ok(rows.iter()
             .map(|r| r.get(0))
             .collect())
+    }
+
+    /// Gets the total number of entities of this type matching a particular POSIX regular expression in the store.
+    ///
+    /// See the [PostgreSQL documentation on pattern matching](https://www.postgresql.org/docs/current/functions-matching.html#FUNCTIONS-POSIX-REGEXP)
+    pub fn get_entity_count_matching_posix_regex(&self, regex: &str) -> Result<u64, postgres::Error> {
+        let stmt = self.conn.prepare_cached("SELECT COUNT(DISTINCT entity_id) FROM events WHERE entity_type = $1 AND entity_id ~ $2")?;
+        let rows = stmt.query(&[&A::entity_type(), &regex])?;
+        Ok(rows.iter().next().map(|r| r.get::<_, i64>(0) as u64).unwrap_or_default())
     }
 
     /// Loads a page of entity IDs matching a particular POSIX regular expression.
