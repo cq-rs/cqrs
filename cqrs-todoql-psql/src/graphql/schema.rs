@@ -144,8 +144,12 @@ graphql_object!(TodoEdge: Context |&self| {
         Ok(entity)
     }
 
-    field cursor() -> FieldResult<Cursor> {
-        Ok(self.cursor)
+    field id() -> &ID {
+        &self.agg_id
+    }
+
+    field cursor() -> Cursor {
+        self.cursor
     }
 });
 
