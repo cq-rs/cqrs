@@ -29,6 +29,15 @@ impl EventNumber {
     pub fn incr(&mut self) {
         self.0 = NonZeroU64::new(self.0.get() + 1).unwrap();
     }
+
+    /// Gets the event number after the current one.
+    #[inline]
+    #[must_use]
+    pub fn next(self) -> Self {
+        let mut slf = self;
+        slf.0 = NonZeroU64::new(self.0.get() + 1).unwrap();
+        slf
+    }
 }
 
 impl fmt::Display for EventNumber {

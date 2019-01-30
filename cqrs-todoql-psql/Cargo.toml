@@ -2,6 +2,7 @@
 name = "cqrs-todoql-psql"
 version = "0.1.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
+publish = false
 
 [dependencies]
 base64 = "*"

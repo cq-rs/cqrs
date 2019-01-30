@@ -5,6 +5,6 @@ expression: data
 source: cqrs-todo-core/src/lib.rs
 ---
 {
-  "event_type": "todo_reminder_updated",
-  "raw": "{\"new_reminder\":null}"
+  "event_type": "todo_description_updated",
+  "raw": "{\"new_description\":{\"text\":\"alt test description\"}}"
 }

@@ -1,10 +1,10 @@
 ---
-created: "2019-01-25T18:04:19.018010+00:00"
+created: "2019-01-30T00:11:05.238571+00:00"
 creator: insta@0.5.2
 expression: data
 source: cqrs-todo-core/src/lib.rs
 ---
 {
   "event_type": "todo_created",
-  "raw": "{\"text\":\"test description\"}"
+  "raw": "{\"initial_description\":{\"text\":\"test description\"}}"
 }

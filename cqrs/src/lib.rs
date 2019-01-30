@@ -29,7 +29,8 @@ pub mod trivial;
 
 mod entity;
 
-//mod testing;
+#[cfg(test)]
+mod testing;
 
 #[doc(inline)]
 pub use entity::{Entity, EntitySink, EntitySource, EntityStore, CompositeEntitySink, CompositeEntitySource, CompositeEntityStore};

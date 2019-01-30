@@ -1,17 +1,21 @@
+//! # cqrs-todo-core
+//!
+//! `cqrs-todo-core` is a demonstration crate, showing how to construct an aggregate, with the associated events
+//! and commands, using the CQRS system.
+
 #![warn(
     unused_import_braces,
     unused_imports,
     unused_qualifications,
-    missing_docs,
 )]
 
 #![deny(
     missing_debug_implementations,
-    missing_copy_implementations,
     trivial_casts,
     trivial_numeric_casts,
     unsafe_code,
     unused_must_use,
+    missing_docs,
 )]
 
 extern crate cqrs_core;
@@ -28,265 +32,20 @@ extern crate pretty_assertions;
 extern crate proptest;
 extern crate log;
 
-use arrayvec::ArrayVec;
-use cqrs_core::{Aggregate, Event, SerializableEvent, DeserializableEvent};
+use cqrs_core::{Aggregate, AggregateEvent, AggregateId, Event, SerializableEvent, DeserializableEvent};
 
-pub mod domain {
-    use chrono::{DateTime,Utc};
-    use error::{InvalidDescription, InvalidReminderTime};
-    use std::borrow::Borrow;
+pub mod commands;
+pub mod domain;
+pub mod error;
+pub mod events;
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-    pub struct Reminder {
-        time: DateTime<Utc>,
-    }
-
-    impl Reminder {
-        pub fn new(reminder_time: DateTime<Utc>, current_time: DateTime<Utc>) -> Result<Reminder, InvalidReminderTime> {
-            if reminder_time <= current_time {
-                Err(InvalidReminderTime)
-            } else {
-                Ok(Reminder {
-                    time: reminder_time,
-                })
-            }
-        }
-
-        pub fn get_time(&self) -> DateTime<Utc> {
-            self.time
-        }
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-    pub struct Description {
-        text: String,
-    }
-
-    impl Description {
-        pub fn new<S: Into<String>>(text: S) -> Result<Description, InvalidDescription> {
-            let text = text.into();
-            if text.is_empty() {
-                Err(InvalidDescription)
-            } else {
-                Ok(Description {
-                    text,
-                })
-            }
-        }
-
-        pub fn as_str(&self) -> &str {
-            self.text.borrow()
-        }
-    }
-
-    impl Borrow<str> for Description {
-        fn borrow(&self) -> &str {
-            self.text.borrow()
-        }
-    }
-}
-
-pub mod error {
-    use std::error;
-    use std::fmt;
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    pub struct InvalidReminderTime;
-
-    impl error::Error for InvalidReminderTime {
-        fn description(&self) -> &str {
-            "reminder time cannot be in the past"
-        }
-    }
-
-    impl fmt::Display for InvalidReminderTime {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            let err: &error::Error = self;
-            f.write_str(err.description())
-        }
-    }
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    pub struct InvalidDescription;
-
-    impl error::Error for InvalidDescription {
-        fn description(&self) -> &str {
-            "description cannot be empty"
-        }
-    }
-
-    impl fmt::Display for InvalidDescription {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            let err: &error::Error = self;
-            f.write_str(err.description())
-        }
-    }
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    pub enum CommandError {
-        NotInitialized,
-        AlreadyCreated,
-    }
-
-    impl error::Error for CommandError {
-        fn description(&self) -> &str {
-            match *self {
-                CommandError::NotInitialized => "attempt to execute command before creation",
-                CommandError::AlreadyCreated => "attempt to create when already created",
-            }
-        }
-    }
-
-    impl fmt::Display for CommandError {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            let err: &error::Error = self;
-            f.write_str(err.description())
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TodoMetadata {
-    pub initiated_by: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TodoEvent {
-    Created(domain::Description),
-    TextUpdated(domain::Description),
-    ReminderUpdated(Option<domain::Reminder>),
-    Completed,
-    Uncompleted,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TodoCommand {
-    Create(domain::Description, Option<domain::Reminder>),
-    UpdateText(domain::Description),
-    SetReminder(domain::Reminder),
-    CancelReminder,
-    ToggleCompletion,
-    MarkCompleted,
-    ResetCompleted,
-}
-
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TodoStatus {
-    Completed,
-    NotCompleted,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TodoData {
-    pub description: domain::Description,
-    pub reminder: Option<domain::Reminder>,
-    pub status: TodoStatus,
-}
-
-impl TodoData {
-    fn new(description: domain::Description, reminder: Option<domain::Reminder>, status: TodoStatus) -> Self {
-        TodoData {
-            description, reminder, status,
-        }
-    }
-
-    fn with_description(description: domain::Description) -> Self {
-        TodoData {
-            description,
-            reminder: None,
-            status: TodoStatus::NotCompleted
-        }
-    }
-
-    fn apply(&mut self, event: TodoEvent) {
-        match event {
-            TodoEvent::TextUpdated(description) => self.description = description,
-            TodoEvent::ReminderUpdated(reminder) => self.reminder = reminder,
-            TodoEvent::Completed => self.status = TodoStatus::Completed,
-            TodoEvent::Uncompleted => self.status = TodoStatus::NotCompleted,
-            TodoEvent::Created(_) => {},
-        }
-    }
-
-    fn execute(&self, command: TodoCommand) -> Result<Events, error::CommandError> {
-        match command {
-            TodoCommand::UpdateText(description) => Ok(self.execute_update_description(description)),
-            TodoCommand::SetReminder(reminder) => Ok(self.execute_set_reminder(reminder)),
-            TodoCommand::CancelReminder => Ok(self.execute_cancel_reminder()),
-            TodoCommand::ToggleCompletion => Ok(self.execute_toggle_completion()),
-            TodoCommand::MarkCompleted => Ok(self.execute_mark_completed()),
-            TodoCommand::ResetCompleted => Ok(self.execute_reset_completed()),
-            TodoCommand::Create(ref description, ref reminder_opt) => self.execute_create(description, reminder_opt.as_ref()),
-        }
-    }
-
-    fn execute_create(&self, description: &domain::Description, reminder_opt: Option<&domain::Reminder>) -> Result<Events, error::CommandError> {
-        if &self.description == description && self.reminder.as_ref() == reminder_opt {
-            Ok(Events::new())
-        } else {
-            Err(error::CommandError::AlreadyCreated)
-        }
-    }
-
-    fn execute_update_description(&self, description: domain::Description) -> Events {
-        let mut events = Events::new();
-        if self.description != description {
-            events.push(TodoEvent::TextUpdated(description));
-        }
-        events
-    }
-
-    fn execute_set_reminder(&self, reminder: domain::Reminder) -> Events {
-        let mut events = Events::new();
-        if let Some(existing) = self.reminder {
-            if existing != reminder {
-                events.push(TodoEvent::ReminderUpdated(Some(reminder)));
-            }
-        } else {
-            events.push(TodoEvent::ReminderUpdated(Some(reminder)));
-        }
-        events
-    }
-
-    fn execute_cancel_reminder(&self) -> Events {
-        let mut events = Events::new();
-        if self.reminder.is_some() {
-            events.push(TodoEvent::ReminderUpdated(None));
-        }
-        events
-    }
-
-    fn execute_toggle_completion(&self) -> Events {
-        let mut events = Events::new();
-        match self.status {
-            TodoStatus::NotCompleted => events.push(TodoEvent::Completed),
-            TodoStatus::Completed => events.push(TodoEvent::Uncompleted),
-        }
-        events
-    }
-
-    fn execute_mark_completed(&self) -> Events {
-        let mut events = Events::new();
-        match self.status {
-            TodoStatus::NotCompleted => events.push(TodoEvent::Completed),
-            TodoStatus::Completed => {},
-        }
-        events
-    }
-
-    fn execute_reset_completed(&self) -> Events {
-        let mut events = Events::new();
-        match self.status {
-            TodoStatus::NotCompleted => {},
-            TodoStatus::Completed => events.push(TodoEvent::Uncompleted),
-        }
-        events
-    }
-}
-
+/// An aggregate representing the view of a to-do item.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TodoAggregate {
+    /// A to-do item that has been properly initialized.
     Created(TodoData),
+
+    /// An uninitialized to-do item.
     Uninitialized,
 }
 
@@ -296,66 +55,18 @@ impl Default for TodoAggregate {
     }
 }
 
-type Events = ArrayVec<[TodoEvent; 2]>;
-
 impl TodoAggregate {
-    fn apply_event(&mut self, event: TodoEvent) {
+    /// Get the underlying to-do data if the aggregate has been initialized.
+    pub fn get_data(&self) -> Option<&TodoData> {
         match *self {
-            TodoAggregate::Uninitialized => self.apply_to_uninitialized(event),
-            TodoAggregate::Created(ref mut data) => data.apply(event),
-        }
-    }
-
-    fn apply_to_uninitialized(&mut self, event: TodoEvent) {
-        if let TodoEvent::Created(initial_description) = event {
-            *self = TodoAggregate::Created(TodoData::with_description(initial_description));
-        }
-    }
-
-    fn execute_command(&self, command: TodoCommand) -> Result<Events, error::CommandError> {
-        match *self {
-            TodoAggregate::Uninitialized => self.execute_on_uninitialized(command),
-            TodoAggregate::Created(ref data) => data.execute(command),
-        }
-    }
-
-    fn execute_on_uninitialized(&self, command: TodoCommand) -> Result<Events, error::CommandError> {
-        match command {
-            TodoCommand::Create(description, reminder_opt) => {
-                let mut events = Events::new();
-                events.push(TodoEvent::Created(description));
-                if let Some(reminder) = reminder_opt {
-                    events.push(TodoEvent::ReminderUpdated(Some(reminder)));
-                }
-                Ok(events)
-            }
-            _ => Err(error::CommandError::NotInitialized),
-        }
-    }
-
-    pub fn get_data(&self) -> Result<&TodoData, &'static str> {
-        match *self {
-            TodoAggregate::Uninitialized => Err("uninitialized"),
-            TodoAggregate::Created(ref x) => Ok(x),
+            TodoAggregate::Uninitialized => None,
+            TodoAggregate::Created(ref x) => Some(x),
         }
     }
 }
 
 impl Aggregate for TodoAggregate {
     type Event = TodoEvent;
-    type Command = TodoCommand;
-    type Events = Events;
-    type Error = error::CommandError;
-
-    fn apply(&mut self, event: Self::Event) {
-        log::trace!("apply {:?}", event);
-        self.apply_event(event);
-    }
-
-    fn execute(&self, command: TodoCommand) -> Result<Self::Events, Self::Error> {
-        log::trace!("execute {:?}", command);
-        self.execute_command(command)
-    }
 
     #[inline(always)]
     fn entity_type() -> &'static str where Self: Sized {
@@ -363,14 +74,164 @@ impl Aggregate for TodoAggregate {
     }
 }
 
+/// An identifier for an item to be done.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TodoId(pub String);
+
+impl AsRef<str> for TodoId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AggregateId for TodoId {
+    type Aggregate = TodoAggregate;
+}
+
+/// An identifier for an item to be done.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TodoIdRef<'a>(pub &'a str);
+
+impl<'a> AsRef<str> for TodoIdRef<'a> {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<'a> AggregateId for TodoIdRef<'a> {
+    type Aggregate = TodoAggregate;
+}
+
+/// Metadata about events.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TodoMetadata {
+    /// The actor that caused this event to be added to the event stream.
+    pub initiated_by: String,
+}
+
+/// Data relating to a to-do item.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TodoData {
+    /// The to-do item description.
+    pub description: domain::Description,
+
+    /// The reminder time for this to-do item.
+    pub reminder: Option<domain::Reminder>,
+
+    /// The current status of this item.
+    pub status: TodoStatus,
+}
+
+impl TodoData {
+    fn with_description(description: domain::Description) -> Self {
+        TodoData {
+            description,
+            reminder: None,
+            status: TodoStatus::NotCompleted
+        }
+    }
+}
+
+/// The completion status of a to-do item.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TodoStatus {
+    /// The item has been completed.
+    Completed,
+
+    /// The item has not been completed.
+    NotCompleted,
+}
+
+/// A combined roll-up of the events that can be applied to a [TodoAggregate].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TodoEvent {
+    /// Created
+    Created(events::Created),
+
+    /// Description updated
+    DescriptionUpdated(events::DescriptionUpdated),
+
+    /// Reminder updated
+    ReminderUpdated(events::ReminderUpdated),
+
+    /// Item completed
+    Completed(events::Completed),
+
+    /// Item completion undone
+    Uncompleted(events::Uncompleted),
+}
+
 impl Event for TodoEvent {
     fn event_type(&self) -> &'static str {
         match *self {
-            TodoEvent::Created(_) => "todo_created",
-            TodoEvent::ReminderUpdated(_) => "todo_reminder_updated",
-            TodoEvent::TextUpdated(_) => "todo_text_updated",
-            TodoEvent::Completed => "todo_completed",
-            TodoEvent::Uncompleted => "todo_uncompleted",
+            TodoEvent::Created(ref evt) => evt.event_type(),
+            TodoEvent::DescriptionUpdated(ref evt) => evt.event_type(),
+            TodoEvent::ReminderUpdated(ref evt) => evt.event_type(),
+            TodoEvent::Completed(ref evt) => evt.event_type(),
+            TodoEvent::Uncompleted(ref evt) => evt.event_type(),
+        }
+    }
+}
+
+impl AggregateEvent for events::Created {
+    type Aggregate = TodoAggregate;
+
+    fn apply_to(self, aggregate: &mut Self::Aggregate) {
+        if TodoAggregate::Uninitialized == *aggregate {
+            *aggregate = TodoAggregate::Created(TodoData::with_description(self.initial_description))
+        }
+    }
+}
+
+impl AggregateEvent for events::DescriptionUpdated {
+    type Aggregate = TodoAggregate;
+
+    fn apply_to(self, aggregate: &mut Self::Aggregate) {
+        if let TodoAggregate::Created(ref mut data) = aggregate {
+            data.description = self.new_description;
+        }
+    }
+}
+
+impl AggregateEvent for events::ReminderUpdated {
+    type Aggregate = TodoAggregate;
+
+    fn apply_to(self, aggregate: &mut Self::Aggregate) {
+        if let TodoAggregate::Created(ref mut data) = aggregate {
+            data.reminder = self.new_reminder;
+        }
+    }
+}
+
+impl AggregateEvent for events::Completed {
+    type Aggregate = TodoAggregate;
+
+    fn apply_to(self, aggregate: &mut Self::Aggregate) {
+        if let TodoAggregate::Created(ref mut data) = aggregate {
+            data.status = TodoStatus::Completed;
+        }
+    }
+}
+
+impl AggregateEvent for events::Uncompleted {
+    type Aggregate = TodoAggregate;
+
+    fn apply_to(self, aggregate: &mut Self::Aggregate) {
+        if let TodoAggregate::Created(ref mut data) = aggregate {
+            data.status = TodoStatus::NotCompleted;
+        }
+    }
+}
+impl AggregateEvent for TodoEvent {
+    type Aggregate = TodoAggregate;
+
+    fn apply_to(self, aggregate: &mut Self::Aggregate) {
+        match self {
+            TodoEvent::Created(evt) => evt.apply_to(aggregate),
+            TodoEvent::DescriptionUpdated(evt) => evt.apply_to(aggregate),
+            TodoEvent::ReminderUpdated(evt) => evt.apply_to(aggregate),
+            TodoEvent::Completed(evt) => evt.apply_to(aggregate),
+            TodoEvent::Uncompleted(evt) => evt.apply_to(aggregate),
         }
     }
 }
@@ -388,14 +249,14 @@ impl SerializableEvent for TodoEvent {
             TodoEvent::ReminderUpdated(ref inner) => {
                 serde_json::to_writer(buffer, inner)?;
             },
-            TodoEvent::TextUpdated(ref inner) => {
+            TodoEvent::DescriptionUpdated(ref inner) => {
                 serde_json::to_writer(buffer, inner)?;
             },
-            TodoEvent::Completed => {
-                *buffer = vec![b'{', b'}'];
+            TodoEvent::Completed(ref inner) => {
+                serde_json::to_writer(buffer, inner)?;
             },
-            TodoEvent::Uncompleted => {
-                *buffer = vec![b'{', b'}'];
+            TodoEvent::Uncompleted(ref inner) => {
+                serde_json::to_writer(buffer, inner)?;
             },
         }
         Ok(())
@@ -409,9 +270,9 @@ impl DeserializableEvent for TodoEvent {
         match event_type {
             "todo_created" => Ok(Some(TodoEvent::Created(serde_json::from_slice(data)?))),
             "todo_reminder_updated" => Ok(Some(TodoEvent::ReminderUpdated(serde_json::from_slice(data)?))),
-            "todo_text_updated" => Ok(Some(TodoEvent::TextUpdated(serde_json::from_slice(data)?))),
-            "todo_completed" => Ok(Some(TodoEvent::Completed)),
-            "todo_uncompleted" => Ok(Some(TodoEvent::Uncompleted)),
+            "todo_description_updated" => Ok(Some(TodoEvent::DescriptionUpdated(serde_json::from_slice(data)?))),
+            "todo_completed" => Ok(Some(TodoEvent::Completed(serde_json::from_slice(data)?))),
+            "todo_uncompleted" => Ok(Some(TodoEvent::Uncompleted(serde_json::from_slice(data)?))),
             _ => Ok(None)
         }
     }
@@ -420,6 +281,7 @@ impl DeserializableEvent for TodoEvent {
 #[cfg(test)]
 mod tests {
     pub use super::*;
+    use arrayvec::ArrayVec;
     use chrono::{Utc,TimeZone,Duration};
     use pretty_assertions::assert_eq;
 
@@ -428,12 +290,12 @@ mod tests {
         let reminder = now + Duration::seconds(10000);
 
         let events = ArrayVec::from([
-            TodoEvent::Completed,
-            TodoEvent::Created(domain::Description::new("Hello!").unwrap()),
-            TodoEvent::ReminderUpdated(Some(domain::Reminder::new(reminder, now).unwrap())),
-            TodoEvent::TextUpdated(domain::Description::new("New text").unwrap()),
-            TodoEvent::Created(domain::Description::new("Ignored!").unwrap()),
-            TodoEvent::ReminderUpdated(None),
+            TodoEvent::Completed(events::Completed{}),
+            TodoEvent::Created(events::Created { initial_description: domain::Description::new("Hello!").unwrap() }),
+            TodoEvent::ReminderUpdated(events::ReminderUpdated { new_reminder: Some(domain::Reminder::new(reminder, now).unwrap()) }),
+            TodoEvent::DescriptionUpdated(events::DescriptionUpdated { new_description: domain::Description::new("New text").unwrap() }),
+            TodoEvent::Created(events::Created { initial_description: domain::Description::new("Ignored!").unwrap() }),
+            TodoEvent::ReminderUpdated(events::ReminderUpdated { new_reminder: None }),
         ]);
 
         let mut agg = TodoAggregate::default();
@@ -461,7 +323,7 @@ mod tests {
     fn cancel_reminder_on_default_aggregate() {
         let agg = TodoAggregate::default();
 
-        let cmd = TodoCommand::CancelReminder;
+        let cmd = commands::CancelReminder;
 
         let result = agg.execute(cmd).unwrap_err();
 
@@ -472,11 +334,11 @@ mod tests {
     fn cancel_reminder_on_basic_aggregate() {
         let agg = create_basic_aggregate();
 
-        let cmd = TodoCommand::CancelReminder;
+        let cmd = commands::CancelReminder;
 
         let result = agg.execute(cmd).unwrap();
 
-        assert_eq!(Events::new(), result);
+        assert_eq!(ArrayVec::new(), result);
     }
 
     #[test]
@@ -485,20 +347,20 @@ mod tests {
 
         let now = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
         let reminder_time = now + Duration::seconds(20000);
-        let reminder = domain::Reminder::new(reminder_time, now).unwrap();
-        let cmd = TodoCommand::SetReminder(reminder);
+        let new_reminder = domain::Reminder::new(reminder_time, now).unwrap();
+        let cmd = commands::SetReminder { new_reminder };
 
         let result = agg.execute(cmd).unwrap();
 
-        let mut expected = Events::new();
-        expected.push(TodoEvent::ReminderUpdated(Some(reminder)));
+        let mut expected = ArrayVec::new();
+        expected.push(TodoEvent::ReminderUpdated(events::ReminderUpdated { new_reminder: Some(new_reminder) }));
         assert_eq!(expected, result);
     }
 
     #[test]
     fn ensure_created_event_stays_same() -> Result<(), serde_json::Error> {
-        let description = domain::Description::new("test description").unwrap();
-        run_snapshot_test("created_event", TodoEvent::Created(description))
+        let initial_description = domain::Description::new("test description").unwrap();
+        run_snapshot_test("created_event", TodoEvent::Created(events::Created { initial_description }))
     }
 
     #[test]
@@ -506,28 +368,28 @@ mod tests {
         let current_time = Utc.ymd(2000, 1, 1).and_hms(0, 0, 0);
         let reminder_time = Utc.ymd(2100, 1, 1).and_hms(0, 0, 0);
         let reminder = domain::Reminder::new(reminder_time, current_time).unwrap();
-        run_snapshot_test("reminder_updated_event", TodoEvent::ReminderUpdated(Some(reminder)))
+        run_snapshot_test("reminder_updated_event", TodoEvent::ReminderUpdated(events::ReminderUpdated { new_reminder: Some(reminder) }))
     }
 
     #[test]
     fn ensure_reminder_removed_event_stays_same() -> Result<(), serde_json::Error> {
-        run_snapshot_test("reminder_updated_none_event", TodoEvent::ReminderUpdated(None))
+        run_snapshot_test("reminder_updated_none_event", TodoEvent::ReminderUpdated(events::ReminderUpdated { new_reminder: None }))
     }
 
     #[test]
     fn ensure_text_updated_event_stays_same() -> Result<(), serde_json::Error> {
         let new_description = domain::Description::new("alt test description").unwrap();
-        run_snapshot_test("text_updated_event", TodoEvent::TextUpdated(new_description))
+        run_snapshot_test("description_updated_event", TodoEvent::DescriptionUpdated(events::DescriptionUpdated { new_description }))
     }
 
     #[test]
     fn ensure_completed_event_stays_same() -> Result<(), serde_json::Error> {
-        run_snapshot_test("completed_event", TodoEvent::Completed)
+        run_snapshot_test("completed_event", TodoEvent::Completed(events::Completed{}))
     }
 
     #[test]
     fn ensure_uncompleted_event_stays_same() -> Result<(), serde_json::Error> {
-        run_snapshot_test("uncompleted_event", TodoEvent::Uncompleted)
+        run_snapshot_test("uncompleted_event", TodoEvent::Uncompleted(events::Uncompleted{}))
     }
 
     fn run_snapshot_test<E: SerializableEvent>(name: &'static str, event: E) -> Result<(), E::Error> {
@@ -550,80 +412,49 @@ mod tests {
     }
 
     #[test]
-    fn roundtrip_created() -> Result<(), serde_json::Error> {
-        let original = TodoEvent::Created(domain::Description::new("test description").unwrap());
-        let mut buffer = Vec::default();
-        original.serialize_event_to_buffer(&mut buffer)?;
-
-        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, original.event_type())?;
-        assert_eq!(Some(original), roundtrip);
-
-        Ok(())
+    fn roundtrip_created() {
+        let original = TodoEvent::Created(events::Created { initial_description: domain::Description::new("test description").unwrap() });
+        let roundtrip = cqrs_proptest::roundtrip_through_serialization(&original);
+        assert_eq!(original, roundtrip);
     }
 
     #[test]
-    fn roundtrip_reminder_updated() -> Result<(), serde_json::Error> {
-        let original = TodoEvent::ReminderUpdated(Some(domain::Reminder::new(Utc.ymd(2100, 1, 1).and_hms(0, 0, 0), Utc.ymd(2000, 1, 1).and_hms(0, 0, 0)).unwrap()));
-        let mut buffer = Vec::default();
-        original.serialize_event_to_buffer(&mut buffer)?;
-
-        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, original.event_type())?;
-        assert_eq!(Some(original), roundtrip);
-
-        Ok(())
+    fn roundtrip_reminder_updated() {
+        let original = TodoEvent::ReminderUpdated(events::ReminderUpdated { new_reminder: Some(domain::Reminder::new(Utc.ymd(2100, 1, 1).and_hms(0, 0, 0), Utc.ymd(2000, 1, 1).and_hms(0, 0, 0)).unwrap()) });
+        let roundtrip = cqrs_proptest::roundtrip_through_serialization(&original);
+        assert_eq!(original, roundtrip);
     }
 
     #[test]
-    fn roundtrip_reminder_updated_none() -> Result<(), serde_json::Error> {
-        let original = TodoEvent::ReminderUpdated(None);
-        let mut buffer = Vec::default();
-        original.serialize_event_to_buffer(&mut buffer)?;
-
-        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, original.event_type())?;
-        assert_eq!(Some(original), roundtrip);
-
-        Ok(())
+    fn roundtrip_reminder_updated_none() {
+        let original = TodoEvent::ReminderUpdated(events::ReminderUpdated { new_reminder: None });
+        let roundtrip = cqrs_proptest::roundtrip_through_serialization(&original);
+        assert_eq!(original, roundtrip);
     }
 
     #[test]
-    fn roundtrip_text_updated() -> Result<(), serde_json::Error> {
-        let original = TodoEvent::TextUpdated(domain::Description::new("alt test description").unwrap());
-        let mut buffer = Vec::default();
-        original.serialize_event_to_buffer(&mut buffer)?;
-
-        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, original.event_type())?;
-        assert_eq!(Some(original), roundtrip);
-
-        Ok(())
+    fn roundtrip_description_updated() {
+        let original = TodoEvent::DescriptionUpdated(events::DescriptionUpdated { new_description: domain::Description::new("alt test description").unwrap() });
+        let roundtrip = cqrs_proptest::roundtrip_through_serialization(&original);
+        assert_eq!(original, roundtrip);
     }
 
     #[test]
-    fn roundtrip_completed() -> Result<(), serde_json::Error> {
-        let original = TodoEvent::Completed;
-        let mut buffer = Vec::default();
-        original.serialize_event_to_buffer(&mut buffer)?;
-
-        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, original.event_type())?;
-        assert_eq!(Some(original), roundtrip);
-
-        Ok(())
+    fn roundtrip_completed() {
+        let original = TodoEvent::Completed(events::Completed{});
+        let roundtrip = cqrs_proptest::roundtrip_through_serialization(&original);
+        assert_eq!(original, roundtrip);
     }
 
     #[test]
-    fn roundtrip_uncompleted() -> Result<(), serde_json::Error> {
-        let original = TodoEvent::Uncompleted;
-        let mut buffer = Vec::default();
-        original.serialize_event_to_buffer(&mut buffer)?;
-
-        let roundtrip = TodoEvent::deserialize_event_from_buffer(&buffer, original.event_type())?;
-        assert_eq!(Some(original), roundtrip);
-
-        Ok(())
+    fn roundtrip_uncompleted() {
+        let original = TodoEvent::Uncompleted(events::Uncompleted{});
+        let roundtrip = cqrs_proptest::roundtrip_through_serialization(&original);
+        assert_eq!(original, roundtrip);
     }
 
     mod property_tests {
         use super::*;
-        use cqrs_core::{Aggregate, Event};
         use cqrs_proptest::AggregateFromEventSequence;
         use proptest::prelude::*;
         use proptest::{proptest_helper, prop_oneof, proptest};
@@ -646,7 +477,7 @@ mod tests {
         impl Arbitrary for domain::Reminder {
             type Parameters = ();
 
-            fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
+            fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
                 let current_time = Utc.ymd(2000, 1, 1).and_hms(0, 0, 0);
 
                 (2000..2500_i32, 1..=366_u32, 0..86400_u32).prop_filter_map("invalid date", move |(y, o, s)| {
@@ -659,16 +490,78 @@ mod tests {
             type Strategy = BoxedStrategy<Self>;
         }
 
+        impl Arbitrary for events::Created {
+            type Parameters = ();
+
+            fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+                any::<domain::Description>().prop_map(|initial_description| {
+                    events::Created {
+                        initial_description,
+                    }
+                }).boxed()
+            }
+
+            type Strategy = BoxedStrategy<Self>;
+        }
+
+        impl Arbitrary for events::ReminderUpdated {
+            type Parameters = ();
+
+            fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+                any::<Option<domain::Reminder>>().prop_map(|new_reminder| {
+                    events::ReminderUpdated {
+                        new_reminder,
+                    }
+                }).boxed()
+            }
+
+            type Strategy = BoxedStrategy<Self>;
+        }
+
+        impl Arbitrary for events::DescriptionUpdated {
+            type Parameters = ();
+
+            fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+                any::<domain::Description>().prop_map(|new_description| {
+                    events::DescriptionUpdated {
+                        new_description,
+                    }
+                }).boxed()
+            }
+
+            type Strategy = BoxedStrategy<Self>;
+        }
+
+        impl Arbitrary for events::Completed {
+            type Parameters = ();
+
+            fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+                Just(events::Completed{})
+            }
+
+            type Strategy = Just<Self>;
+        }
+
+        impl Arbitrary for events::Uncompleted {
+            type Parameters = ();
+
+            fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+                Just(events::Uncompleted{})
+            }
+
+            type Strategy = Just<Self>;
+        }
+
         impl Arbitrary for TodoEvent {
             type Parameters = ();
 
-            fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
+            fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
                 prop_oneof! [
-                    any::<domain::Description>().prop_map(TodoEvent::Created),
-                    any::<Option<domain::Reminder>>().prop_map(TodoEvent::ReminderUpdated),
-                    any::<domain::Description>().prop_map(TodoEvent::TextUpdated),
-                    Just(TodoEvent::Completed),
-                    Just(TodoEvent::Uncompleted),
+                    any::<events::Created>().prop_map(TodoEvent::Created),
+                    any::<events::ReminderUpdated>().prop_map(TodoEvent::ReminderUpdated),
+                    any::<events::DescriptionUpdated>().prop_map(TodoEvent::DescriptionUpdated),
+                    any::<events::Completed>().prop_map(TodoEvent::Completed),
+                    any::<events::Uncompleted>().prop_map(TodoEvent::Uncompleted),
                 ].boxed()
             }
 
@@ -685,7 +578,7 @@ mod tests {
 
         proptest! {
             #[test]
-            fn can_create_arbitrary_aggregate(agg in any::<ArbitraryTodoAggregate>()) {
+            fn can_create_arbitrary_aggregate(_agg in any::<ArbitraryTodoAggregate>()) {
             }
 
             #[test]

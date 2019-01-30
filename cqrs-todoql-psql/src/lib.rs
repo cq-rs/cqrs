@@ -69,10 +69,10 @@ pub fn start_todo_server(conn_str: &str) -> iron::Listening {
 pub struct IdProvider(hashids::HashIds,::std::sync::atomic::AtomicUsize);
 
 impl IdProvider {
-    fn new_id(&self) -> String {
+    fn new_id(&self) -> cqrs_todo_core::TodoId {
         let next = self.1.fetch_add(1, ::std::sync::atomic::Ordering::SeqCst);
         let duration = ::std::time::SystemTime::now().duration_since(::std::time::UNIX_EPOCH).unwrap();
-        self.0.encode(&vec![duration.as_secs() as i64, next as i64])
+        cqrs_todo_core::TodoId(self.0.encode(&vec![duration.as_secs() as i64, next as i64]))
     }
 }
 
@@ -80,20 +80,20 @@ mod helper {
     use chrono::{Duration,Utc,TimeZone};
     use cqrs::{Version, VersionedAggregateView};
     use cqrs::{EventSink, SnapshotSink};
-    use cqrs_todo_core::{TodoEvent, TodoAggregate, TodoData, TodoMetadata, TodoStatus, domain};
+    use cqrs_todo_core::{events, TodoEvent, TodoAggregate, TodoData, TodoId, TodoMetadata, TodoStatus, domain};
     use super::TodoStore;
     use r2d2_postgres::postgres::Connection;
 
-    pub fn prefill(id: &str, conn: impl ::std::ops::Deref<Target=Connection>) {
+    pub fn prefill(id: &TodoId, conn: impl ::std::ops::Deref<Target=Connection>) {
         let epoch = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
         let reminder_time = epoch + Duration::seconds(10000);
         let mut events = Vec::new();
-        events.push(TodoEvent::Completed);
-        events.push(TodoEvent::Created(domain::Description::new("Hello!").unwrap()));
-        events.push(TodoEvent::ReminderUpdated(Some(domain::Reminder::new(reminder_time, epoch).unwrap())));
-        events.push(TodoEvent::TextUpdated(domain::Description::new("New text").unwrap()));
-        events.push(TodoEvent::Created(domain::Description::new("Ignored!").unwrap()));
-        events.push(TodoEvent::ReminderUpdated(None));
+        events.push(TodoEvent::Completed(events::Completed{}));
+        events.push(TodoEvent::Created(events::Created { initial_description: domain::Description::new("Hello!").unwrap() }));
+        events.push(TodoEvent::ReminderUpdated(events::ReminderUpdated { new_reminder: Some(domain::Reminder::new(reminder_time, epoch).unwrap()) }));
+        events.push(TodoEvent::DescriptionUpdated(events::DescriptionUpdated { new_description: domain::Description::new("New text").unwrap() }));
+        events.push(TodoEvent::Created(events::Created { initial_description: domain::Description::new("Ignored!").unwrap() }));
+        events.push(TodoEvent::ReminderUpdated(events::ReminderUpdated { new_reminder: None }));
 
         let store = TodoStore::new(&*conn);
 

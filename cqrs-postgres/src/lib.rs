@@ -1,3 +1,7 @@
+//! # cqrs-postgres
+//!
+//! `cqrs-postgres` is an implementation of the CQRS system with persistence to a PostgreSQL backend.
+
 #![warn(
     unused_import_braces,
     unused_imports,
@@ -29,7 +33,9 @@ mod error;
 mod store;
 mod util;
 
+#[doc(inline)]
 pub use store::PostgresStore;
+#[doc(inline)]
 pub use error::{LoadError, PersistError};
 
 #[cfg(test)]

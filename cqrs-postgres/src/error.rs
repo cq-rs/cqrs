@@ -1,10 +1,16 @@
 use cqrs_core::CqrsError;
 use std::fmt;
 
+/// An error while attempting to persist an event or snapshot.
 #[derive(Debug)]
 pub enum PersistError<E: CqrsError> {
+    /// An error from the PostgreSQL backend.
     Postgres(postgres::Error),
+
+    /// The operation failed because a specified precondition failed.
     PreconditionFailed(cqrs_core::Precondition),
+
+    /// The operation failed because there was a serialization error.
     SerializationError(E),
 }
 
@@ -30,10 +36,16 @@ impl<E: CqrsError> From<cqrs_core::Precondition> for PersistError<E> {
     }
 }
 
+/// An error while attempting to load an event or snapshot.
 #[derive(Debug)]
 pub enum LoadError<E: CqrsError> {
+    /// An error from the PostgreSQL backend.
     Postgres(postgres::Error),
+
+    /// The event type from the event stream is not one that can be deserialized.
     UnknownEventType(String),
+
+    /// The operation failed because there was a deserialization error.
     DeserializationError(E),
 }
 

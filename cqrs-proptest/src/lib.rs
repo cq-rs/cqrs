@@ -6,7 +6,7 @@
 //! ## Examples
 //!
 //! ```
-//! use cqrs_core::{Aggregate, Event};
+//! use cqrs_core::{Aggregate, AggregateEvent, Event};
 //! use cqrs_proptest::AggregateFromEventSequence;
 //! use proptest::{prelude::*, strategy::{TupleUnion, ValueTree, W}, test_runner::TestRunner, prop_oneof};
 //!
@@ -16,49 +16,80 @@
 //! }
 //!
 //! impl Aggregate for MyAggregate {
-//!     type Event = MyEvent;
-//!     type Events = Vec<MyEvent>;
-//!     type Command = ();
-//!     type Error = String;
+//!     type Event = MyEvents;
 //!
 //!     fn entity_type() -> &'static str {
 //!         "my_aggregate"
 //!     }
+//! }
 //!
-//!     fn apply(&mut self, event: Self::Event) {
-//!         match event {
-//!             MyEvent::Created => self.active = true,
-//!             MyEvent::Deleted => self.active = false,
-//!         }
+//! #[derive(Clone, Copy, Debug)]
+//! struct CreatedEvent{};
+//!
+//! impl Event for CreatedEvent {
+//!     fn event_type(&self) -> &'static str {
+//!         "created"
 //!     }
+//! }
 //!
-//!     fn execute(&self, _: Self::Command) -> Result<Self::Events, Self::Error> {
-//!         Ok(Vec::default())
+//! impl AggregateEvent for CreatedEvent {
+//!     type Aggregate = MyAggregate;
+//!
+//!     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+//!         aggregate.active = true;
 //!     }
 //! }
 //!
 //! #[derive(Clone, Copy, Debug)]
-//! enum MyEvent {
-//!     Created,
-//!     Deleted,
+//! struct DeletedEvent{};
+//!
+//! impl Event for DeletedEvent {
+//!     fn event_type(&self) -> &'static str {
+//!         "deleted"
+//!     }
 //! }
 //!
-//! impl Event for MyEvent {
+//! impl AggregateEvent for DeletedEvent {
+//!     type Aggregate = MyAggregate;
+//!
+//!     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+//!         aggregate.active = false;
+//!     }
+//! }
+//!
+//! #[derive(Clone, Copy, Debug)]
+//! enum MyEvents {
+//!     Created(CreatedEvent),
+//!     Deleted(DeletedEvent),
+//! }
+//!
+//! impl Event for MyEvents {
 //!     fn event_type(&self) -> &'static str {
 //!         match *self {
-//!             MyEvent::Created => "created",
-//!             MyEvent::Deleted => "deleted",
+//!             MyEvents::Created(ref e) => e.event_type(),
+//!             MyEvents::Deleted(ref e) => e.event_type(),
 //!         }
 //!     }
 //! }
 //!
-//! impl Arbitrary for MyEvent {
+//! impl AggregateEvent for MyEvents {
+//!     type Aggregate = MyAggregate;
+//!
+//!     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+//!         match self {
+//!             MyEvents::Created(e) => e.apply_to(aggregate),
+//!             MyEvents::Deleted(e) => e.apply_to(aggregate),
+//!         }
+//!     }
+//! }
+//!
+//! impl Arbitrary for MyEvents {
 //!     type Parameters = ();
 //!
 //!     fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
 //!         prop_oneof![
-//!             Just(MyEvent::Created),
-//!             Just(MyEvent::Deleted),
+//!             Just(MyEvents::Created(CreatedEvent{})),
+//!             Just(MyEvents::Deleted(DeletedEvent{})),
 //!         ]
 //!     }
 //!
@@ -94,7 +125,7 @@
     missing_docs,
 )]
 
-use cqrs_core::{Aggregate, CqrsError, Event, SerializableEvent, DeserializableEvent};
+use cqrs_core::{Aggregate, Event, SerializableEvent, DeserializableEvent};
 use proptest::prelude::*;
 use std::fmt;
 
@@ -108,28 +139,46 @@ use std::fmt;
 /// use proptest::{prelude::*, strategy::ValueTree, test_runner::TestRunner, prop_oneof};
 ///
 /// #[derive(Clone, Copy, Debug)]
-/// enum MyEvent {
-///     Created,
-///     Deleted,
+/// struct CreatedEvent{};
+///
+/// impl Event for CreatedEvent {
+///     fn event_type(&self) -> &'static str {
+///         "created"
+///     }
 /// }
 ///
-/// impl Event for MyEvent {
+/// #[derive(Clone, Copy, Debug)]
+/// struct DeletedEvent{};
+///
+/// impl Event for DeletedEvent {
+///     fn event_type(&self) -> &'static str {
+///         "deleted"
+///     }
+/// }
+///
+/// #[derive(Clone, Copy, Debug)]
+/// enum MyEvents {
+///     Created(CreatedEvent),
+///     Deleted(DeletedEvent),
+/// }
+///
+/// impl Event for MyEvents {
 ///     fn event_type(&self) -> &'static str {
 ///         match *self {
-///             MyEvent::Created => "created",
-///             MyEvent::Deleted => "deleted",
+///             MyEvents::Created(ref e) => e.event_type(),
+///             MyEvents::Deleted(ref e) => e.event_type(),
 ///         }
 ///     }
 /// }
 ///
-/// fn arb_my_event() -> impl Strategy<Value = MyEvent> {
+/// fn arb_my_events() -> impl Strategy<Value = MyEvents> {
 ///     prop_oneof![
-///         Just(MyEvent::Created),
-///         Just(MyEvent::Deleted),
+///         Just(MyEvents::Created(CreatedEvent{})),
+///         Just(MyEvents::Deleted(DeletedEvent{})),
 ///     ]
 /// }
 ///
-/// arb_events(arb_my_event(), 0..10)
+/// arb_events(arb_my_events(), 0..10)
 ///     .new_tree(&mut TestRunner::default())
 ///     .unwrap()
 ///     .current();
@@ -143,7 +192,7 @@ pub fn arb_events<E: Event + fmt::Debug>(event_strategy: impl Strategy<Value = E
 /// # Examples
 ///
 /// ```
-/// use cqrs_core::{Aggregate, Event};
+/// use cqrs_core::{Aggregate, AggregateEvent, Event};
 /// use cqrs_proptest::{arb_aggregate, arb_events};
 /// use proptest::{prelude::*, strategy::{TupleUnion, ValueTree, W}, test_runner::TestRunner, prop_oneof};
 ///
@@ -153,56 +202,87 @@ pub fn arb_events<E: Event + fmt::Debug>(event_strategy: impl Strategy<Value = E
 /// }
 ///
 /// impl Aggregate for MyAggregate {
-///     type Event = MyEvent;
-///     type Events = Vec<MyEvent>;
-///     type Command = ();
-///     type Error = String;
+///     type Event = MyEvents;
 ///
 ///     fn entity_type() -> &'static str {
 ///         "my_aggregate"
 ///     }
+/// }
 ///
-///     fn apply(&mut self, event: Self::Event) {
-///         match event {
-///             MyEvent::Created => self.active = true,
-///             MyEvent::Deleted => self.active = false,
-///         }
+/// #[derive(Clone, Copy, Debug)]
+/// struct CreatedEvent{};
+///
+/// impl Event for CreatedEvent {
+///     fn event_type(&self) -> &'static str {
+///         "created"
 ///     }
+/// }
 ///
-///     fn execute(&self, _: Self::Command) -> Result<Self::Events, Self::Error> {
-///         Ok(Vec::default())
+/// impl AggregateEvent for CreatedEvent {
+///     type Aggregate = MyAggregate;
+///
+///     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+///         aggregate.active = true;
 ///     }
 /// }
 ///
 /// #[derive(Clone, Copy, Debug)]
-/// enum MyEvent {
-///     Created,
-///     Deleted,
+/// struct DeletedEvent{};
+///
+/// impl Event for DeletedEvent {
+///     fn event_type(&self) -> &'static str {
+///         "deleted"
+///     }
 /// }
 ///
-/// impl Event for MyEvent {
+/// impl AggregateEvent for DeletedEvent {
+///     type Aggregate = MyAggregate;
+///
+///     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+///         aggregate.active = false;
+///     }
+/// }
+///
+/// #[derive(Clone, Copy, Debug)]
+/// enum MyEvents {
+///     Created(CreatedEvent),
+///     Deleted(DeletedEvent),
+/// }
+///
+/// impl Event for MyEvents {
 ///     fn event_type(&self) -> &'static str {
 ///         match *self {
-///             MyEvent::Created => "created",
-///             MyEvent::Deleted => "deleted",
+///             MyEvents::Created(ref e) => e.event_type(),
+///             MyEvents::Deleted(ref e) => e.event_type(),
 ///         }
 ///     }
 /// }
 ///
-/// impl Arbitrary for MyEvent {
+/// impl AggregateEvent for MyEvents {
+///     type Aggregate = MyAggregate;
+///
+///     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+///         match self {
+///             MyEvents::Created(e) => e.apply_to(aggregate),
+///             MyEvents::Deleted(e) => e.apply_to(aggregate),
+///         }
+///     }
+/// }
+///
+/// impl Arbitrary for MyEvents {
 ///     type Parameters = ();
 ///
 ///     fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
 ///         prop_oneof![
-///             Just(MyEvent::Created),
-///             Just(MyEvent::Deleted),
+///             Just(MyEvents::Created(CreatedEvent{})),
+///             Just(MyEvents::Deleted(DeletedEvent{})),
 ///         ]
 ///     }
 ///
 ///     type Strategy = TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
 /// }
 ///
-/// arb_aggregate::<MyAggregate, _>(arb_events(any::<MyEvent>(), 0..10))
+/// arb_aggregate::<MyAggregate, _>(arb_events(any::<MyEvents>(), 0..10))
 ///     .new_tree(&mut TestRunner::default())
 ///     .unwrap()
 ///     .current();
@@ -227,43 +307,65 @@ where
 /// ```
 /// use cqrs_core::{Event, SerializableEvent, DeserializableEvent};
 /// use cqrs_proptest::roundtrip_through_serialization;
+/// use serde::{Serialize, Deserialize};
 ///
-/// #[derive(Debug, PartialEq)]
-/// enum MyEvent {
-///     Created,
-///     Deleted,
+/// #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// struct CreatedEvent{};
+///
+/// impl Event for CreatedEvent {
+///     fn event_type(&self) -> &'static str {
+///         "created"
+///     }
 /// }
 ///
-/// impl Event for MyEvent {
+/// #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// struct DeletedEvent{};
+///
+/// impl Event for DeletedEvent {
+///     fn event_type(&self) -> &'static str {
+///         "deleted"
+///     }
+/// }
+///
+/// #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// enum MyEvents {
+///     Created(CreatedEvent),
+///     Deleted(DeletedEvent),
+/// }
+///
+/// impl Event for MyEvents {
 ///     fn event_type(&self) -> &'static str {
 ///         match *self {
-///             MyEvent::Created => "created",
-///             MyEvent::Deleted => "deleted",
+///             MyEvents::Created(ref e) => e.event_type(),
+///             MyEvents::Deleted(ref e) => e.event_type(),
 ///         }
 ///     }
 /// }
 ///
-/// impl SerializableEvent for MyEvent {
-///     type Error = String;
+/// impl SerializableEvent for MyEvents {
+///     type Error = serde_json::Error;
 ///
 ///     fn serialize_event_to_buffer(&self, buffer: &mut Vec<u8>) -> Result<(), Self::Error> {
-///         Ok(())
+///         match *self {
+///             MyEvents::Created(ref e) => serde_json::to_writer(buffer, e),
+///             MyEvents::Deleted(ref e) => serde_json::to_writer(buffer, e),
+///         }
 ///     }
 /// }
 ///
-/// impl DeserializableEvent for MyEvent {
-///     type Error = String;
+/// impl DeserializableEvent for MyEvents {
+///     type Error = serde_json::Error;
 ///
 ///     fn deserialize_event_from_buffer(buffer: &[u8], event_type: &str) -> Result<Option<Self>, Self::Error> {
 ///         match event_type {
-///             "created" => Ok(Some(MyEvent::Created)),
-///             "deleted" => Ok(Some(MyEvent::Deleted)),
+///             "created" => serde_json::from_reader(buffer).map(MyEvents::Created).map(Some),
+///             "deleted" => serde_json::from_reader(buffer).map(MyEvents::Deleted).map(Some),
 ///             _ => Ok(None),
 ///         }
 ///     }
 /// }
 ///
-/// let original = MyEvent::Created;
+/// let original = MyEvents::Created(CreatedEvent{});
 /// let roundtrip = roundtrip_through_serialization(&original);
 /// assert_eq!(original, roundtrip);
 /// ```
@@ -280,7 +382,7 @@ pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEven
 /// # Examples
 ///
 /// ```
-/// use cqrs_core::{Aggregate, Event};
+/// use cqrs_core::{Aggregate, AggregateEvent, Event};
 /// use cqrs_proptest::AggregateFromEventSequence;
 /// use proptest::{prelude::*, strategy::{TupleUnion, ValueTree, W}, test_runner::TestRunner, prop_oneof};
 ///
@@ -290,49 +392,80 @@ pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEven
 /// }
 ///
 /// impl Aggregate for MyAggregate {
-///     type Event = MyEvent;
-///     type Events = Vec<MyEvent>;
-///     type Command = ();
-///     type Error = String;
+///     type Event = MyEvents;
 ///
 ///     fn entity_type() -> &'static str {
 ///         "my_aggregate"
 ///     }
+/// }
 ///
-///     fn apply(&mut self, event: Self::Event) {
-///         match event {
-///             MyEvent::Created => self.active = true,
-///             MyEvent::Deleted => self.active = false,
-///         }
+/// #[derive(Clone, Copy, Debug)]
+/// struct CreatedEvent{};
+///
+/// impl Event for CreatedEvent {
+///     fn event_type(&self) -> &'static str {
+///         "created"
 ///     }
+/// }
 ///
-///     fn execute(&self, _: Self::Command) -> Result<Self::Events, Self::Error> {
-///         Ok(Vec::default())
+/// impl AggregateEvent for CreatedEvent {
+///     type Aggregate = MyAggregate;
+///
+///     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+///         aggregate.active = true;
 ///     }
 /// }
 ///
 /// #[derive(Clone, Copy, Debug)]
-/// enum MyEvent {
-///     Created,
-///     Deleted,
+/// struct DeletedEvent{};
+///
+/// impl Event for DeletedEvent {
+///     fn event_type(&self) -> &'static str {
+///         "deleted"
+///     }
 /// }
 ///
-/// impl Event for MyEvent {
+/// impl AggregateEvent for DeletedEvent {
+///     type Aggregate = MyAggregate;
+///
+///     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+///         aggregate.active = false;
+///     }
+/// }
+///
+/// #[derive(Clone, Copy, Debug)]
+/// enum MyEvents {
+///     Created(CreatedEvent),
+///     Deleted(DeletedEvent),
+/// }
+///
+/// impl Event for MyEvents {
 ///     fn event_type(&self) -> &'static str {
 ///         match *self {
-///             MyEvent::Created => "created",
-///             MyEvent::Deleted => "deleted",
+///             MyEvents::Created(ref e) => e.event_type(),
+///             MyEvents::Deleted(ref e) => e.event_type(),
 ///         }
 ///     }
 /// }
 ///
-/// impl Arbitrary for MyEvent {
+/// impl AggregateEvent for MyEvents {
+///     type Aggregate = MyAggregate;
+///
+///     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+///         match self {
+///             MyEvents::Created(e) => e.apply_to(aggregate),
+///             MyEvents::Deleted(e) => e.apply_to(aggregate),
+///         }
+///     }
+/// }
+///
+/// impl Arbitrary for MyEvents {
 ///     type Parameters = ();
 ///
 ///     fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
 ///         prop_oneof![
-///             Just(MyEvent::Created),
-///             Just(MyEvent::Deleted),
+///             Just(MyEvents::Created(CreatedEvent{})),
+///             Just(MyEvents::Deleted(DeletedEvent{})),
 ///         ]
 ///     }
 ///
@@ -372,7 +505,6 @@ impl<A: Aggregate> AggregateFromEventSequence<A> {
 impl<A> Arbitrary for AggregateFromEventSequence<A>
 where
     A: Aggregate + fmt::Debug,
-    A::Error: CqrsError,
     A::Event: Arbitrary + 'static,
     Self: fmt::Debug,
 {

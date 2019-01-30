@@ -6,9 +6,10 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
+use cqrs::AggregateId;
 use cqrs::{EventNumber, Precondition, VersionedEvent, Version};
 use cqrs::{EventSource, EventSink, Since};
-use cqrs_todo_core::{TodoAggregate, TodoEvent, TodoMetadata};
+use cqrs_todo_core::{TodoAggregate, TodoEvent, TodoIdRef, TodoMetadata};
 use void::Void;
 
 #[derive(Debug)]
@@ -18,9 +19,12 @@ impl EventSource<TodoAggregate> for EventMap {
     type Events = Vec<Result<VersionedEvent<TodoEvent>, Void>>;
     type Error = Void;
 
-    fn read_events(&self, id: &str, since: Since, max_count: Option<u64>) -> Result<Option<Self::Events>, Self::Error> {
+    fn read_events<I>(&self, id: &I, since: Since, max_count: Option<u64>) -> Result<Option<Self::Events>, Self::Error>
+    where
+        I: AggregateId<Aggregate=TodoAggregate>,
+    {
         let borrow = self.0.borrow();
-        let stream = borrow.get(id);
+        let stream = borrow.get(id.as_ref());
         match (since, max_count) {
             (Since::BeginningOfStream, Some(max_count)) => Ok(stream.map(|e| e.into_iter().take(max_count.min(usize::max_value() as u64) as usize).map(|e| Ok(e.to_owned())).collect())),
             (Since::Event(event_number), Some(max_count)) => Ok(stream.map(|e| e.into_iter().skip(event_number.get() as usize).take(max_count.min(usize::max_value() as u64) as usize).map(|e| Ok(e.to_owned())).collect())),
@@ -33,9 +37,12 @@ impl EventSource<TodoAggregate> for EventMap {
 impl EventSink<TodoAggregate, TodoMetadata> for EventMap {
     type Error = Void;
 
-    fn append_events(&self, id: &str, events: &[TodoEvent], precondition: Option<Precondition>, _metadata: TodoMetadata) -> Result<EventNumber, Self::Error> {
+    fn append_events<I>(&self, id: &I, events: &[TodoEvent], precondition: Option<Precondition>, _metadata: TodoMetadata) -> Result<EventNumber, Self::Error>
+    where
+        I: AggregateId<Aggregate=TodoAggregate>,
+    {
         let mut borrow = self.0.borrow_mut();
-        let entry = borrow.entry(id.into());
+        let entry = borrow.entry(id.as_ref().into());
 
         match entry {
             Entry::Occupied(_) if precondition == Some(Precondition::New) => panic!("Need error type here"),
@@ -51,7 +58,7 @@ impl EventSink<TodoAggregate, TodoMetadata> for EventMap {
             _ => {}
         }
 
-        sequence = sequence.incr();
+        sequence.incr();
         stream.reserve(events.len());
         let initial = sequence;
         for event in events {
@@ -59,7 +66,7 @@ impl EventSink<TodoAggregate, TodoMetadata> for EventMap {
                 sequence: sequence.event_number().unwrap(),
                 event: event.to_owned(),
             });
-            sequence = sequence.incr();
+            sequence.incr();
         }
 
         Ok(initial.event_number().unwrap())
@@ -69,29 +76,29 @@ impl EventSink<TodoAggregate, TodoMetadata> for EventMap {
 #[test]
 fn main_test() {
     let em = EventMap(RefCell::new(HashMap::default()));
-    let id = "test";
+    let id = TodoIdRef("test");
     let metadata = TodoMetadata {
         initiated_by: String::from("test"),
     };
 
-    assert_eq!(em.read_events(id, Since::BeginningOfStream, None), Ok(None));
-    let event_num = em.append_events(id, &[cqrs_todo_core::TodoEvent::Completed], Some(Precondition::New), metadata.clone()).unwrap();
+    assert_eq!(em.read_events(&id, Since::BeginningOfStream, None), Ok(None));
+    let event_num = em.append_events(&id, &[cqrs_todo_core::TodoEvent::Completed(cqrs_todo_core::events::Completed{})], Some(Precondition::New), metadata.clone()).unwrap();
     assert_eq!(event_num, EventNumber::MIN_VALUE);
-    let event_num = em.append_events(id, &[cqrs_todo_core::TodoEvent::Uncompleted], Some(Precondition::ExpectedVersion(Version::Number(EventNumber::MIN_VALUE))), metadata).unwrap();
-    assert_eq!(event_num, EventNumber::MIN_VALUE.incr());
+    let event_num = em.append_events(&id, &[cqrs_todo_core::TodoEvent::Uncompleted(cqrs_todo_core::events::Uncompleted{})], Some(Precondition::ExpectedVersion(Version::Number(EventNumber::MIN_VALUE))), metadata).unwrap();
+    assert_eq!(event_num, EventNumber::MIN_VALUE.next());
 
     let expected_events = vec![
         Ok(VersionedEvent {
             sequence: EventNumber::MIN_VALUE,
-            event: cqrs_todo_core::TodoEvent::Completed,
+            event: cqrs_todo_core::TodoEvent::Completed(cqrs_todo_core::events::Completed{}),
         }),
         Ok(VersionedEvent {
-            sequence: EventNumber::MIN_VALUE.incr(),
-            event: cqrs_todo_core::TodoEvent::Uncompleted,
+            sequence: EventNumber::MIN_VALUE.next(),
+            event: cqrs_todo_core::TodoEvent::Uncompleted(cqrs_todo_core::events::Uncompleted{}),
         }),
     ];
 
-    assert_eq!(em.read_events(id, Since::BeginningOfStream, None), Ok(Some(expected_events.clone())));
-    assert_eq!(em.read_events(id, Since::Event(EventNumber::MIN_VALUE), None), Ok(Some(expected_events[1..].to_owned())));
-    assert_eq!(em.read_events(id, Since::Event(EventNumber::MIN_VALUE.incr()), None), Ok(Some(Vec::default())));
+    assert_eq!(em.read_events(&id, Since::BeginningOfStream, None), Ok(Some(expected_events.clone())));
+    assert_eq!(em.read_events(&id, Since::Event(EventNumber::MIN_VALUE), None), Ok(Some(expected_events[1..].to_owned())));
+    assert_eq!(em.read_events(&id, Since::Event(EventNumber::MIN_VALUE.next()), None), Ok(Some(Vec::default())));
 }

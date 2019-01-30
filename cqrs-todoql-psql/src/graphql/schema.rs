@@ -1,7 +1,7 @@
 use crate::TodoStore;
 use base64;
 use cqrs::{Entity, Precondition, Version, EntityStore, EntitySink, EntitySource};
-use cqrs_todo_core::{domain, TodoAggregate, TodoStatus, TodoCommand, TodoMetadata};
+use cqrs_todo_core::{domain, commands, TodoAggregate, TodoId, TodoStatus, TodoMetadata};
 use chrono::{DateTime, Utc};
 use juniper::{ID, FieldResult, Value};
 
@@ -30,7 +30,7 @@ graphql_object!(Query: Context |&self| {
             reader.iter().skip_while(move |id| {
                 if let Some(ref first_id) = first {
                     also_skipped += 1;
-                    **id != **first_id
+                    id.0.as_str() != &**first_id
                 } else {
                     false
                 }
@@ -43,7 +43,7 @@ graphql_object!(Query: Context |&self| {
             skip += 1;
             let cursor = Cursor(skip);
             items.push(TodoEdge {
-                agg_id: ID::from(agg_id.clone()),
+                agg_id: ID::from(agg_id.0.clone()),
                 cursor,
             });
             end_cursor = Some(cursor);
@@ -65,7 +65,7 @@ graphql_object!(Query: Context |&self| {
         let conn = context.backend.get()?;
         let store = TodoStore::new(&*conn);
 
-        let id = id.to_string();
+        let id = TodoId(id.to_string());
 
         let entity = store.rehydrate(&id)?
             .map(|agg| TodoQL(agg.into_entity_with_id(id)));
@@ -74,7 +74,7 @@ graphql_object!(Query: Context |&self| {
     }
 });
 
-struct TodoQL(Entity<String, TodoAggregate>);
+struct TodoQL(Entity<TodoId, TodoAggregate>);
 
 graphql_object!(TodoQL: Context |&self| {
     field id() -> FieldResult<ID> {
@@ -82,15 +82,15 @@ graphql_object!(TodoQL: Context |&self| {
     }
 
     field description() -> FieldResult<&str> {
-        Ok(self.0.aggregate().state().get_data()?.description.as_str())
+        Ok(self.0.aggregate().state().get_data().ok_or("uninitialized")?.description.as_str())
     }
 
     field reminder() -> FieldResult<Option<DateTime<Utc>>> {
-        Ok(self.0.aggregate().state().get_data()?.reminder.map(|r| r.get_time()))
+        Ok(self.0.aggregate().state().get_data().ok_or("uninitialized")?.reminder.map(|r| r.get_time()))
     }
 
     field completed() -> FieldResult<bool> {
-        Ok(self.0.aggregate().state().get_data()?.status == TodoStatus::Completed)
+        Ok(self.0.aggregate().state().get_data().ok_or("uninitialized")?.status == TodoStatus::Completed)
     }
 
     field version() -> FieldResult<i32> {
@@ -151,7 +151,7 @@ graphql_object!(TodoEdge: Context |&self| {
     field node(&executor) -> FieldResult<Option<TodoQL>> {
         let context = executor.context();
 
-        let id = self.agg_id.to_string();
+        let id = TodoId(self.agg_id.to_string());
 
         let conn = context.backend.get()?;
         let store = TodoStore::new(&*conn);
@@ -190,7 +190,11 @@ graphql_object!(Mutations: Context |&self| {
             } else { None };
 
 
-        let command = TodoCommand::Create(description, reminder);
+        let command = commands::CreateTodo {
+            description,
+            reminder,
+        };
+
 
         let new_id = context.id_provider.new_id();
 
@@ -232,11 +236,11 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let precondition = expect_exists_or(expected_version);
 
-        let description = domain::Description::new(text)?;
+        let new_description = domain::Description::new(text)?;
 
-        let command = TodoCommand::UpdateText(description);
+        let command = commands::UpdateDescription { new_description };
 
-        let id = self.0.to_string();
+        let id = TodoId(self.0.to_string());
 
         let conn = context.backend.get()?;
         let store = TodoStore::new(&*conn);
@@ -261,11 +265,11 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let precondition = expect_exists_or(expected_version);
 
-        let reminder = domain::Reminder::new(time, Utc::now())?;
+        let new_reminder = domain::Reminder::new(time, Utc::now())?;
 
-        let command = TodoCommand::SetReminder(reminder);
+        let command = commands::SetReminder { new_reminder };
 
-        let id = self.0.to_string();
+        let id = TodoId(self.0.to_string());
 
         let conn = context.backend.get()?;
         let store = TodoStore::new(&*conn);
@@ -290,9 +294,9 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let precondition = expect_exists_or(expected_version);
 
-        let command = TodoCommand::CancelReminder;
+        let command = commands::CancelReminder;
 
-        let id = self.0.to_string();
+        let id = TodoId(self.0.to_string());
 
         let conn = context.backend.get()?;
         let store = TodoStore::new(&*conn);
@@ -317,9 +321,9 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let precondition = expect_exists_or(expected_version);
 
-        let command = TodoCommand::ToggleCompletion;
+        let command = commands::ToggleCompletion;
 
-        let id = self.0.to_string();
+        let id = TodoId(self.0.to_string());
 
         let conn = context.backend.get()?;
         let store = TodoStore::new(&*conn);
@@ -344,9 +348,9 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let precondition = expect_exists_or(expected_version);
 
-        let command = TodoCommand::ResetCompleted;
+        let command = commands::ResetCompleted;
 
-        let id = self.0.to_string();
+        let id = TodoId(self.0.to_string());
 
         let conn = context.backend.get()?;
         let store = TodoStore::new(&*conn);
@@ -371,9 +375,9 @@ graphql_object!(TodoMutQL: Context |&self| {
 
         let precondition = expect_exists_or(expected_version);
 
-        let command = TodoCommand::MarkCompleted;
+        let command = commands::MarkCompleted;
 
-        let id = self.0.to_string();
+        let id = TodoId(self.0.to_string());
 
         let conn = context.backend.get()?;
         let store = TodoStore::new(&*conn);
