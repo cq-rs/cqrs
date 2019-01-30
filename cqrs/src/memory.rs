@@ -8,7 +8,7 @@ use std::sync::Arc;
 use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use void::Void;
-use cqrs_core::{Aggregate, AggregateId, EventSource, EventSink, SnapshotSource, SnapshotSink, EventNumber, VersionedEvent, Since, Version, VersionedAggregate, VersionedAggregateView, Precondition};
+use cqrs_core::{Aggregate, AggregateId, EventSource, EventSink, SnapshotSource, SnapshotSink, EventNumber, VersionedEvent, Since, Version, VersionedAggregate, Precondition};
 
 #[derive(Debug, Default)]
 struct EventStream<Event, Metadata> {
@@ -268,22 +268,27 @@ where
 {
     type Error = Void;
 
-    fn persist_snapshot<I>(&self, id: &I, view: VersionedAggregateView<A>) -> Result<(), Self::Error>
+    fn persist_snapshot<I>(&self, id: &I, aggregate: &A, version: Version, _last_snapshot_version: Version) -> Result<Version, Self::Error>
     where
         I: AggregateId<Aggregate=A>,
         Self: Sized,
     {
         let table = self.inner.upgradable_read();
 
-        if table.contains_key(id.as_ref()) {
-            let table = RwLockUpgradableReadGuard::downgrade(table);
-            *table.get(id.as_ref()).unwrap().write() = view.into();
-        } else {
-            let mut table = RwLockUpgradableReadGuard::upgrade(table);
-            table.insert(id.as_ref().into(), RwLock::new(view.into()));
+        let owned_aggregate = VersionedAggregate {
+            version,
+            payload: aggregate.to_owned(),
         };
 
-        Ok(())
+        if table.contains_key(id.as_ref()) {
+            let table = RwLockUpgradableReadGuard::downgrade(table);
+            *table.get(id.as_ref()).unwrap().write() = owned_aggregate;
+        } else {
+            let mut table = RwLockUpgradableReadGuard::upgrade(table);
+            table.insert(id.as_ref().into(), RwLock::new(owned_aggregate));
+        };
+
+        Ok(version)
     }
 }
 

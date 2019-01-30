@@ -234,25 +234,6 @@ pub struct VersionedAggregate<A> {
     pub payload: A,
 }
 
-/// A structured tuple combining a reference to an aggregate and its current version.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct VersionedAggregateView<'a, A: 'a> {
-    /// The current version of the referenced aggregate.
-    pub version: Version,
-
-    /// A reference to the aggregate.
-    pub payload: &'a A,
-}
-
-impl<'a, A: Clone + 'a> From<VersionedAggregateView<'a, A>> for VersionedAggregate<A> {
-    fn from(view: VersionedAggregateView<'a, A>) -> Self {
-        VersionedAggregate {
-            version: view.version,
-            payload: view.payload.to_owned(),
-        }
-    }
-}
-
 /// The starting point when reading a stream of values from an [EventSource].
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Since {
@@ -272,6 +253,16 @@ impl From<Version> for Since {
             Version::Number(x) => Since::Event(x),
         }
     }
+}
+
+/// A recommendation on whether or not a snapshot should be persisted.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum SnapshotRecommendation {
+    /// Recommends that a snapshot be taken.
+    ShouldSnapshot,
+
+    /// Recommends that a snapshot should not be taken.
+    DoNotSnapshot,
 }
 
 /// Represents a common trait that all errors handled by CQRS should implement.

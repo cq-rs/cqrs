@@ -18,3 +18,5 @@ CREATE TABLE snapshots (
   payload jsonb NOT NULL,
   UNIQUE (entity_type, entity_id, sequence)
 );
+
+INSERT INTO migrations (version) VALUES (1);

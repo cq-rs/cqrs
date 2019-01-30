@@ -1,5 +1,5 @@
 use aggregate::{Aggregate, AggregateId};
-use types::{CqrsError, EventNumber, Precondition, VersionedEvent, Since, VersionedAggregate, VersionedAggregateView};
+use types::{CqrsError, EventNumber, Precondition, VersionedEvent, Since, SnapshotRecommendation, VersionedAggregate, Version};
 
 /// A source for reading/loading events.
 pub trait EventSource<A: Aggregate> {
@@ -47,10 +47,36 @@ pub trait SnapshotSink<A: Aggregate> {
     /// The error type.
     type Error: CqrsError;
 
-    /// Writes a versioned view of the aggregate to the sink.
-    fn persist_snapshot<I>(&self, id: &I, view: VersionedAggregateView<A>) -> Result<(), Self::Error>
+    /// Writes an aggregate with its version to the sink. Returns the version number of the latest snapshot.
+    fn persist_snapshot<I>(&self, id: &I, aggregate: &A, version: Version, last_snapshot_version: Version) -> Result<Version, Self::Error>
     where
         I: AggregateId<Aggregate=A>;
+}
+
+/// A strategy determining when to recommend a snapshot be taken.
+pub trait SnapshotStrategy {
+    /// Gives the sink's recommendation on whether or not to perform a snapshot
+    fn snapshot_recommendation(&self, version: Version, last_snapshot_version: Version) -> SnapshotRecommendation;
+}
+
+/// A snapshot strategy that will never recommend taking a snapshot.
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
+pub struct NeverSnapshot;
+
+impl SnapshotStrategy for NeverSnapshot {
+    fn snapshot_recommendation(&self, _: Version, _: Version) -> SnapshotRecommendation {
+        SnapshotRecommendation::DoNotSnapshot
+    }
+}
+
+/// A snapshot strategy that will always recommend taking a snapshot.
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
+pub struct AlwaysSnapshot;
+
+impl SnapshotStrategy for AlwaysSnapshot {
+    fn snapshot_recommendation(&self, _: Version, _: Version) -> SnapshotRecommendation {
+        SnapshotRecommendation::ShouldSnapshot
+    }
 }
 
 #[cfg(test)]

@@ -27,6 +27,6 @@ mod types;
 #[doc(inline)]
 pub use aggregate::{Aggregate, AggregateCommand, AggregateEvent, AggregateId, Event, Events, SerializableEvent, DeserializableEvent, ExecuteTarget, AggregateIdentifiedBy, ApplyTarget, CommandError, EventFor, ProducedEvent, ProducedEvents};
 #[doc(inline)]
-pub use store::{EventSource, EventSink, SnapshotSource, SnapshotSink};
+pub use store::{EventSource, EventSink, SnapshotSource, SnapshotSink, SnapshotStrategy, NeverSnapshot, AlwaysSnapshot};
 #[doc(inline)]
-pub use types::{CqrsError, EventNumber, Version, Precondition, VersionedEvent, Since, VersionedAggregate, VersionedAggregateView};
+pub use types::{CqrsError, EventNumber, Version, Precondition, VersionedEvent, Since, SnapshotRecommendation, VersionedAggregate};

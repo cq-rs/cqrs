@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 use std::fmt;
 use std::marker::PhantomData;
 use trivial::NullStore;
-use cqrs_core::{Aggregate, AggregateCommand, AggregateId, Events, EventSource, EventSink, ExecuteTarget, SnapshotSource, SnapshotSink, EventNumber, Since, Version, VersionedAggregate, VersionedAggregateView, Precondition, CqrsError};
+use cqrs_core::{Aggregate, AggregateCommand, AggregateId, Events, EventSource, EventSink, ExecuteTarget, SnapshotSource, SnapshotSink, EventNumber, Since, Version, VersionedAggregate, Precondition, CqrsError};
 
 /// An aggregate that has been loaded from a source, which keeps track of the version of its last snapshot and the current version of the aggregate.
 #[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
@@ -27,6 +27,11 @@ where
     /// The version of the snapshot from which the aggregate was loaded.
     pub fn snapshot_version(&self) -> Version {
         self.snapshot_version
+    }
+
+    /// Updates the snapshot version. Generally used to indicate that a snapshot was taken.
+    pub fn set_snapshot_version(&mut self, new_snapshot_version: Version) {
+        self.snapshot_version = new_snapshot_version;
     }
 
     /// The actual aggregate.
@@ -329,7 +334,6 @@ where
         events: E,
         expected_version: Version,
         metadata: M,
-        max_events_before_snapshot: u64,
     ) -> EntityPersistResult<A, M, Self>
     where
         I: AggregateId<Aggregate=A>,
@@ -341,13 +345,8 @@ where
             aggregate.apply(event);
         }
 
-        if aggregate.version - aggregate.snapshot_version >= max_events_before_snapshot as i64 {
-            let view = VersionedAggregateView {
-                payload: &aggregate.state,
-                version: aggregate.version,
-            };
-            self.persist_snapshot(id, view).map_err(EntityPersistError::SnapshotSink)?
-        }
+        let new_snapshot_version = self.persist_snapshot(id, aggregate.state(), aggregate.version(), aggregate.snapshot_version()).map_err(EntityPersistError::SnapshotSink)?;
+        aggregate.set_snapshot_version(new_snapshot_version);
 
         Ok(())
     }
@@ -362,7 +361,6 @@ where
         command: C,
         precondition: Option<Precondition>,
         metadata: M,
-        max_events_before_snapshot: u64,
     ) -> EntityExecAndPersistResult<C, M, Self>
     where
         I: AggregateId<Aggregate=A>,
@@ -386,7 +384,6 @@ where
                     events,
                     expected_version,
                     metadata,
-                    max_events_before_snapshot,
                 ).map_err(EntityExecAndPersistError::Persist)?;
             },
             Err(e) => {
@@ -417,7 +414,6 @@ where
         command: C,
         precondition: Option<Precondition>,
         metadata: M,
-        max_events_before_snapshot: u64
     ) -> EntityResult<C, M, Self>
     where
         I: AggregateId<Aggregate=A>,
@@ -431,7 +427,6 @@ where
             command,
             precondition,
             metadata,
-            max_events_before_snapshot,
         )?;
 
         Ok(aggregate)
@@ -447,7 +442,6 @@ where
         command: C,
         precondition: Option<Precondition>,
         metadata: M,
-        max_events_before_snapshot: u64
     ) -> EntityOptionResult<C, M, Self>
     where
         I: AggregateId<Aggregate=A>,
@@ -461,7 +455,6 @@ where
                 command,
                 precondition,
                 metadata,
-                max_events_before_snapshot,
             )?;
 
             Ok(Some(aggregate))
@@ -650,11 +643,11 @@ where
 {
     type Error = SS::Error;
 
-    fn persist_snapshot<I>(&self, id: &I, aggregate: VersionedAggregateView<A>) -> Result<(), Self::Error>
+    fn persist_snapshot<I>(&self, id: &I, aggregate: &A, version: Version, last_snapshot_version: Version) -> Result<Version, Self::Error>
     where
         I: AggregateId<Aggregate=A>,
     {
-        self.snapshot_sink.persist_snapshot(id, aggregate)
+        self.snapshot_sink.persist_snapshot(id, aggregate, version, last_snapshot_version)
     }
 }
 
@@ -773,11 +766,11 @@ where
 {
     type Error = <SS as SnapshotSink<A>>::Error;
 
-    fn persist_snapshot<I>(&self, id: &I, aggregate: VersionedAggregateView<A>) -> Result<(), Self::Error>
+    fn persist_snapshot<I>(&self, id: &I, aggregate: &A, version: Version, last_snapshot_version: Version) -> Result<Version, Self::Error>
     where
         I: AggregateId<Aggregate=A>,
     {
-        self.entity_sink.persist_snapshot(id, aggregate)
+        self.entity_sink.persist_snapshot(id, aggregate, version, last_snapshot_version)
     }
 }
 

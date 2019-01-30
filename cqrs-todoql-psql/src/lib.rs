@@ -35,7 +35,20 @@ mod graphql;
 
 use r2d2_postgres::PostgresConnectionManager;
 
-type TodoStore<'conn> = cqrs_postgres::PostgresStore<'conn, cqrs_todo_core::TodoAggregate, cqrs_todo_core::TodoMetadata>;
+#[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
+struct SnapshotEvery10;
+
+impl cqrs::SnapshotStrategy for SnapshotEvery10 {
+    fn snapshot_recommendation(&self, version: cqrs::Version, last_snapshot_version: cqrs::Version) -> cqrs::SnapshotRecommendation {
+        if version - last_snapshot_version >= 10 {
+            cqrs::SnapshotRecommendation::ShouldSnapshot
+        } else {
+            cqrs::SnapshotRecommendation::DoNotSnapshot
+        }
+    }
+}
+
+type TodoStore<'conn> = cqrs_postgres::PostgresStore<'conn, cqrs_todo_core::TodoAggregate, cqrs_todo_core::TodoMetadata, SnapshotEvery10>;
 
 pub fn start_todo_server(conn_str: &str) -> iron::Listening {
     let pool = r2d2::Pool::new(PostgresConnectionManager::new(conn_str, r2d2_postgres::TlsMode::None).unwrap()).unwrap();
@@ -78,11 +91,11 @@ impl IdProvider {
 
 mod helper {
     use chrono::{Duration,Utc,TimeZone};
-    use cqrs::{Version, VersionedAggregateView};
-    use cqrs::{EventSink, SnapshotSink};
+    use cqrs::{AlwaysSnapshot, EventSink, SnapshotSink, Version};
     use cqrs_todo_core::{events, TodoEvent, TodoAggregate, TodoData, TodoId, TodoMetadata, TodoStatus, domain};
-    use super::TodoStore;
     use r2d2_postgres::postgres::Connection;
+
+    type TodoStore<'conn> = cqrs_postgres::PostgresStore<'conn, TodoAggregate, TodoMetadata, AlwaysSnapshot>;
 
     pub fn prefill(id: &TodoId, conn: impl ::std::ops::Deref<Target=Connection>) {
         let epoch = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
@@ -97,18 +110,22 @@ mod helper {
 
         let store = TodoStore::new(&*conn);
 
+        if let Err(err) = store.create_tables() {
+            eprintln!("Error preparing tables: {:?}", err);
+        }
+
         let metadata = TodoMetadata {
             initiated_by: String::from("prefill"),
         };
 
         store.append_events(id, &events, None, metadata).unwrap();
-        store.persist_snapshot(id, VersionedAggregateView {
-            version: Version::new(1),
-            payload: &TodoAggregate::Created(TodoData {
-                description: domain::Description::new("Hello!").unwrap(),
-                reminder: None,
-                status: TodoStatus::NotCompleted,
-            })
-        }).unwrap();
+
+        let quick_aggregate = TodoAggregate::Created(TodoData {
+            description: domain::Description::new("Hello!").unwrap(),
+            reminder: None,
+            status: TodoStatus::NotCompleted,
+        });
+
+        store.persist_snapshot(id, &quick_aggregate, Version::new(2), Version::Initial).unwrap();
     }
 }

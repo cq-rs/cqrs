@@ -1,5 +1,5 @@
 use std::{fmt, marker::PhantomData};
-use cqrs_core::{Aggregate, AggregateId, Event, EventNumber, EventSource, EventSink, Precondition, VersionedEvent, Since, Version, SerializableEvent, DeserializableEvent, SnapshotSink, SnapshotSource, VersionedAggregate, VersionedAggregateView};
+use cqrs_core::{Aggregate, AggregateId, Event, EventNumber, EventSource, EventSink, Precondition, VersionedEvent, Since, Version, SerializableEvent, DeserializableEvent, SnapshotSink, SnapshotStrategy, SnapshotRecommendation, SnapshotSource, VersionedAggregate, NeverSnapshot};
 use fallible_iterator::FallibleIterator;
 use postgres::Connection;
 use error::{LoadError, PersistError};
@@ -7,17 +7,20 @@ use util::{BorrowedJson, Json, RawJsonPersist, RawJsonRead};
 use serde::{de::DeserializeOwned, Serialize};
 
 /// A PostgreSQL storage backend.
-pub struct PostgresStore<'conn, A, M>
+pub struct PostgresStore<'conn, A, M, S = NeverSnapshot>
 where
     A: Aggregate,
+    S: SnapshotStrategy,
 {
     conn: &'conn Connection,
+    snapshot_strategy: S,
     _phantom: PhantomData<(A, M)>,
 }
 
-impl<'conn, A, M> fmt::Debug for PostgresStore<'conn, A, M>
+impl<'conn, A, M, S> fmt::Debug for PostgresStore<'conn, A, M, S>
 where
     A: Aggregate,
+    S: SnapshotStrategy,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("PostgresStore")
@@ -26,30 +29,54 @@ where
     }
 }
 
-impl<'conn, A, M> PostgresStore<'conn, A, M>
+impl<'conn, A, M, S> PostgresStore<'conn, A, M, S>
 where
     A: Aggregate,
+    S: SnapshotStrategy + Default,
 {
-    /// Constructs a transient store based on a provided PostgreSQL connection.
+    /// Constructs a transient store based on a provided PostgreSQL connection using the default snapshot strategy.
     pub fn new(conn: &'conn Connection) -> Self {
         PostgresStore {
             conn,
+            snapshot_strategy: S::default(),
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Constructs a transient store based on a provided PostgreSQL connection and snapshot strategy.
+    pub fn with_snapshot_strategy(conn: &'conn Connection, snapshot_strategy: S) -> Self {
+        PostgresStore {
+            conn,
+            snapshot_strategy,
             _phantom: PhantomData,
         }
     }
 
     /// Creates the base set of tables required to support the CQRS system.
     pub fn create_tables(&self) -> Result<(), postgres::Error> {
-        const CREATE_TABLES_QUERY: &str = include_str!("create_tables.sql");
-        self.conn.batch_execute(CREATE_TABLES_QUERY)
+        self.conn.batch_execute(include_str!("migrations/00_create_migrations.sql"))?;
+
+        let current_version: i32 =
+            self.conn.query("SELECT MAX(version) from migrations", &[])?
+                .iter()
+                .next()
+                .and_then(|r| r.get(0))
+                .unwrap_or_default();
+
+        if current_version < 1 {
+            self.conn.batch_execute(include_str!("migrations/01_create_tables.sql"))?;
+        }
+
+        Ok(())
     }
 }
 
-impl<'conn, A, M> EventSink<A, M> for PostgresStore<'conn, A, M>
+impl<'conn, A, M, S> EventSink<A, M> for PostgresStore<'conn, A, M, S>
 where
     A: Aggregate,
     A::Event: SerializableEvent + fmt::Debug,
     M: Serialize + fmt::Debug,
+    S: SnapshotStrategy,
 {
     type Error = PersistError<<A::Event as SerializableEvent>::Error>;
 
@@ -101,10 +128,11 @@ where
     }
 }
 
-impl<'conn, A, M> EventSource<A> for PostgresStore<'conn, A, M>
+impl<'conn, A, M, S> EventSource<A> for PostgresStore<'conn, A, M, S>
 where
     A: Aggregate,
     A::Event: DeserializableEvent,
+    S: SnapshotStrategy,
 {
     type Events = Vec<Result<VersionedEvent<A::Event>, Self::Error>>;
     type Error = LoadError<<A::Event as DeserializableEvent>::Error>;
@@ -162,26 +190,37 @@ where
     }
 }
 
-impl<'conn, A, M> SnapshotSink<A> for PostgresStore<'conn, A, M>
+impl<'conn, A, M, S> SnapshotSink<A> for PostgresStore<'conn, A, M, S>
 where
     A: Aggregate + Serialize + fmt::Debug,
+    S: SnapshotStrategy,
 {
     type Error = PersistError<serde_json::Error>;
 
-    fn persist_snapshot<I>(&self, id: &I, aggregate: VersionedAggregateView<A>) -> Result<(), Self::Error>
+    fn persist_snapshot<I>(&self, id: &I, aggregate: &A, version: Version, last_snapshot_version: Version) -> Result<Version, Self::Error>
     where
         I: AggregateId<Aggregate=A>,
     {
+        if version <= last_snapshot_version || self.snapshot_strategy.snapshot_recommendation(version, last_snapshot_version) == SnapshotRecommendation::DoNotSnapshot {
+            return Ok(last_snapshot_version);
+        }
+
         let stmt = self.conn.prepare_cached("INSERT INTO snapshots (entity_type, entity_id, sequence, payload) VALUES ($1, $2, $3, $4)")?;
-        let _modified_count = stmt.execute(&[&A::entity_type(), &id.as_ref(), &(aggregate.version.get() as i64), &Json(aggregate.payload)])?;
+        let _modified_count = stmt.execute(&[&A::entity_type(), &id.as_ref(), &(version.get() as i64), &Json(aggregate)])?;
+
+        // Clean up strategy for snapshots?
+//        let stmt = self.conn.prepare_cached("DELETE FROM snapshots WHERE entity_type = $1 AND entity_id = $2 AND sequence < $3")?;
+//        let _modified_count = stmt.execute(&[&A::entity_type(), &id.as_ref(), &(version.get() as i64)])?;
+
         log::trace!("entity {}: persisted snapshot", id.as_ref());
-        Ok(())
+        Ok(version)
     }
 }
 
-impl<'conn, A, M> SnapshotSource<A> for PostgresStore<'conn, A, M>
+impl<'conn, A, M, S> SnapshotSource<A> for PostgresStore<'conn, A, M, S>
 where
-    A: Aggregate + DeserializeOwned
+    A: Aggregate + DeserializeOwned,
+    S: SnapshotStrategy,
 {
     type Error = postgres::Error;
 

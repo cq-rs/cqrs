@@ -2,7 +2,7 @@
 
 use std::iter::Empty;
 use void::Void;
-use cqrs_core::{Aggregate, AggregateId, EventSource, EventSink, SnapshotSource, SnapshotSink, EventNumber, VersionedEvent, Since, VersionedAggregate, VersionedAggregateView, Precondition};
+use cqrs_core::{Aggregate, AggregateId, EventSource, EventSink, SnapshotSource, SnapshotSink, EventNumber, VersionedEvent, Since, VersionedAggregate, Version, Precondition};
 
 /// A trivial store that never has any events or snapshots, and which always succeeds in
 /// persisting data (which is immediately dropped).
@@ -63,12 +63,12 @@ where
     type Error = Void;
 
     #[inline]
-    fn persist_snapshot<I>(&self, _id: &I, _aggregate: VersionedAggregateView<A>) -> Result<(), Self::Error>
+    fn persist_snapshot<I>(&self, _id: &I, _aggregate: &A, _version: Version, last_snapshot_version: Version) -> Result<Version, Self::Error>
     where
         I: AggregateId<Aggregate=A>,
         Self: Sized,
     {
-        Ok(())
+        Ok(last_snapshot_version)
     }
 }
 
