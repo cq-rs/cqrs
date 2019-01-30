@@ -81,8 +81,8 @@ where
     pub fn get_entity_count(&self) -> Result<u64, postgres::Error> {
         let stmt = self.conn.prepare_cached(
             "SELECT COUNT(DISTINCT entity_id) \
-            FROM events \
-            WHERE entity_type = $1",
+             FROM events \
+             WHERE entity_type = $1",
         )?;
         let rows = stmt.query(&[&A::aggregate_type()])?;
         Ok(rows
@@ -96,13 +96,17 @@ where
     pub fn get_entity_ids(&self, offset: u32, limit: u32) -> Result<Vec<String>, postgres::Error> {
         let stmt = self.conn.prepare_cached(
             "SELECT entity_id \
-            FROM events \
-            WHERE entity_type = $1 \
-            GROUP BY entity_id \
-            ORDER BY MIN(event_id) ASC \
-            OFFSET $2 LIMIT $3",
+             FROM events \
+             WHERE entity_type = $1 \
+             GROUP BY entity_id \
+             ORDER BY MIN(event_id) ASC \
+             OFFSET $2 LIMIT $3",
         )?;
-        let rows = stmt.query(&[&A::aggregate_type(), &(i64::from(offset)), &(i64::from(limit))])?;
+        let rows = stmt.query(&[
+            &A::aggregate_type(),
+            &(i64::from(offset)),
+            &(i64::from(limit)),
+        ])?;
         Ok(rows.iter().map(|r| r.get(0)).collect())
     }
 
@@ -117,8 +121,8 @@ where
     pub fn get_entity_count_matching_pattern(&self, pattern: &str) -> Result<u64, postgres::Error> {
         let stmt = self.conn.prepare_cached(
             "SELECT COUNT(DISTINCT entity_id) \
-            FROM events \
-            WHERE entity_type = $1 AND entity_id LIKE $2",
+             FROM events \
+             WHERE entity_type = $1 AND entity_id LIKE $2",
         )?;
         let rows = stmt.query(&[&A::aggregate_type(), &pattern])?;
         Ok(rows
@@ -144,11 +148,11 @@ where
     ) -> Result<Vec<String>, postgres::Error> {
         let stmt = self.conn.prepare_cached(
             "SELECT entity_id \
-            FROM events \
-            WHERE entity_type = $1 AND entity_id LIKE $2 \
-            GROUP BY entity_id \
-            ORDER BY MIN(event_id) ASC \
-            OFFSET $3 LIMIT $4",
+             FROM events \
+             WHERE entity_type = $1 AND entity_id LIKE $2 \
+             GROUP BY entity_id \
+             ORDER BY MIN(event_id) ASC \
+             OFFSET $3 LIMIT $4",
         )?;
         let rows = stmt.query(&[
             &A::aggregate_type(),
@@ -165,8 +169,8 @@ where
     pub fn get_entity_count_matching_sql_regex(&self, regex: &str) -> Result<u64, postgres::Error> {
         let stmt = self.conn.prepare_cached(
             "SELECT COUNT(DISTINCT entity_id) \
-            FROM events \
-            WHERE entity_type = $1 AND entity_id SIMILAR TO $2",
+             FROM events \
+             WHERE entity_type = $1 AND entity_id SIMILAR TO $2",
         )?;
         let rows = stmt.query(&[&A::aggregate_type(), &regex])?;
         Ok(rows
@@ -187,11 +191,11 @@ where
     ) -> Result<Vec<String>, postgres::Error> {
         let stmt = self.conn.prepare_cached(
             "SELECT entity_id \
-            FROM events \
-            WHERE entity_type = $1 AND entity_id SIMILAR TO $2 \
-            GROUP BY entity_id \
-            ORDER BY MIN(event_id) ASC \
-            OFFSET $3 LIMIT $4",
+             FROM events \
+             WHERE entity_type = $1 AND entity_id SIMILAR TO $2 \
+             GROUP BY entity_id \
+             ORDER BY MIN(event_id) ASC \
+             OFFSET $3 LIMIT $4",
         )?;
         let rows = stmt.query(&[
             &A::aggregate_type(),
@@ -211,8 +215,8 @@ where
     ) -> Result<u64, postgres::Error> {
         let stmt = self.conn.prepare_cached(
             "SELECT COUNT(DISTINCT entity_id) \
-            FROM events \
-            WHERE entity_type = $1 AND entity_id ~ $2",
+             FROM events \
+             WHERE entity_type = $1 AND entity_id ~ $2",
         )?;
         let rows = stmt.query(&[&A::aggregate_type(), &regex])?;
         Ok(rows
@@ -233,11 +237,11 @@ where
     ) -> Result<Vec<String>, postgres::Error> {
         let stmt = self.conn.prepare_cached(
             "SELECT entity_id \
-            FROM events \
-            WHERE entity_type = $1 AND entity_id ~ $2 \
-            GROUP BY entity_id \
-            ORDER BY MIN(event_id) ASC \
-            OFFSET $3 LIMIT $4",
+             FROM events \
+             WHERE entity_type = $1 AND entity_id ~ $2 \
+             GROUP BY entity_id \
+             ORDER BY MIN(event_id) ASC \
+             OFFSET $3 LIMIT $4",
         )?;
         let rows = stmt.query(&[
             &A::aggregate_type(),
@@ -386,10 +390,10 @@ where
             if let Some(max_count) = max_count {
                 stmt = trans.prepare_cached(
                     "SELECT sequence, event_type, payload \
-                    FROM events \
-                    WHERE entity_type = $1 AND entity_id = $2 AND sequence > $3 \
-                    ORDER BY sequence ASC \
-                    LIMIT $4",
+                     FROM events \
+                     WHERE entity_type = $1 AND entity_id = $2 AND sequence > $3 \
+                     ORDER BY sequence ASC \
+                     LIMIT $4",
                 )?;
                 rows = stmt.lazy_query(
                     &trans,
@@ -404,9 +408,9 @@ where
             } else {
                 stmt = trans.prepare_cached(
                     "SELECT sequence, event_type, payload \
-                    FROM events \
-                    WHERE entity_type = $1 AND entity_id = $2 AND sequence > $3 \
-                    ORDER BY sequence ASC",
+                     FROM events \
+                     WHERE entity_type = $1 AND entity_id = $2 AND sequence > $3 \
+                     ORDER BY sequence ASC",
                 )?;
                 rows = stmt.lazy_query(
                     &trans,
@@ -461,7 +465,7 @@ where
 
         let stmt = self.conn.prepare_cached(
             "INSERT INTO snapshots (entity_type, entity_id, sequence, payload) \
-            VALUES ($1, $2, $3, $4)",
+             VALUES ($1, $2, $3, $4)",
         )?;
         let _modified_count = stmt.execute(&[
             &A::aggregate_type(),
@@ -492,10 +496,10 @@ where
     {
         let stmt = self.conn.prepare_cached(
             "SELECT sequence, payload \
-            FROM snapshots \
-            WHERE entity_type = $1 AND entity_id = $2 \
-            ORDER BY sequence DESC \
-            LIMIT 1",
+             FROM snapshots \
+             WHERE entity_type = $1 AND entity_id = $2 \
+             ORDER BY sequence DESC \
+             LIMIT 1",
         )?;
         let rows = stmt.query(&[&A::aggregate_type(), &id.as_ref()])?;
         if let Some(row) = rows.iter().next() {

@@ -273,12 +273,10 @@ impl DeserializableEvent for TodoEvent {
     ) -> Result<Option<Self>, Self::Error> {
         let deserialized = match event_type {
             "todo_created" => TodoEvent::Created(serde_json::from_slice(data)?),
-            "todo_reminder_updated" => TodoEvent::ReminderUpdated(
-                serde_json::from_slice(data)?,
-            ),
-            "todo_description_updated" => TodoEvent::DescriptionUpdated(
-                serde_json::from_slice(data)?,
-            ),
+            "todo_reminder_updated" => TodoEvent::ReminderUpdated(serde_json::from_slice(data)?),
+            "todo_description_updated" => {
+                TodoEvent::DescriptionUpdated(serde_json::from_slice(data)?)
+            },
             "todo_completed" => TodoEvent::Completed(serde_json::from_slice(data)?),
             "todo_uncompleted" => TodoEvent::Uncompleted(serde_json::from_slice(data)?),
             _ => return Ok(None),
