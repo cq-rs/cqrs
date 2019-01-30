@@ -1,4 +1,4 @@
-use types::CqrsError;
+use crate::types::CqrsError;
 
 /// A projected state built from a series of events.
 pub trait Aggregate: Default {

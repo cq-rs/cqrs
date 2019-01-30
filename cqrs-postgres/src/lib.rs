@@ -17,13 +17,6 @@
     unused_must_use
 )]
 
-extern crate cqrs_core;
-extern crate fallible_iterator;
-extern crate log;
-extern crate postgres;
-extern crate serde;
-extern crate serde_json;
-
 #[cfg(test)]
 extern crate cqrs;
 #[cfg(test)]
@@ -36,9 +29,9 @@ mod store;
 mod util;
 
 #[doc(inline)]
-pub use error::{LoadError, PersistError};
+pub use crate::error::{LoadError, PersistError};
 #[doc(inline)]
-pub use store::PostgresStore;
+pub use crate::store::PostgresStore;
 
 #[cfg(test)]
 mod tests {

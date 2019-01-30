@@ -13,23 +13,10 @@
     missing_docs
 )]
 
-extern crate arrayvec;
-extern crate chrono;
-extern crate cqrs_core;
-#[cfg(test)]
-extern crate cqrs_proptest;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate log;
-#[cfg(test)]
-extern crate pretty_assertions;
-#[cfg(test)]
-extern crate proptest;
-
 use cqrs_core::{
     Aggregate, AggregateEvent, AggregateId, DeserializableEvent, Event, SerializableEvent,
 };
+use serde::{Deserialize, Serialize};
 
 pub mod commands;
 pub mod domain;
@@ -612,7 +599,7 @@ mod tests {
         }
 
         fn verify_serializable_roundtrips_through_serialization<
-            V: serde::Serialize + for<'de> serde::Deserialize<'de> + Eq + fmt::Debug,
+            V: Serialize + for<'de> Deserialize<'de> + Eq + fmt::Debug,
         >(
             original: V,
         ) {

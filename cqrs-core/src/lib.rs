@@ -21,18 +21,18 @@ mod store;
 mod types;
 
 #[doc(inline)]
-pub use aggregate::{
+pub use crate::aggregate::{
     Aggregate, AggregateCommand, AggregateEvent, AggregateId, AggregateIdentifiedBy, ApplyTarget,
     CommandError, DeserializableEvent, Event, EventFor, Events, ExecuteTarget, ProducedEvent,
     ProducedEvents, SerializableEvent,
 };
 #[doc(inline)]
-pub use store::{
+pub use crate::store::{
     AlwaysSnapshot, EventSink, EventSource, NeverSnapshot, SnapshotSink, SnapshotSource,
     SnapshotStrategy,
 };
 #[doc(inline)]
-pub use types::{
+pub use crate::types::{
     CqrsError, EventNumber, Precondition, Since, SnapshotRecommendation, Version,
     VersionedAggregate, VersionedEvent,
 };

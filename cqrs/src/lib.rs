@@ -13,11 +13,6 @@
     missing_docs
 )]
 
-extern crate cqrs_core;
-extern crate hashbrown;
-extern crate parking_lot;
-extern crate void;
-
 pub mod memory;
 pub mod trivial;
 
@@ -27,9 +22,9 @@ mod entity;
 mod testing;
 
 #[doc(inline)]
-pub use cqrs_core::*;
-#[doc(inline)]
-pub use entity::{
+pub use crate::entity::{
     CompositeEntitySink, CompositeEntitySource, CompositeEntityStore, Entity, EntitySink,
     EntitySource, EntityStore,
 };
+#[doc(inline)]
+pub use cqrs_core::*;

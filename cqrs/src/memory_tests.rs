@@ -1,7 +1,5 @@
 use super::*;
-use testing::*;
-use EventSink;
-use EventSource;
+use crate::testing::*;
 
 type TestMemoryEventStore = EventStore<TestAggregate, TestMetadata>;
 

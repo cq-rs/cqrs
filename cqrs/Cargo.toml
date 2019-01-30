@@ -4,6 +4,7 @@ version = "0.1.0-alpha.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
 description = "An event-sourced command-query system"
 license = "Apache-2.0"
+edition = "2018"
 
 [dependencies]
 cqrs-core = { path = "../cqrs-core", version = "0.1.0-alpha.0" }

@@ -1,7 +1,8 @@
 //! Special types that may require validation to ensure they don't contain invalid values.
 
+use crate::error::{InvalidDescription, InvalidReminderTime};
 use chrono::{DateTime, Utc};
-use error::{InvalidDescription, InvalidReminderTime};
+use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 
 /// A time at which a user should be reminded that they have something to do.

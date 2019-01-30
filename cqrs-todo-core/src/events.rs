@@ -2,6 +2,7 @@
 
 use crate::domain;
 use cqrs_core::Event;
+use serde::{Deserialize, Serialize};
 
 /// A to-do was created.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

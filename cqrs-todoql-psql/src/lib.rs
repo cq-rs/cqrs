@@ -7,24 +7,8 @@
     unused_must_use
 )]
 
-extern crate cqrs;
-extern crate cqrs_postgres;
-extern crate cqrs_todo_core;
-
 #[macro_use]
 extern crate juniper;
-extern crate base64;
-extern crate chrono;
-extern crate hashids;
-extern crate iron;
-extern crate juniper_iron;
-extern crate mount;
-extern crate parking_lot;
-extern crate r2d2;
-extern crate r2d2_postgres;
-extern crate serde;
-extern crate serde_json;
-extern crate void;
 
 mod graphql;
 

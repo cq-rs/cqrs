@@ -1,14 +1,16 @@
+use crate::{
+    error::{LoadError, PersistError},
+    util::{BorrowedJson, Json, RawJsonPersist, RawJsonRead},
+};
 use cqrs_core::{
     Aggregate, AggregateId, DeserializableEvent, Event, EventNumber, EventSink, EventSource,
     NeverSnapshot, Precondition, SerializableEvent, Since, SnapshotRecommendation, SnapshotSink,
     SnapshotSource, SnapshotStrategy, Version, VersionedAggregate, VersionedEvent,
 };
-use error::{LoadError, PersistError};
 use fallible_iterator::FallibleIterator;
 use postgres::Connection;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{fmt, marker::PhantomData};
-use util::{BorrowedJson, Json, RawJsonPersist, RawJsonRead};
 
 /// A PostgreSQL storage backend.
 pub struct PostgresStore<'conn, A, M, S = NeverSnapshot>

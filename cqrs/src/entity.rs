@@ -1,3 +1,4 @@
+use crate::trivial::NullStore;
 use cqrs_core::{
     Aggregate, AggregateCommand, AggregateId, CqrsError, EventNumber, EventSink, EventSource,
     Events, ExecuteTarget, Precondition, Since, SnapshotSink, SnapshotSource, Version,
@@ -8,7 +9,6 @@ use std::{
     fmt,
     marker::PhantomData,
 };
-use trivial::NullStore;
 
 /// An aggregate that has been loaded from a source, which keeps track of the version of its last snapshot and the current version of the aggregate.
 #[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
@@ -1029,8 +1029,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use memory::StateStore;
-    use testing::*;
+    use crate::{memory::StateStore, testing::*};
 
     #[test]
     fn can_construct_composite_entity_source() {

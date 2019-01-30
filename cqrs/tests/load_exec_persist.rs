@@ -1,7 +1,3 @@
-extern crate cqrs;
-extern crate cqrs_todo_core;
-extern crate void;
-
 use std::{
     cell::RefCell,
     collections::{hash_map::Entry, HashMap},

@@ -1,7 +1,9 @@
-use aggregate::{Aggregate, AggregateId};
-use types::{
-    CqrsError, EventNumber, Precondition, Since, SnapshotRecommendation, Version,
-    VersionedAggregate, VersionedEvent,
+use crate::{
+    aggregate::{Aggregate, AggregateId},
+    types::{
+        CqrsError, EventNumber, Precondition, Since, SnapshotRecommendation, Version,
+        VersionedAggregate, VersionedEvent,
+    },
 };
 
 /// A source for reading/loading events.
