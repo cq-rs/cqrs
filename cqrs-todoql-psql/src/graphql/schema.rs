@@ -35,7 +35,7 @@ graphql_object!(Query: Context |&self| {
             }
         };
 
-        let mut offset = {
+        let offset = {
             if let Some(Cursor(cursor)) = after {
                 cursor + 1
             } else {
@@ -175,14 +175,18 @@ graphql_scalar!(Cursor {
     description: "An opaque identifier, represented as a location in an enumeration"
 
     resolve(&self) -> Value {
-        Value::string(self.to_string())
+        Value::scalar(self.to_string())
     }
 
     from_input_value(v: &InputValue) -> Option<Cursor> {
-        v.as_string_value()
+        v.as_scalar_value::<String>()
             .and_then(|v| base64::decode(v).ok())
             .and_then(|v| String::from_utf8_lossy(&v).parse::<u32>().ok())
             .map(Cursor)
+    }
+
+    from_str<'a>(value: ScalarToken<'a>) -> juniper::ParseScalarResult<'a> {
+        <String as juniper::ParseScalarValue>::from_str(value)
     }
 });
 
