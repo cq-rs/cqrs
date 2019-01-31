@@ -617,7 +617,7 @@ mod tests {
 
             #[test]
             fn arbitrary_aggregate_roundtrips_through_serialization(arg in any::<ArbitraryTodoAggregate>()) {
-                verify_serializable_roundtrips_through_serialization(dbg!(arg.into_aggregate()));
+                verify_serializable_roundtrips_through_serialization(arg.into_aggregate());
             }
 
             #[test]
