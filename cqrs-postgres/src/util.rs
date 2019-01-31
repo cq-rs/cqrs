@@ -1,4 +1,4 @@
-use postgres::types::{FromSql, IsNull, ToSql, Type, BYTEA, JSON, JSONB};
+use postgres::types::{FromSql, IsNull, ToSql, Type, BYTEA, INT8, JSON, JSONB};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{error::Error, fmt};
 
@@ -99,5 +99,22 @@ impl FromSql for RawJsonRead {
             }
         }
         Ok(RawJsonRead(Vec::from(raw)))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub struct Sequence(pub cqrs_core::EventNumber);
+
+impl FromSql for Sequence {
+    postgres::accepts!(INT8);
+
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
+        let value = i64::from_sql(ty, raw)?;
+        if value < 0 {
+            return Err("Invalid event sequence number, negative values are not allowed".into());
+        }
+        let event_number = cqrs_core::EventNumber::new(value as u64)
+            .ok_or_else(|| "Invalid event sequence number, zero is not a valid sequence number")?;
+        Ok(Sequence(event_number))
     }
 }

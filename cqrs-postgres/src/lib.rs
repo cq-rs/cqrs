@@ -28,6 +28,8 @@ mod error;
 mod store;
 mod util;
 
+pub mod raw;
+
 #[doc(inline)]
 pub use crate::error::{LoadError, PersistError};
 #[doc(inline)]

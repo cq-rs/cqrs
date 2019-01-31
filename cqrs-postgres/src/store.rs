@@ -1,6 +1,6 @@
 use crate::{
     error::{LoadError, PersistError},
-    util::{BorrowedJson, Json, RawJsonPersist, RawJsonRead},
+    util::{BorrowedJson, Json, RawJsonPersist, RawJsonRead, Sequence},
 };
 use cqrs_core::{
     Aggregate, AggregateId, DeserializableEvent, Event, EventNumber, EventSink, EventSource,
@@ -13,6 +13,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::{fmt, marker::PhantomData};
 
 /// A PostgreSQL storage backend.
+#[derive(Clone)]
 pub struct PostgresStore<'conn, A, M, S = NeverSnapshot>
 where
     A: Aggregate,
@@ -26,11 +27,13 @@ where
 impl<'conn, A, M, S> fmt::Debug for PostgresStore<'conn, A, M, S>
 where
     A: Aggregate,
-    S: SnapshotStrategy,
+    S: SnapshotStrategy + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("PostgresStore")
             .field("conn", &*self.conn)
+            .field("strategy", &self.snapshot_strategy)
+            .field("phantom", &self._phantom)
             .finish()
     }
 }
@@ -40,6 +43,8 @@ where
     A: Aggregate,
     S: SnapshotStrategy + Default,
 {
+    const DB_VERSION: u32 = 1;
+
     /// Constructs a transient store based on a provided PostgreSQL connection using the default snapshot strategy.
     pub fn new(conn: &'conn Connection) -> Self {
         PostgresStore {
@@ -79,12 +84,38 @@ where
         Ok(())
     }
 
+    /// Checks to see if the database is the latest version as seen by the current executable..
+    pub fn is_latest(&self) -> Result<bool, postgres::Error> {
+        let current_version: i32 = self
+            .conn
+            .query("SELECT MAX(version) from migrations", &[])?
+            .iter()
+            .next()
+            .and_then(|r| r.get(0))
+            .unwrap_or_default();
+
+        Ok(Self::DB_VERSION == current_version as u32)
+    }
+
+    /// Checks to see if the database is compatible with the current executable.
+    pub fn is_compatible(&self) -> Result<bool, postgres::Error> {
+        let current_version: i32 = self
+            .conn
+            .query("SELECT MAX(version) from migrations", &[])?
+            .iter()
+            .next()
+            .and_then(|r| r.get(0))
+            .unwrap_or_default();
+
+        Ok(Self::DB_VERSION >= current_version as u32)
+    }
+
     /// Gets the total number of entities of this type in the store.
     pub fn get_entity_count(&self) -> Result<u64, postgres::Error> {
         let stmt = self.conn.prepare_cached(
             "SELECT COUNT(DISTINCT entity_id) \
              FROM events \
-             WHERE entity_type = $1",
+             WHERE aggregate_type = $1",
         )?;
         let rows = stmt.query(&[&A::aggregate_type()])?;
         Ok(rows
@@ -99,7 +130,7 @@ where
         let stmt = self.conn.prepare_cached(
             "SELECT entity_id \
              FROM events \
-             WHERE entity_type = $1 \
+             WHERE aggregate_type = $1 \
              GROUP BY entity_id \
              ORDER BY MIN(event_id) ASC \
              OFFSET $2 LIMIT $3",
@@ -124,7 +155,7 @@ where
         let stmt = self.conn.prepare_cached(
             "SELECT COUNT(DISTINCT entity_id) \
              FROM events \
-             WHERE entity_type = $1 AND entity_id LIKE $2",
+             WHERE aggregate_type = $1 AND entity_id LIKE $2",
         )?;
         let rows = stmt.query(&[&A::aggregate_type(), &pattern])?;
         Ok(rows
@@ -151,7 +182,7 @@ where
         let stmt = self.conn.prepare_cached(
             "SELECT entity_id \
              FROM events \
-             WHERE entity_type = $1 AND entity_id LIKE $2 \
+             WHERE aggregate_type = $1 AND entity_id LIKE $2 \
              GROUP BY entity_id \
              ORDER BY MIN(event_id) ASC \
              OFFSET $3 LIMIT $4",
@@ -172,7 +203,7 @@ where
         let stmt = self.conn.prepare_cached(
             "SELECT COUNT(DISTINCT entity_id) \
              FROM events \
-             WHERE entity_type = $1 AND entity_id SIMILAR TO $2",
+             WHERE aggregate_type = $1 AND entity_id SIMILAR TO $2",
         )?;
         let rows = stmt.query(&[&A::aggregate_type(), &regex])?;
         Ok(rows
@@ -194,7 +225,7 @@ where
         let stmt = self.conn.prepare_cached(
             "SELECT entity_id \
              FROM events \
-             WHERE entity_type = $1 AND entity_id SIMILAR TO $2 \
+             WHERE aggregate_type = $1 AND entity_id SIMILAR TO $2 \
              GROUP BY entity_id \
              ORDER BY MIN(event_id) ASC \
              OFFSET $3 LIMIT $4",
@@ -218,7 +249,7 @@ where
         let stmt = self.conn.prepare_cached(
             "SELECT COUNT(DISTINCT entity_id) \
              FROM events \
-             WHERE entity_type = $1 AND entity_id ~ $2",
+             WHERE aggregate_type = $1 AND entity_id ~ $2",
         )?;
         let rows = stmt.query(&[&A::aggregate_type(), &regex])?;
         Ok(rows
@@ -240,7 +271,7 @@ where
         let stmt = self.conn.prepare_cached(
             "SELECT entity_id \
              FROM events \
-             WHERE entity_type = $1 AND entity_id ~ $2 \
+             WHERE aggregate_type = $1 AND entity_id ~ $2 \
              GROUP BY entity_id \
              ORDER BY MIN(event_id) ASC \
              OFFSET $3 LIMIT $4",
@@ -277,13 +308,13 @@ where
         let trans = self.conn.transaction()?;
 
         let check_stmt = trans.prepare_cached(
-            "SELECT MAX(sequence) FROM events WHERE entity_type = $1 AND entity_id = $2",
+            "SELECT MAX(sequence) FROM events WHERE aggregate_type = $1 AND entity_id = $2",
         )?;
 
         let result = check_stmt.query(&[&A::aggregate_type(), &id.as_ref()])?;
         let current_version = result.iter().next().and_then(|r| {
-            let max_sequence: Option<i64> = r.get(0);
-            max_sequence.map(|x| Version::new(x as u64))
+            let max_sequence: Option<Sequence> = r.get(0);
+            max_sequence.map(|x| Version::from(x.0))
         });
 
         log::trace!(
@@ -307,7 +338,7 @@ where
         let mut buffer = Vec::with_capacity(128);
 
         let stmt = trans.prepare_cached(
-            "INSERT INTO events (entity_type, entity_id, sequence, event_type, payload, metadata, timestamp) \
+            "INSERT INTO events (aggregate_type, entity_id, sequence, event_type, payload, metadata, timestamp) \
             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)",
         )?;
         for event in events {
@@ -368,7 +399,7 @@ where
 
         let handle_row = |row: postgres::rows::Row| {
             let event_type: String = row.get("event_type");
-            let sequence: i64 = row.get("sequence");
+            let sequence: Sequence = row.get("sequence");
             let raw: RawJsonRead = row.get("payload");
             let event = A::Event::deserialize_event_from_buffer(&raw.0, &event_type)
                 .map_err(LoadError::DeserializationError)?
@@ -376,12 +407,11 @@ where
             log::trace!(
                 "entity {}: loaded event; sequence: {}, type: {}",
                 id.as_ref(),
-                sequence,
+                sequence.0,
                 event_type
             );
             Ok(VersionedEvent {
-                sequence: EventNumber::new(sequence as u64)
-                    .expect("Sequence number should be non-zero"),
+                sequence: sequence.0,
                 event,
             })
         };
@@ -393,7 +423,7 @@ where
                 stmt = trans.prepare_cached(
                     "SELECT sequence, event_type, payload \
                      FROM events \
-                     WHERE entity_type = $1 AND entity_id = $2 AND sequence > $3 \
+                     WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
                      ORDER BY sequence ASC \
                      LIMIT $4",
                 )?;
@@ -411,7 +441,7 @@ where
                 stmt = trans.prepare_cached(
                     "SELECT sequence, event_type, payload \
                      FROM events \
-                     WHERE entity_type = $1 AND entity_id = $2 AND sequence > $3 \
+                     WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
                      ORDER BY sequence ASC",
                 )?;
                 rows = stmt.lazy_query(
@@ -466,7 +496,7 @@ where
         }
 
         let stmt = self.conn.prepare_cached(
-            "INSERT INTO snapshots (entity_type, entity_id, sequence, payload) \
+            "INSERT INTO snapshots (aggregate_type, entity_id, sequence, payload) \
              VALUES ($1, $2, $3, $4)",
         )?;
         let _modified_count = stmt.execute(&[
@@ -477,8 +507,8 @@ where
         ])?;
 
         // Clean up strategy for snapshots?
-        //        let stmt = self.conn.prepare_cached("DELETE FROM snapshots WHERE entity_type = $1 AND entity_id = $2 AND sequence < $3")?;
-        //        let _modified_count = stmt.execute(&[&A::entity_type(), &id.as_ref(), &(version.get() as i64)])?;
+        //        let stmt = self.conn.prepare_cached("DELETE FROM snapshots WHERE aggregate_type = $1 AND entity_id = $2 AND sequence < $3")?;
+        //        let _modified_count = stmt.execute(&[&A::aggregate_type(), &id.as_ref(), &(version.get() as i64)])?;
 
         log::trace!("entity {}: persisted snapshot", id.as_ref());
         Ok(version)
@@ -499,17 +529,17 @@ where
         let stmt = self.conn.prepare_cached(
             "SELECT sequence, payload \
              FROM snapshots \
-             WHERE entity_type = $1 AND entity_id = $2 \
+             WHERE aggregate_type = $1 AND entity_id = $2 \
              ORDER BY sequence DESC \
              LIMIT 1",
         )?;
         let rows = stmt.query(&[&A::aggregate_type(), &id.as_ref()])?;
         if let Some(row) = rows.iter().next() {
-            let sequence: i64 = row.get("sequence");
+            let sequence: Sequence = row.get("sequence");
             let raw: Json<A> = row.get("payload");
             log::trace!("entity {}: loaded snapshot", id.as_ref());
             Ok(Some(VersionedAggregate {
-                version: Version::new(sequence as u64),
+                version: Version::from(sequence.0),
                 payload: raw.0,
             }))
         } else {
