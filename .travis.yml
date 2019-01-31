@@ -1,0 +1,39 @@
+language: rust
+
+matrix:
+  include:
+    - rust: stable
+    - rust: beta
+    - rust: nightly
+      name: "Rust: nightly"
+
+    - rust: 1.31.0
+
+    - rust: stable
+      name: clippy
+      before_script:
+        - rustup component add clippy
+      script:
+        - cargo clippy
+
+    - rust: nightly
+      name: wasm32
+      before_script:
+        - rustup target add wasm32-unknown-unknown
+      script:
+        - cargo build --target=wasm32-unknown-unknown -p cqrs-core -p cqrs -p cqrs-todo-core
+
+    - rust: nightly
+      name: rustfmt
+      before_script:
+        - rustup component add rustfmt
+      script:
+        - cargo fmt -- --check
+
+  allow_failures:
+    - rust: nightly
+      name: "Rust: nightly"
+
+script:
+  - cargo build
+  - cargo test
