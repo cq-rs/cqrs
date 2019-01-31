@@ -11,3 +11,5 @@ edition = "2018"
 [dev-dependencies]
 void = "1.0"
 
+[badges]
+travis-ci = { repository = "cq-rs/cqrs", branch = "master" }

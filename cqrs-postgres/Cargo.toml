@@ -18,3 +18,6 @@ serde_json = "1.0"
 cqrs = { path = "../cqrs", version = "0.1.0-alpha.0" }
 cqrs-todo-core = { path = "../cqrs-todo-core", version = "0.1.0-alpha.0" }
 static_assertions = "0.3"
+
+[badges]
+travis-ci = { repository = "cq-rs/cqrs", branch = "master" }
