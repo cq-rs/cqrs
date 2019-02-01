@@ -11,7 +11,7 @@ The framework is built around a few key concepts:
 * _Commands_: Intentions which, when executed against an aggregate, may produce
     zero or more events, or which may be prohibited by the current state of
     an aggregate
-* _Reactions_: Processes that execute an action when a certain events are occur
+* _Reactions_: Processes that execute an action when certain events occur
      in the system
 
 The framework is written to be applicable to a generic backend, with an
