@@ -16,8 +16,6 @@
 //! }
 //!
 //! impl Aggregate for MyAggregate {
-//!     type Event = MyEvents;
-//!
 //!     fn aggregate_type() -> &'static str {
 //!         "my_aggregate"
 //!     }
@@ -32,10 +30,8 @@
 //!     }
 //! }
 //!
-//! impl AggregateEvent for CreatedEvent {
-//!     type Aggregate = MyAggregate;
-//!
-//!     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+//! impl AggregateEvent<MyAggregate> for CreatedEvent {
+//!     fn apply_to(self, aggregate: &mut MyAggregate) {
 //!         aggregate.active = true;
 //!     }
 //! }
@@ -49,10 +45,8 @@
 //!     }
 //! }
 //!
-//! impl AggregateEvent for DeletedEvent {
-//!     type Aggregate = MyAggregate;
-//!
-//!     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+//! impl AggregateEvent<MyAggregate> for DeletedEvent {
+//!     fn apply_to(self, aggregate: &mut MyAggregate) {
 //!         aggregate.active = false;
 //!     }
 //! }
@@ -72,10 +66,8 @@
 //!     }
 //! }
 //!
-//! impl AggregateEvent for MyEvents {
-//!     type Aggregate = MyAggregate;
-//!
-//!     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+//! impl AggregateEvent<MyAggregate> for MyEvents {
+//!     fn apply_to(self, aggregate: &mut MyAggregate) {
 //!         match self {
 //!             MyEvents::Created(e) => e.apply_to(aggregate),
 //!             MyEvents::Deleted(e) => e.apply_to(aggregate),
@@ -96,14 +88,14 @@
 //!     type Strategy = TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
 //! }
 //!
-//! any::<AggregateFromEventSequence<MyAggregate>>()
+//! any::<AggregateFromEventSequence<MyAggregate, MyEvents>>()
 //!     .new_tree(&mut TestRunner::default())
 //!     .unwrap()
 //!     .current()
 //!     .into_aggregate();
 //!
 //! let parameters = (prop::collection::SizeRange::from(1..10), ());
-//! any_with::<AggregateFromEventSequence<MyAggregate>>(parameters)
+//! any_with::<AggregateFromEventSequence<MyAggregate, MyEvents>>(parameters)
 //!     .new_tree(&mut TestRunner::default())
 //!     .unwrap()
 //!     .current();
@@ -120,9 +112,9 @@
     missing_docs
 )]
 
-use cqrs_core::{Aggregate, DeserializableEvent, Event, SerializableEvent};
+use cqrs_core::{Aggregate, AggregateEvent, DeserializableEvent, Event, SerializableEvent};
 use proptest::prelude::*;
-use std::fmt;
+use std::{fmt, marker::PhantomData};
 
 /// Produces a strategy to generate an arbitrary vector of events, given a strategy
 /// to generate an arbitrary event and a size range.
@@ -202,8 +194,6 @@ pub fn arb_events<E: Event + fmt::Debug>(
 /// }
 ///
 /// impl Aggregate for MyAggregate {
-///     type Event = MyEvents;
-///
 ///     fn aggregate_type() -> &'static str {
 ///         "my_aggregate"
 ///     }
@@ -218,10 +208,8 @@ pub fn arb_events<E: Event + fmt::Debug>(
 ///     }
 /// }
 ///
-/// impl AggregateEvent for CreatedEvent {
-///     type Aggregate = MyAggregate;
-///
-///     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+/// impl AggregateEvent<MyAggregate> for CreatedEvent {
+///     fn apply_to(self, aggregate: &mut MyAggregate) {
 ///         aggregate.active = true;
 ///     }
 /// }
@@ -235,10 +223,8 @@ pub fn arb_events<E: Event + fmt::Debug>(
 ///     }
 /// }
 ///
-/// impl AggregateEvent for DeletedEvent {
-///     type Aggregate = MyAggregate;
-///
-///     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+/// impl AggregateEvent<MyAggregate> for DeletedEvent {
+///     fn apply_to(self, aggregate: &mut MyAggregate) {
 ///         aggregate.active = false;
 ///     }
 /// }
@@ -258,10 +244,8 @@ pub fn arb_events<E: Event + fmt::Debug>(
 ///     }
 /// }
 ///
-/// impl AggregateEvent for MyEvents {
-///     type Aggregate = MyAggregate;
-///
-///     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+/// impl AggregateEvent<MyAggregate> for MyEvents {
+///     fn apply_to(self, aggregate: &mut MyAggregate) {
 ///         match self {
 ///             MyEvents::Created(e) => e.apply_to(aggregate),
 ///             MyEvents::Deleted(e) => e.apply_to(aggregate),
@@ -282,16 +266,16 @@ pub fn arb_events<E: Event + fmt::Debug>(
 ///     type Strategy = TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
 /// }
 ///
-/// arb_aggregate::<MyAggregate, _>(arb_events(any::<MyEvents>(), 0..10))
+/// arb_aggregate::<MyAggregate, MyEvents, _>(arb_events(any::<MyEvents>(), 0..10))
 ///     .new_tree(&mut TestRunner::default())
 ///     .unwrap()
 ///     .current();
 /// ```
-pub fn arb_aggregate<A: Aggregate + fmt::Debug, S: Strategy<Value = Vec<A::Event>>>(
-    events_strategy: S,
-) -> impl Strategy<Value = A>
+pub fn arb_aggregate<A, E, S>(events_strategy: S) -> impl Strategy<Value = A>
 where
-    A::Event: fmt::Debug,
+    A: Aggregate + fmt::Debug,
+    E: AggregateEvent<A> + fmt::Debug,
+    S: Strategy<Value = Vec<E>>,
 {
     events_strategy.prop_map(|e| {
         let mut aggregate = A::default();
@@ -400,8 +384,6 @@ pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEven
 /// }
 ///
 /// impl Aggregate for MyAggregate {
-///     type Event = MyEvents;
-///
 ///     fn aggregate_type() -> &'static str {
 ///         "my_aggregate"
 ///     }
@@ -416,10 +398,8 @@ pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEven
 ///     }
 /// }
 ///
-/// impl AggregateEvent for CreatedEvent {
-///     type Aggregate = MyAggregate;
-///
-///     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+/// impl AggregateEvent<MyAggregate> for CreatedEvent {
+///     fn apply_to(self, aggregate: &mut MyAggregate) {
 ///         aggregate.active = true;
 ///     }
 /// }
@@ -433,10 +413,8 @@ pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEven
 ///     }
 /// }
 ///
-/// impl AggregateEvent for DeletedEvent {
-///     type Aggregate = MyAggregate;
-///
-///     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+/// impl AggregateEvent<MyAggregate> for DeletedEvent {
+///     fn apply_to(self, aggregate: &mut MyAggregate) {
 ///         aggregate.active = false;
 ///     }
 /// }
@@ -456,10 +434,8 @@ pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEven
 ///     }
 /// }
 ///
-/// impl AggregateEvent for MyEvents {
-///     type Aggregate = MyAggregate;
-///
-///     fn apply_to(self, aggregate: &mut Self::Aggregate) {
+/// impl AggregateEvent<MyAggregate> for MyEvents {
+///     fn apply_to(self, aggregate: &mut MyAggregate) {
 ///         match self {
 ///             MyEvents::Created(e) => e.apply_to(aggregate),
 ///             MyEvents::Deleted(e) => e.apply_to(aggregate),
@@ -480,56 +456,85 @@ pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEven
 ///     type Strategy = TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
 /// }
 ///
-/// any::<AggregateFromEventSequence<MyAggregate>>()
+/// any::<AggregateFromEventSequence<MyAggregate, MyEvents>>()
 ///     .new_tree(&mut TestRunner::default())
 ///     .unwrap()
 ///     .current()
 ///     .into_aggregate();
 ///
 /// let parameters = (prop::collection::SizeRange::from(1..10), ());
-/// any_with::<AggregateFromEventSequence<MyAggregate>>(parameters)
+/// any_with::<AggregateFromEventSequence<MyAggregate, MyEvents>>(parameters)
 ///     .new_tree(&mut TestRunner::default())
 ///     .unwrap()
 ///     .current();
 /// ```
-#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
-pub struct AggregateFromEventSequence<A: Aggregate>(A);
+#[derive(Clone, Copy, Default, Hash, PartialEq, Eq)]
+pub struct AggregateFromEventSequence<A, E>
+where
+    A: Aggregate,
+    E: AggregateEvent<A>,
+{
+    aggregate: A,
+    _phantom: PhantomData<*const E>,
+}
 
-impl<A: Aggregate> From<A> for AggregateFromEventSequence<A> {
-    #[inline]
-    fn from(aggregate: A) -> Self {
-        AggregateFromEventSequence(aggregate)
+impl<A, E> fmt::Debug for AggregateFromEventSequence<A, E>
+where
+    A: Aggregate + fmt::Debug,
+    E: AggregateEvent<A>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("AggregateFromEventSequence")
+            .field(&self.aggregate)
+            .finish()
     }
 }
 
-impl<A: Aggregate> AggregateFromEventSequence<A> {
+impl<A, E> From<A> for AggregateFromEventSequence<A, E>
+where
+    A: Aggregate,
+    E: AggregateEvent<A>,
+{
+    #[inline]
+    fn from(aggregate: A) -> Self {
+        AggregateFromEventSequence {
+            aggregate,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<A, E> AggregateFromEventSequence<A, E>
+where
+    A: Aggregate,
+    E: AggregateEvent<A>,
+{
     /// Unwraps the generated aggregate.
     #[inline]
     pub fn into_aggregate(self) -> A {
-        self.0
+        self.aggregate
     }
 }
 
-impl<A> Arbitrary for AggregateFromEventSequence<A>
+impl<A, E> Arbitrary for AggregateFromEventSequence<A, E>
 where
     A: Aggregate + fmt::Debug,
-    A::Event: Arbitrary + 'static,
-    Self: fmt::Debug,
+    E: AggregateEvent<A> + Arbitrary + 'static,
 {
-    type Parameters = (
-        prop::collection::SizeRange,
-        <A::Event as Arbitrary>::Parameters,
-    );
+    type Parameters = (prop::collection::SizeRange, <E as Arbitrary>::Parameters);
     type Strategy = BoxedStrategy<Self>;
 
     fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
-        any_with::<Vec<A::Event>>(args)
+        any_with::<Vec<E>>(args)
             .prop_map(|events| {
                 let mut aggregate = A::default();
                 for event in events {
                     aggregate.apply(event);
                 }
-                AggregateFromEventSequence(aggregate)
+                AggregateFromEventSequence {
+                    aggregate,
+                    _phantom: PhantomData,
+                }
             })
             .boxed()
     }

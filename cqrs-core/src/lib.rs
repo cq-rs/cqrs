@@ -22,9 +22,8 @@ mod types;
 
 #[doc(inline)]
 pub use crate::aggregate::{
-    Aggregate, AggregateCommand, AggregateEvent, AggregateId, AggregateIdentifiedBy, ApplyTarget,
-    CommandError, DeserializableEvent, Event, EventFor, Events, ExecuteTarget, ProducedEvent,
-    ProducedEvents, SerializableEvent,
+    Aggregate, AggregateCommand, AggregateEvent, AggregateId, AggregateIdentifiedBy, CommandError,
+    DeserializableEvent, Event, Events, ProducedEvent, ProducedEvents, SerializableEvent,
 };
 #[doc(inline)]
 pub use crate::store::{

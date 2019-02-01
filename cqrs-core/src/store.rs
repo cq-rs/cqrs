@@ -1,5 +1,5 @@
 use crate::{
-    aggregate::{Aggregate, AggregateId},
+    aggregate::{Aggregate, AggregateEvent, AggregateId},
     types::{
         CqrsError, EventNumber, Precondition, Since, SnapshotRecommendation, Version,
         VersionedAggregate, VersionedEvent,
@@ -7,9 +7,13 @@ use crate::{
 };
 
 /// A source for reading/loading events.
-pub trait EventSource<A: Aggregate> {
+pub trait EventSource<A, E>
+where
+    A: Aggregate,
+    E: AggregateEvent<A>,
+{
     /// Represents the sequence of events read from the event source.
-    type Events: IntoIterator<Item = Result<VersionedEvent<A::Event>, Self::Error>>;
+    type Events: IntoIterator<Item = Result<VersionedEvent<E>, Self::Error>>;
 
     /// The error type.
     type Error: CqrsError;
@@ -29,7 +33,11 @@ pub trait EventSource<A: Aggregate> {
 }
 
 /// A sink for writing/persisting events with associated metadata.
-pub trait EventSink<A: Aggregate, M> {
+pub trait EventSink<A, E, M>
+where
+    A: Aggregate,
+    E: AggregateEvent<A>,
+{
     /// The error type.
     type Error: CqrsError;
 
@@ -39,7 +47,7 @@ pub trait EventSink<A: Aggregate, M> {
     fn append_events<I>(
         &self,
         id: &I,
-        events: &[A::Event],
+        events: &[E],
         precondition: Option<Precondition>,
         metadata: M,
     ) -> Result<EventNumber, Self::Error>
@@ -48,7 +56,10 @@ pub trait EventSink<A: Aggregate, M> {
 }
 
 /// A source for reading/loading snapshots of aggregates.
-pub trait SnapshotSource<A: Aggregate> {
+pub trait SnapshotSource<A>
+where
+    A: Aggregate,
+{
     /// The error type.
     type Error: CqrsError;
 
@@ -59,7 +70,10 @@ pub trait SnapshotSource<A: Aggregate> {
 }
 
 /// A sink for writing/persisting snapshots of aggregates.
-pub trait SnapshotSink<A: Aggregate> {
+pub trait SnapshotSink<A>
+where
+    A: Aggregate,
+{
     /// The error type.
     type Error: CqrsError;
 
@@ -128,25 +142,21 @@ mod tests {
     pub struct TestMetadata;
 
     impl Aggregate for TestAggregate {
-        type Event = TestEvent;
-
         fn aggregate_type() -> &'static str {
             "test"
         }
     }
 
-    impl AggregateEvent for TestEvent {
-        type Aggregate = TestAggregate;
-
-        fn apply_to(self, _aggregate: &mut Self::Aggregate) {}
+    impl AggregateEvent<TestAggregate> for TestEvent {
+        fn apply_to(self, _aggregate: &mut TestAggregate) {}
     }
 
-    impl AggregateCommand for TestCommand {
-        type Aggregate = TestAggregate;
+    impl AggregateCommand<TestAggregate> for TestCommand {
         type Error = Void;
+        type Event = TestEvent;
         type Events = Vec<TestEvent>;
 
-        fn execute_on(self, _aggregate: &Self::Aggregate) -> Result<Self::Events, Self::Error> {
+        fn execute_on(self, _aggregate: &TestAggregate) -> Result<Self::Events, Self::Error> {
             Ok(Vec::default())
         }
     }

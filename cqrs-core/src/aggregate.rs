@@ -7,30 +7,23 @@ pub trait Aggregate: Default {
     /// Note: This should effectively be a constant value, and should never change.
     fn aggregate_type() -> &'static str;
 
-    /// The event type that can be applied to this aggregate.
-    type Event: AggregateEvent<Aggregate = Self>;
-
     /// Consumes the event, applying its effects to the aggregate.
-    fn apply(&mut self, event: Self::Event) {
+    fn apply<E>(&mut self, event: E)
+    where
+        E: AggregateEvent<Self>,
+    {
         event.apply_to(self);
     }
 
     /// Consumes a command, attempting to execute it against the aggregate. If the execution is successful, a sequence
     /// of events is generated, which can be applied to the aggregate.
-    fn execute<C: AggregateCommand<Aggregate = Self>>(
-        &self,
-        command: C,
-    ) -> Result<C::Events, C::Error>
+    fn execute<C>(&self, command: C) -> Result<C::Events, C::Error>
     where
-        C: AggregateCommand<Aggregate = Self>,
-        C::Events: Events<Self::Event>,
+        C: AggregateCommand<Self>,
     {
         command.execute_on(self)
     }
 }
-
-/// The event type that is applied to a particular aggregate.
-pub type EventFor<A> = <A as Aggregate>::Event;
 
 /// An identifier for an aggregate.
 pub trait AggregateId: AsRef<str> {
@@ -42,32 +35,29 @@ pub trait AggregateId: AsRef<str> {
 pub type AggregateIdentifiedBy<I> = <I as AggregateId>::Aggregate;
 
 /// A command that can be executed against an aggregate.
-pub trait AggregateCommand {
-    /// The aggregate type.
-    type Aggregate: Aggregate;
+pub trait AggregateCommand<A: Aggregate> {
+    /// The type of event that is produced by this command.
+    type Event: AggregateEvent<A>;
 
     /// The type of the sequence of events generated when the command is executed successfully.
-    type Events: Events<ProducedEvent<Self>>;
+    type Events: Events<ProducedEvent<A, Self>>;
 
     /// The error type.
     type Error: CqrsError;
 
     /// Consumes a command, attempting to execute it against the aggregate. If the execution is successful, a sequence
     /// of events is generated, which can be applied to the aggregate.
-    fn execute_on(self, aggregate: &Self::Aggregate) -> Result<Self::Events, Self::Error>;
+    fn execute_on(self, aggregate: &A) -> Result<Self::Events, Self::Error>;
 }
 
-/// The aggregate type that this command executes against.
-pub type ExecuteTarget<C> = <C as AggregateCommand>::Aggregate;
-
 /// The event type produced by this command.
-pub type ProducedEvent<C> = <ExecuteTarget<C> as Aggregate>::Event;
+pub type ProducedEvent<A, C> = <C as AggregateCommand<A>>::Event;
 
 /// The event sequence produced by this command.
-pub type ProducedEvents<C> = <C as AggregateCommand>::Events;
+pub type ProducedEvents<A, C> = <C as AggregateCommand<A>>::Events;
 
 /// The error produced when this command cannot be executed against an aggregate.
-pub type CommandError<C> = <C as AggregateCommand>::Error;
+pub type CommandError<A, C> = <C as AggregateCommand<A>>::Error;
 
 /// A thing that happened.
 pub trait Event {
@@ -76,16 +66,10 @@ pub trait Event {
 }
 
 /// An event that can be applied to an aggregate.
-pub trait AggregateEvent: Event {
-    /// The aggregate type.
-    type Aggregate: Aggregate;
-
+pub trait AggregateEvent<A: Aggregate>: Event {
     /// Consumes the event, applying its effects to the aggregate.
-    fn apply_to(self, aggregate: &mut Self::Aggregate);
+    fn apply_to(self, aggregate: &mut A);
 }
-
-/// The aggregate type that this event is applied against.
-pub type ApplyTarget<E> = <E as AggregateEvent>::Aggregate;
 
 /// An iterable and sliceable list of events.
 pub trait Events<E>: IntoIterator<Item = E> + AsRef<[E]>

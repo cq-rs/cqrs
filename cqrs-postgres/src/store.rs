@@ -3,9 +3,9 @@ use crate::{
     util::{BorrowedJson, Json, RawJsonPersist, RawJsonRead, Sequence},
 };
 use cqrs_core::{
-    Aggregate, AggregateId, DeserializableEvent, Event, EventNumber, EventSink, EventSource,
-    NeverSnapshot, Precondition, SerializableEvent, Since, SnapshotRecommendation, SnapshotSink,
-    SnapshotSource, SnapshotStrategy, Version, VersionedAggregate, VersionedEvent,
+    Aggregate, AggregateEvent, AggregateId, DeserializableEvent, EventNumber, EventSink,
+    EventSource, NeverSnapshot, Precondition, SerializableEvent, Since, SnapshotRecommendation,
+    SnapshotSink, SnapshotSource, SnapshotStrategy, Version, VersionedAggregate, VersionedEvent,
 };
 use fallible_iterator::FallibleIterator;
 use postgres::Connection;
@@ -14,19 +14,21 @@ use std::{fmt, marker::PhantomData};
 
 /// A PostgreSQL storage backend.
 #[derive(Clone)]
-pub struct PostgresStore<'conn, A, M, S = NeverSnapshot>
+pub struct PostgresStore<'conn, A, E, M, S = NeverSnapshot>
 where
     A: Aggregate,
+    E: AggregateEvent<A>,
     S: SnapshotStrategy,
 {
     conn: &'conn Connection,
     snapshot_strategy: S,
-    _phantom: PhantomData<(A, M)>,
+    _phantom: PhantomData<&'conn (A, E, M)>,
 }
 
-impl<'conn, A, M, S> fmt::Debug for PostgresStore<'conn, A, M, S>
+impl<'conn, A, E, M, S> fmt::Debug for PostgresStore<'conn, A, E, M, S>
 where
     A: Aggregate,
+    E: AggregateEvent<A>,
     S: SnapshotStrategy + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -38,9 +40,10 @@ where
     }
 }
 
-impl<'conn, A, M, S> PostgresStore<'conn, A, M, S>
+impl<'conn, A, E, M, S> PostgresStore<'conn, A, E, M, S>
 where
     A: Aggregate,
+    E: AggregateEvent<A>,
     S: SnapshotStrategy + Default,
 {
     const DB_VERSION: u32 = 1;
@@ -286,19 +289,19 @@ where
     }
 }
 
-impl<'conn, A, M, S> EventSink<A, M> for PostgresStore<'conn, A, M, S>
+impl<'conn, A, E, M, S> EventSink<A, E, M> for PostgresStore<'conn, A, E, M, S>
 where
     A: Aggregate,
-    A::Event: SerializableEvent + fmt::Debug,
+    E: AggregateEvent<A> + SerializableEvent + fmt::Debug,
     M: Serialize + fmt::Debug,
     S: SnapshotStrategy,
 {
-    type Error = PersistError<<A::Event as SerializableEvent>::Error>;
+    type Error = PersistError<<E as SerializableEvent>::Error>;
 
     fn append_events<I>(
         &self,
         id: &I,
-        events: &[A::Event],
+        events: &[E],
         precondition: Option<Precondition>,
         metadata: M,
     ) -> Result<EventNumber, Self::Error>
@@ -369,14 +372,14 @@ where
     }
 }
 
-impl<'conn, A, M, S> EventSource<A> for PostgresStore<'conn, A, M, S>
+impl<'conn, A, E, M, S> EventSource<A, E> for PostgresStore<'conn, A, E, M, S>
 where
     A: Aggregate,
-    A::Event: DeserializableEvent,
+    E: AggregateEvent<A> + DeserializableEvent,
     S: SnapshotStrategy,
 {
-    type Error = LoadError<<A::Event as DeserializableEvent>::Error>;
-    type Events = Vec<Result<VersionedEvent<A::Event>, Self::Error>>;
+    type Error = LoadError<<E as DeserializableEvent>::Error>;
+    type Events = Vec<Result<VersionedEvent<E>, Self::Error>>;
 
     fn read_events<I>(
         &self,
@@ -401,7 +404,7 @@ where
             let event_type: String = row.get("event_type");
             let sequence: Sequence = row.get("sequence");
             let raw: RawJsonRead = row.get("payload");
-            let event = A::Event::deserialize_event_from_buffer(&raw.0, &event_type)
+            let event = E::deserialize_event_from_buffer(&raw.0, &event_type)
                 .map_err(LoadError::DeserializationError)?
                 .ok_or_else(|| LoadError::UnknownEventType(event_type.clone()))?;
             log::trace!(
@@ -469,9 +472,10 @@ where
     }
 }
 
-impl<'conn, A, M, S> SnapshotSink<A> for PostgresStore<'conn, A, M, S>
+impl<'conn, A, E, M, S> SnapshotSink<A> for PostgresStore<'conn, A, E, M, S>
 where
     A: Aggregate + Serialize + fmt::Debug,
+    E: AggregateEvent<A>,
     S: SnapshotStrategy,
 {
     type Error = PersistError<serde_json::Error>;
@@ -515,9 +519,10 @@ where
     }
 }
 
-impl<'conn, A, M, S> SnapshotSource<A> for PostgresStore<'conn, A, M, S>
+impl<'conn, A, E, M, S> SnapshotSource<A> for PostgresStore<'conn, A, E, M, S>
 where
     A: Aggregate + DeserializeOwned,
+    E: AggregateEvent<A>,
     S: SnapshotStrategy,
 {
     type Error = postgres::Error;

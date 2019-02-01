@@ -50,8 +50,6 @@ impl TodoAggregate {
 }
 
 impl Aggregate for TodoAggregate {
-    type Event = TodoEvent;
-
     #[inline(always)]
     fn aggregate_type() -> &'static str
     where
@@ -160,10 +158,8 @@ impl Event for TodoEvent {
     }
 }
 
-impl AggregateEvent for events::Created {
-    type Aggregate = TodoAggregate;
-
-    fn apply_to(self, aggregate: &mut Self::Aggregate) {
+impl AggregateEvent<TodoAggregate> for events::Created {
+    fn apply_to(self, aggregate: &mut TodoAggregate) {
         if TodoAggregate::Uninitialized == *aggregate {
             *aggregate =
                 TodoAggregate::Created(TodoData::with_description(self.initial_description))
@@ -171,49 +167,39 @@ impl AggregateEvent for events::Created {
     }
 }
 
-impl AggregateEvent for events::DescriptionUpdated {
-    type Aggregate = TodoAggregate;
-
-    fn apply_to(self, aggregate: &mut Self::Aggregate) {
+impl AggregateEvent<TodoAggregate> for events::DescriptionUpdated {
+    fn apply_to(self, aggregate: &mut TodoAggregate) {
         if let TodoAggregate::Created(ref mut data) = aggregate {
             data.description = self.new_description;
         }
     }
 }
 
-impl AggregateEvent for events::ReminderUpdated {
-    type Aggregate = TodoAggregate;
-
-    fn apply_to(self, aggregate: &mut Self::Aggregate) {
+impl AggregateEvent<TodoAggregate> for events::ReminderUpdated {
+    fn apply_to(self, aggregate: &mut TodoAggregate) {
         if let TodoAggregate::Created(ref mut data) = aggregate {
             data.reminder = self.new_reminder;
         }
     }
 }
 
-impl AggregateEvent for events::Completed {
-    type Aggregate = TodoAggregate;
-
-    fn apply_to(self, aggregate: &mut Self::Aggregate) {
+impl AggregateEvent<TodoAggregate> for events::Completed {
+    fn apply_to(self, aggregate: &mut TodoAggregate) {
         if let TodoAggregate::Created(ref mut data) = aggregate {
             data.status = TodoStatus::Completed;
         }
     }
 }
 
-impl AggregateEvent for events::Uncompleted {
-    type Aggregate = TodoAggregate;
-
-    fn apply_to(self, aggregate: &mut Self::Aggregate) {
+impl AggregateEvent<TodoAggregate> for events::Uncompleted {
+    fn apply_to(self, aggregate: &mut TodoAggregate) {
         if let TodoAggregate::Created(ref mut data) = aggregate {
             data.status = TodoStatus::NotCompleted;
         }
     }
 }
-impl AggregateEvent for TodoEvent {
-    type Aggregate = TodoAggregate;
-
-    fn apply_to(self, aggregate: &mut Self::Aggregate) {
+impl AggregateEvent<TodoAggregate> for TodoEvent {
+    fn apply_to(self, aggregate: &mut TodoAggregate) {
         match self {
             TodoEvent::Created(evt) => evt.apply_to(aggregate),
             TodoEvent::DescriptionUpdated(evt) => evt.apply_to(aggregate),
@@ -608,7 +594,7 @@ mod tests {
             assert_eq!(original, roundtrip);
         }
 
-        type ArbitraryTodoAggregate = AggregateFromEventSequence<TodoAggregate>;
+        type ArbitraryTodoAggregate = AggregateFromEventSequence<TodoAggregate, TodoEvent>;
 
         proptest! {
             #[test]

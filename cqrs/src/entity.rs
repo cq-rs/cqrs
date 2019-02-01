@@ -1,7 +1,7 @@
-use crate::trivial::NullStore;
+use crate::trivial::{NullEventStore, NullSnapshotStore};
 use cqrs_core::{
-    Aggregate, AggregateCommand, AggregateId, CqrsError, EventNumber, EventSink, EventSource,
-    Events, ExecuteTarget, Precondition, Since, SnapshotSink, SnapshotSource, Version,
+    Aggregate, AggregateCommand, AggregateEvent, AggregateId, CqrsError, EventNumber, EventSink,
+    EventSource, Events, Precondition, ProducedEvent, Since, SnapshotSink, SnapshotSource, Version,
     VersionedAggregate,
 };
 use std::{
@@ -46,14 +46,14 @@ where
     }
 
     /// Applies a sequence of events to the internal aggregate.
-    pub fn apply_events<I: IntoIterator<Item = A::Event>>(&mut self, events: I) {
+    pub fn apply_events<E: AggregateEvent<A>, I: IntoIterator<Item = E>>(&mut self, events: I) {
         for event in events {
             self.apply(event);
         }
     }
 
     /// Applies a single event to the aggregate, keeping track of the new aggregate version.
-    pub fn apply(&mut self, event: A::Event) {
+    pub fn apply<E: AggregateEvent<A>>(&mut self, event: E) {
         self.state.apply(event);
         self.version.incr();
     }
@@ -175,9 +175,10 @@ where
 }
 
 /// A source for loading an [Entity].
-pub trait EntitySource<A>: EventSource<A> + SnapshotSource<A>
+pub trait EntitySource<A, E>: EventSource<A, E> + SnapshotSource<A>
 where
     A: Aggregate,
+    E: AggregateEvent<A>,
 {
     /// Loads an identified [Entity] from the latest known snapshot.
     ///
@@ -207,7 +208,7 @@ where
         &self,
         id: &I,
         aggregate: &mut HydratedAggregate<A>,
-    ) -> Result<(), <Self as EventSource<A>>::Error>
+    ) -> Result<(), <Self as EventSource<A, E>>::Error>
     where
         I: AggregateId<Aggregate = A>,
     {
@@ -231,7 +232,7 @@ where
     ///
     /// Errors may occur while loading the snapshot or the events. If no snapshot or events can be found
     /// for the entity, returns `Ok(None)`
-    fn rehydrate<I>(&self, id: &I) -> EntityRefreshResult<A, Self>
+    fn rehydrate<I>(&self, id: &I) -> EntityRefreshResult<A, E, Self>
     where
         I: AggregateId<Aggregate = A>,
     {
@@ -259,63 +260,68 @@ pub type EntityLoadSnapshotResult<A, L> =
     Result<Option<HydratedAggregate<A>>, <L as SnapshotSource<A>>::Error>;
 
 /// The result of refreshing an [Entity].
-pub type EntityRefreshResult<A, L> = Result<
+pub type EntityRefreshResult<A, E, L> = Result<
     Option<HydratedAggregate<A>>,
-    EntityLoadError<<L as EventSource<A>>::Error, <L as SnapshotSource<A>>::Error>,
+    EntityLoadError<<L as EventSource<A, E>>::Error, <L as SnapshotSource<A>>::Error>,
 >;
 
 /// The result of persisting an [Entity].
-pub type EntityPersistResult<A, M, L> =
-    Result<(), EntityPersistError<<L as EventSink<A, M>>::Error, <L as SnapshotSink<A>>::Error>>;
+pub type EntityPersistResult<A, E, M, L> =
+    Result<(), EntityPersistError<<L as EventSink<A, E, M>>::Error, <L as SnapshotSink<A>>::Error>>;
 
 /// The result of executing a command against an [Entity], after attempting to persist any
 /// new events and possibly updating the snapshot.
-pub type EntityExecAndPersistResult<C, M, L> = Result<
-    HydratedAggregate<ExecuteTarget<C>>,
+pub type EntityExecAndPersistResult<A, C, M, L> = Result<
+    HydratedAggregate<A>,
     EntityExecAndPersistError<
+        A,
         C,
-        <L as EventSink<ExecuteTarget<C>, M>>::Error,
-        <L as SnapshotSink<ExecuteTarget<C>>>::Error,
+        <L as EventSink<A, ProducedEvent<A, C>, M>>::Error,
+        <L as SnapshotSink<A>>::Error,
     >,
 >;
 
 /// The result of loading an [Entity], then executing a command and attempting to persist
 /// any new events and possibly updating the snapshot.
-pub type EntityResult<C, M, L> = Result<
-    HydratedAggregate<ExecuteTarget<C>>,
+pub type EntityResult<A, C, M, L> = Result<
+    HydratedAggregate<A>,
     EntityError<
-        <L as EventSource<ExecuteTarget<C>>>::Error,
-        <L as SnapshotSource<ExecuteTarget<C>>>::Error,
+        <L as EventSource<A, ProducedEvent<A, C>>>::Error,
+        <L as SnapshotSource<A>>::Error,
+        A,
         C,
-        <L as EventSink<ExecuteTarget<C>, M>>::Error,
-        <L as SnapshotSink<ExecuteTarget<C>>>::Error,
+        <L as EventSink<A, ProducedEvent<A, C>, M>>::Error,
+        <L as SnapshotSink<A>>::Error,
     >,
 >;
 
 /// The result of trying to load an [Entity], which may not exists, then executing a command and
 /// attempting to persist any new events and possibly updating the snapshot
-pub type EntityOptionResult<C, M, L> = Result<
-    Option<HydratedAggregate<ExecuteTarget<C>>>,
+pub type EntityOptionResult<A, C, M, L> = Result<
+    Option<HydratedAggregate<A>>,
     EntityError<
-        <L as EventSource<ExecuteTarget<C>>>::Error,
-        <L as SnapshotSource<ExecuteTarget<C>>>::Error,
+        <L as EventSource<A, ProducedEvent<A, C>>>::Error,
+        <L as SnapshotSource<A>>::Error,
+        A,
         C,
-        <L as EventSink<ExecuteTarget<C>, M>>::Error,
-        <L as SnapshotSink<ExecuteTarget<C>>>::Error,
+        <L as EventSink<A, ProducedEvent<A, C>, M>>::Error,
+        <L as SnapshotSink<A>>::Error,
     >,
 >;
 
-impl<A, T> EntitySource<A> for T
+impl<A, E, T> EntitySource<A, E> for T
 where
     A: Aggregate,
-    T: EventSource<A> + SnapshotSource<A>,
+    E: AggregateEvent<A>,
+    T: EventSource<A, E> + SnapshotSource<A>,
 {
 }
 
 /// A sink for persisting an [Entity].
-pub trait EntitySink<A, M>: EventSink<A, M> + SnapshotSink<A>
+pub trait EntitySink<A, E, M>: EventSink<A, E, M> + SnapshotSink<A>
 where
     A: Aggregate,
+    E: AggregateEvent<A>,
 {
     /// Attempts persist a sequence of events to an identified aggregate and then apply those
     /// events to the mutable aggregate. Then attempts to persist a snapshot of the aggregate
@@ -324,17 +330,17 @@ where
     ///
     /// Errors may occur while persisting the events or the snapshot or the events. If there result indicates
     /// an error while persisting the snapshot, then any events have already been safely persisted.
-    fn apply_events_and_persist<I, E>(
+    fn apply_events_and_persist<I, Es>(
         &self,
         id: &I,
         aggregate: &mut HydratedAggregate<A>,
-        events: E,
+        events: Es,
         expected_version: Version,
         metadata: M,
-    ) -> EntityPersistResult<A, M, Self>
+    ) -> EntityPersistResult<A, E, M, Self>
     where
         I: AggregateId<Aggregate = A>,
-        E: Events<A::Event>,
+        Es: Events<E>,
     {
         self.append_events(
             id,
@@ -371,11 +377,11 @@ where
         command: C,
         precondition: Option<Precondition>,
         metadata: M,
-    ) -> EntityExecAndPersistResult<C, M, Self>
+    ) -> EntityExecAndPersistResult<A, C, M, Self>
     where
         I: AggregateId<Aggregate = A>,
-        C: AggregateCommand<Aggregate = A>,
-        C::Events: Events<A::Event>,
+        C: AggregateCommand<A, Event = E>,
+        C::Events: Events<E>,
     {
         if let Some(precondition) = precondition {
             let initial_version = aggregate.as_ref().map(|agg| agg.version);
@@ -406,17 +412,19 @@ where
     }
 }
 
-impl<A, M, T> EntitySink<A, M> for T
+impl<A, E, M, T> EntitySink<A, E, M> for T
 where
     A: Aggregate,
-    T: EventSink<A, M> + SnapshotSink<A>,
+    E: AggregateEvent<A>,
+    T: EventSink<A, E, M> + SnapshotSink<A>,
 {
 }
 
 /// A generalized entity store that can perform operations on its entities.
-pub trait EntityStore<A, M>: EntitySource<A> + EntitySink<A, M>
+pub trait EntityStore<A, E, M>: EntitySource<A, E> + EntitySink<A, E, M>
 where
     A: Aggregate,
+    E: AggregateEvent<A>,
 {
     /// Attempts to load an aggregate, using the default instance if the aggregate does not yet exist, executes a
     /// command and persists any new events, possibly peristing a new snapshot if necessary.
@@ -426,11 +434,11 @@ where
         command: C,
         precondition: Option<Precondition>,
         metadata: M,
-    ) -> EntityResult<C, M, Self>
+    ) -> EntityResult<A, C, M, Self>
     where
         I: AggregateId<Aggregate = A>,
-        C: AggregateCommand<Aggregate = A>,
-        C::Events: Events<A::Event>,
+        C: AggregateCommand<A, Event = E>,
+        C::Events: Events<E>,
     {
         let aggregate = self.rehydrate(id).map_err(EntityError::Load)?;
         let aggregate = self.exec_and_persist(id, aggregate, command, precondition, metadata)?;
@@ -448,11 +456,11 @@ where
         command: C,
         precondition: Option<Precondition>,
         metadata: M,
-    ) -> EntityOptionResult<C, M, Self>
+    ) -> EntityOptionResult<A, C, M, Self>
     where
         I: AggregateId<Aggregate = A>,
-        C: AggregateCommand<Aggregate = A>,
-        C::Events: Events<A::Event>,
+        C: AggregateCommand<A, Event = E>,
+        C::Events: Events<E>,
     {
         if let Some(aggregate) = self.rehydrate(id).map_err(EntityError::Load)? {
             let aggregate =
@@ -465,53 +473,58 @@ where
     }
 }
 
-impl<A, M, T> EntityStore<A, M> for T
+impl<A, E, M, T> EntityStore<A, E, M> for T
 where
     A: Aggregate,
-    T: EntitySource<A> + EntitySink<A, M>,
+    E: AggregateEvent<A>,
+    T: EntitySource<A, E> + EntitySink<A, E, M>,
 {
 }
 
 /// Combines an `EventSource` and a `SnapshotSource` of different types by reference
 /// so that they can be used jointly as an [EntitySource].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CompositeEntitySource<'e, 's, A, ES, SS>
+pub struct CompositeEntitySource<'e, 's, A, E, ES, SS>
 where
     A: Aggregate,
-    ES: EventSource<A> + 'e,
+    E: AggregateEvent<A>,
+    ES: EventSource<A, E> + 'e,
     SS: SnapshotSource<A> + 's,
 {
     event_source: &'e ES,
     snapshot_source: &'s SS,
-    _phantom: PhantomData<A>,
+    _phantom: PhantomData<&'e (A, E)>,
 }
 
-impl<A> Default for CompositeEntitySource<'static, 'static, A, NullStore, NullStore>
+impl<A, E> Default
+    for CompositeEntitySource<'static, 'static, A, E, NullEventStore<A, E>, NullSnapshotStore<A>>
 where
     A: Aggregate,
+    E: AggregateEvent<A>,
 {
     fn default() -> Self {
         CompositeEntitySource {
-            event_source: &NullStore,
-            snapshot_source: &NullStore,
+            event_source: &NullEventStore::DEFAULT,
+            snapshot_source: &NullSnapshotStore::DEFAULT,
             _phantom: PhantomData,
         }
     }
 }
 
-impl<'e, 's, A, ES, SS> CompositeEntitySource<'e, 's, A, ES, SS>
+impl<'e, 's, A, E, ES, SS> CompositeEntitySource<'e, 's, A, E, ES, SS>
 where
     A: Aggregate,
-    ES: EventSource<A> + 'e,
+    E: AggregateEvent<A>,
+    ES: EventSource<A, E> + 'e,
     SS: SnapshotSource<A> + 's,
 {
     /// Attaches a specific event source.
     pub fn with_event_source<'new_e, NewES>(
         self,
         event_source: &'new_e NewES,
-    ) -> CompositeEntitySource<'new_e, 's, A, NewES, SS>
+    ) -> CompositeEntitySource<'new_e, 's, A, E, NewES, SS>
     where
-        NewES: EventSource<A> + 'new_e,
+        NewES: EventSource<A, E> + 'new_e,
     {
         CompositeEntitySource {
             event_source,
@@ -524,7 +537,7 @@ where
     pub fn with_snapshot_source<'new_s, NewSS>(
         self,
         snapshot_source: &'new_s NewSS,
-    ) -> CompositeEntitySource<'e, 'new_s, A, ES, NewSS>
+    ) -> CompositeEntitySource<'e, 'new_s, A, E, ES, NewSS>
     where
         NewSS: SnapshotSource<A> + 'new_s,
     {
@@ -536,10 +549,11 @@ where
     }
 }
 
-impl<'e, 's, A, ES, SS> EventSource<A> for CompositeEntitySource<'e, 's, A, ES, SS>
+impl<'e, 's, A, E, ES, SS> EventSource<A, E> for CompositeEntitySource<'e, 's, A, E, ES, SS>
 where
     A: Aggregate,
-    ES: EventSource<A> + 'e,
+    E: AggregateEvent<A>,
+    ES: EventSource<A, E> + 'e,
     SS: SnapshotSource<A> + 's,
 {
     type Error = ES::Error;
@@ -558,10 +572,11 @@ where
     }
 }
 
-impl<'e, 's, A, ES, SS> SnapshotSource<A> for CompositeEntitySource<'e, 's, A, ES, SS>
+impl<'e, 's, A, E, ES, SS> SnapshotSource<A> for CompositeEntitySource<'e, 's, A, E, ES, SS>
 where
     A: Aggregate,
-    ES: EventSource<A> + 'e,
+    E: AggregateEvent<A>,
+    ES: EventSource<A, E> + 'e,
     SS: SnapshotSource<A> + 's,
 {
     type Error = SS::Error;
@@ -580,43 +595,47 @@ where
 /// Combines an `EventSink` and a `SnapshotSink` of different types by reference
 /// so that they can be used jointly as an [EntitySink].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CompositeEntitySink<'e, 's, A, M, ES, SS>
+pub struct CompositeEntitySink<'e, 's, A, E, M, ES, SS>
 where
     A: Aggregate,
-    ES: EventSink<A, M> + 'e,
+    E: AggregateEvent<A>,
+    ES: EventSink<A, E, M> + 'e,
     SS: SnapshotSink<A> + 's,
 {
     event_sink: &'e ES,
     snapshot_sink: &'s SS,
-    _phantom: PhantomData<(A, M)>,
+    _phantom: PhantomData<&'e (A, E, M)>,
 }
 
-impl<A, M> Default for CompositeEntitySink<'static, 'static, A, M, NullStore, NullStore>
+impl<A, E, M> Default
+    for CompositeEntitySink<'static, 'static, A, E, M, NullEventStore<A, E>, NullSnapshotStore<A>>
 where
     A: Aggregate,
+    E: AggregateEvent<A>,
 {
     fn default() -> Self {
         CompositeEntitySink {
-            event_sink: &NullStore,
-            snapshot_sink: &NullStore,
+            event_sink: &NullEventStore::DEFAULT,
+            snapshot_sink: &NullSnapshotStore::DEFAULT,
             _phantom: PhantomData,
         }
     }
 }
 
-impl<'e, 's, A, M, ES, SS> CompositeEntitySink<'e, 's, A, M, ES, SS>
+impl<'e, 's, A, E, M, ES, SS> CompositeEntitySink<'e, 's, A, E, M, ES, SS>
 where
     A: Aggregate,
-    ES: EventSink<A, M> + 'e,
+    E: AggregateEvent<A>,
+    ES: EventSink<A, E, M> + 'e,
     SS: SnapshotSink<A> + 's,
 {
     /// Attaches a specific event sink.
     pub fn with_event_sink<'new_e, NewES>(
         self,
         event_sink: &'new_e NewES,
-    ) -> CompositeEntitySink<'new_e, 's, A, M, NewES, SS>
+    ) -> CompositeEntitySink<'new_e, 's, A, E, M, NewES, SS>
     where
-        NewES: EventSink<A, M> + 'new_e,
+        NewES: EventSink<A, E, M> + 'new_e,
     {
         CompositeEntitySink {
             event_sink,
@@ -629,7 +648,7 @@ where
     pub fn with_snapshot_sink<'new_s, NewSS>(
         self,
         snapshot_sink: &'new_s NewSS,
-    ) -> CompositeEntitySink<'e, 'new_s, A, M, ES, NewSS>
+    ) -> CompositeEntitySink<'e, 'new_s, A, E, M, ES, NewSS>
     where
         NewSS: SnapshotSink<A> + 'new_s,
     {
@@ -641,10 +660,11 @@ where
     }
 }
 
-impl<'e, 's, A, M, ES, SS> EventSink<A, M> for CompositeEntitySink<'e, 's, A, M, ES, SS>
+impl<'e, 's, A, E, M, ES, SS> EventSink<A, E, M> for CompositeEntitySink<'e, 's, A, E, M, ES, SS>
 where
     A: Aggregate,
-    ES: EventSink<A, M> + 'e,
+    E: AggregateEvent<A>,
+    ES: EventSink<A, E, M> + 'e,
     SS: SnapshotSink<A> + 's,
 {
     type Error = ES::Error;
@@ -652,7 +672,7 @@ where
     fn append_events<I>(
         &self,
         id: &I,
-        events: &[A::Event],
+        events: &[E],
         precondition: Option<Precondition>,
         metadata: M,
     ) -> Result<EventNumber, Self::Error>
@@ -664,10 +684,11 @@ where
     }
 }
 
-impl<'e, 's, A, M, ES, SS> SnapshotSink<A> for CompositeEntitySink<'e, 's, A, M, ES, SS>
+impl<'e, 's, A, E, M, ES, SS> SnapshotSink<A> for CompositeEntitySink<'e, 's, A, E, M, ES, SS>
 where
     A: Aggregate,
-    ES: EventSink<A, M> + 'e,
+    E: AggregateEvent<A>,
+    ES: EventSink<A, E, M> + 'e,
     SS: SnapshotSink<A> + 's,
 {
     type Error = SS::Error;
@@ -690,43 +711,53 @@ where
 /// Combines an [EntitySource] and an [EntitySink] into a single type so that they
 /// can be jointly used as an [EntityStore].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CompositeEntityStore<A, M, ES, SS>
+pub struct CompositeEntityStore<A, E, M, ES, SS>
 where
     A: Aggregate,
-    ES: EntitySource<A>,
-    SS: EntitySink<A, M>,
+    E: AggregateEvent<A>,
+    ES: EntitySource<A, E>,
+    SS: EntitySink<A, E, M>,
 {
     entity_source: ES,
     entity_sink: SS,
-    _phantom: PhantomData<(A, M)>,
+    _phantom: PhantomData<*const (A, E, M)>,
 }
 
-impl<A, M> Default for CompositeEntityStore<A, M, NullStore, NullStore>
+impl<A, E, M> Default
+    for CompositeEntityStore<
+        A,
+        E,
+        M,
+        CompositeEntitySource<'static, 'static, A, E, NullEventStore<A, E>, NullSnapshotStore<A>>,
+        CompositeEntitySink<'static, 'static, A, E, M, NullEventStore<A, E>, NullSnapshotStore<A>>,
+    >
 where
     A: Aggregate,
+    E: AggregateEvent<A>,
 {
     fn default() -> Self {
         CompositeEntityStore {
-            entity_source: NullStore,
-            entity_sink: NullStore,
+            entity_source: CompositeEntitySource::default(),
+            entity_sink: CompositeEntitySink::default(),
             _phantom: PhantomData,
         }
     }
 }
 
-impl<A, M, ES, SS> CompositeEntityStore<A, M, ES, SS>
+impl<A, E, M, ES, SS> CompositeEntityStore<A, E, M, ES, SS>
 where
     A: Aggregate,
-    ES: EntitySource<A>,
-    SS: EntitySink<A, M>,
+    E: AggregateEvent<A>,
+    ES: EntitySource<A, E>,
+    SS: EntitySink<A, E, M>,
 {
     /// Attaches a specific entity source.
     pub fn with_entity_source<NewES>(
         self,
         entity_source: NewES,
-    ) -> CompositeEntityStore<A, M, NewES, SS>
+    ) -> CompositeEntityStore<A, E, M, NewES, SS>
     where
-        NewES: EntitySource<A>,
+        NewES: EntitySource<A, E>,
     {
         CompositeEntityStore {
             entity_source,
@@ -739,9 +770,9 @@ where
     pub fn with_entity_sink<NewSS>(
         self,
         entity_sink: NewSS,
-    ) -> CompositeEntityStore<A, M, ES, NewSS>
+    ) -> CompositeEntityStore<A, E, M, ES, NewSS>
     where
-        NewSS: EntitySink<A, M>,
+        NewSS: EntitySink<A, E, M>,
     {
         CompositeEntityStore {
             entity_source: self.entity_source,
@@ -751,14 +782,15 @@ where
     }
 }
 
-impl<A, M, ES, SS> EventSource<A> for CompositeEntityStore<A, M, ES, SS>
+impl<A, E, M, ES, SS> EventSource<A, E> for CompositeEntityStore<A, E, M, ES, SS>
 where
     A: Aggregate,
-    ES: EntitySource<A>,
-    SS: EntitySink<A, M>,
+    E: AggregateEvent<A>,
+    ES: EntitySource<A, E>,
+    SS: EntitySink<A, E, M>,
 {
-    type Error = <ES as EventSource<A>>::Error;
-    type Events = <ES as EventSource<A>>::Events;
+    type Error = <ES as EventSource<A, E>>::Error;
+    type Events = <ES as EventSource<A, E>>::Events;
 
     fn read_events<I>(
         &self,
@@ -773,11 +805,12 @@ where
     }
 }
 
-impl<A, M, ES, SS> SnapshotSource<A> for CompositeEntityStore<A, M, ES, SS>
+impl<A, E, M, ES, SS> SnapshotSource<A> for CompositeEntityStore<A, E, M, ES, SS>
 where
     A: Aggregate,
-    ES: EntitySource<A>,
-    SS: EntitySink<A, M>,
+    E: AggregateEvent<A>,
+    ES: EntitySource<A, E>,
+    SS: EntitySink<A, E, M>,
 {
     type Error = <ES as SnapshotSource<A>>::Error;
 
@@ -792,18 +825,19 @@ where
     }
 }
 
-impl<A, M, ES, SS> EventSink<A, M> for CompositeEntityStore<A, M, ES, SS>
+impl<A, E, M, ES, SS> EventSink<A, E, M> for CompositeEntityStore<A, E, M, ES, SS>
 where
     A: Aggregate,
-    ES: EntitySource<A>,
-    SS: EntitySink<A, M>,
+    E: AggregateEvent<A>,
+    ES: EntitySource<A, E>,
+    SS: EntitySink<A, E, M>,
 {
-    type Error = <SS as EventSink<A, M>>::Error;
+    type Error = <SS as EventSink<A, E, M>>::Error;
 
     fn append_events<I>(
         &self,
         id: &I,
-        events: &[A::Event],
+        events: &[E],
         precondition: Option<Precondition>,
         metadata: M,
     ) -> Result<EventNumber, Self::Error>
@@ -815,11 +849,12 @@ where
     }
 }
 
-impl<A, M, ES, SS> SnapshotSink<A> for CompositeEntityStore<A, M, ES, SS>
+impl<A, E, M, ES, SS> SnapshotSink<A> for CompositeEntityStore<A, E, M, ES, SS>
 where
     A: Aggregate,
-    ES: EntitySource<A>,
-    SS: EntitySink<A, M>,
+    E: AggregateEvent<A>,
+    ES: EntitySource<A, E>,
+    SS: EntitySink<A, E, M>,
 {
     type Error = <SS as SnapshotSink<A>>::Error;
 
@@ -905,9 +940,10 @@ where
 
 /// An error produced when there is an error while attempting to execute a command against an aggregate.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum EntityExecAndPersistError<C, PEErr, PSErr>
+pub enum EntityExecAndPersistError<A, C, PEErr, PSErr>
 where
-    C: AggregateCommand,
+    A: Aggregate,
+    C: AggregateCommand<A>,
     PEErr: CqrsError,
     PSErr: CqrsError,
 {
@@ -915,15 +951,16 @@ where
     PreconditionFailed(Precondition),
 
     /// The command reported an error while executing against the aggregate.
-    Exec(HydratedAggregate<C::Aggregate>, C::Error),
+    Exec(HydratedAggregate<A>, C::Error),
 
     /// An error occurred while persisting the entity.
     Persist(EntityPersistError<PEErr, PSErr>),
 }
 
-impl<C, PEErr, PSErr> fmt::Display for EntityExecAndPersistError<C, PEErr, PSErr>
+impl<A, C, PEErr, PSErr> fmt::Display for EntityExecAndPersistError<A, C, PEErr, PSErr>
 where
-    C: AggregateCommand,
+    A: Aggregate,
+    C: AggregateCommand<A>,
     PEErr: CqrsError,
     PSErr: CqrsError,
 {
@@ -940,9 +977,10 @@ where
     }
 }
 
-impl<C, PEErr, PSErr> From<Precondition> for EntityExecAndPersistError<C, PEErr, PSErr>
+impl<A, C, PEErr, PSErr> From<Precondition> for EntityExecAndPersistError<A, C, PEErr, PSErr>
 where
-    C: AggregateCommand,
+    A: Aggregate,
+    C: AggregateCommand<A>,
     PEErr: CqrsError,
     PSErr: CqrsError,
 {
@@ -953,9 +991,10 @@ where
 
 /// An error produced when there is an error attempting to load an aggregate, execute a command, and perist the results.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum EntityError<LEErr, LSErr, C, PEErr, PSErr>
+pub enum EntityError<LEErr, LSErr, A, C, PEErr, PSErr>
 where
-    C: AggregateCommand,
+    A: Aggregate,
+    C: AggregateCommand<A>,
     LEErr: CqrsError,
     LSErr: CqrsError,
     PEErr: CqrsError,
@@ -968,15 +1007,17 @@ where
     PreconditionFailed(Precondition),
 
     /// The command reported an error while executing against the aggregate.
-    Exec(HydratedAggregate<C::Aggregate>, C::Error),
+    Exec(HydratedAggregate<A>, C::Error),
 
     /// An error occurred while persisting the entity.
     Persist(EntityPersistError<PEErr, PSErr>),
 }
 
-impl<LEErr, LSErr, C, PEErr, PSErr> fmt::Display for EntityError<LEErr, LSErr, C, PEErr, PSErr>
+impl<LEErr, LSErr, A, C, PEErr, PSErr> fmt::Display
+    for EntityError<LEErr, LSErr, A, C, PEErr, PSErr>
 where
-    C: AggregateCommand,
+    A: Aggregate,
+    C: AggregateCommand<A>,
     LEErr: CqrsError,
     LSErr: CqrsError,
     PEErr: CqrsError,
@@ -994,10 +1035,11 @@ where
     }
 }
 
-impl<LEErr, LSErr, C, PEErr, PSErr> From<Precondition>
-    for EntityError<LEErr, LSErr, C, PEErr, PSErr>
+impl<LEErr, LSErr, A, C, PEErr, PSErr> From<Precondition>
+    for EntityError<LEErr, LSErr, A, C, PEErr, PSErr>
 where
-    C: AggregateCommand,
+    A: Aggregate,
+    C: AggregateCommand<A>,
     LEErr: CqrsError,
     LSErr: CqrsError,
     PEErr: CqrsError,
@@ -1008,16 +1050,17 @@ where
     }
 }
 
-impl<LEErr, LSErr, C, PEErr, PSErr> From<EntityExecAndPersistError<C, PEErr, PSErr>>
-    for EntityError<LEErr, LSErr, C, PEErr, PSErr>
+impl<LEErr, LSErr, A, C, PEErr, PSErr> From<EntityExecAndPersistError<A, C, PEErr, PSErr>>
+    for EntityError<LEErr, LSErr, A, C, PEErr, PSErr>
 where
-    C: AggregateCommand,
+    A: Aggregate,
+    C: AggregateCommand<A>,
     LEErr: CqrsError,
     LSErr: CqrsError,
     PEErr: CqrsError,
     PSErr: CqrsError,
 {
-    fn from(p: EntityExecAndPersistError<C, PEErr, PSErr>) -> Self {
+    fn from(p: EntityExecAndPersistError<A, C, PEErr, PSErr>) -> Self {
         match p {
             EntityExecAndPersistError::PreconditionFailed(p) => EntityError::PreconditionFailed(p),
             EntityExecAndPersistError::Exec(agg, err) => EntityError::Exec(agg, err),
@@ -1033,7 +1076,7 @@ mod tests {
 
     #[test]
     fn can_construct_composite_entity_source() {
-        let null = NullStore;
+        let null = NullEventStore::<TestAggregate, TestEvent>::default();
         let memory = StateStore::<TestAggregate>::default();
         let _source = CompositeEntitySource::default()
             .with_event_source(&null)
@@ -1042,12 +1085,13 @@ mod tests {
 
     #[test]
     fn can_construct_composite_entity_sink() {
-        let null = NullStore;
+        let null = NullEventStore::<TestAggregate, TestEvent>::default();
         let memory = StateStore::<TestAggregate>::default();
         let _sink: CompositeEntitySink<
             TestAggregate,
+            TestEvent,
             TestMetadata,
-            NullStore,
+            NullEventStore<TestAggregate, TestEvent>,
             StateStore<TestAggregate>,
         > = CompositeEntitySink::default()
             .with_event_sink(&null)
@@ -1056,15 +1100,16 @@ mod tests {
 
     #[test]
     fn can_construct_composite_entity_store() {
-        let null = NullStore;
+        let null = NullEventStore::<TestAggregate, TestEvent>::default();
         let memory = StateStore::<TestAggregate>::default();
         let source = CompositeEntitySource::default()
             .with_event_source(&null)
             .with_snapshot_source(&memory);
         let sink: CompositeEntitySink<
             TestAggregate,
+            TestEvent,
             TestMetadata,
-            NullStore,
+            NullEventStore<TestAggregate, TestEvent>,
             StateStore<TestAggregate>,
         > = CompositeEntitySink::default()
             .with_event_sink(&null)

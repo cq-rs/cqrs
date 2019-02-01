@@ -12,7 +12,7 @@ use void::Void;
 #[derive(Debug)]
 struct EventMap(RefCell<HashMap<String, Vec<cqrs::VersionedEvent<cqrs_todo_core::TodoEvent>>>>);
 
-impl EventSource<TodoAggregate> for EventMap {
+impl EventSource<TodoAggregate, TodoEvent> for EventMap {
     type Error = Void;
     type Events = Vec<Result<VersionedEvent<TodoEvent>, Void>>;
 
@@ -54,7 +54,7 @@ impl EventSource<TodoAggregate> for EventMap {
     }
 }
 
-impl EventSink<TodoAggregate, TodoMetadata> for EventMap {
+impl EventSink<TodoAggregate, TodoEvent, TodoMetadata> for EventMap {
     type Error = Void;
 
     fn append_events<I>(

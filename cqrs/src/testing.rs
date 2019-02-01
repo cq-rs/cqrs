@@ -28,8 +28,6 @@ impl<'a> AsRef<str> for TestId<'a> {
 }
 
 impl Aggregate for TestAggregate {
-    type Event = TestEvent;
-
     fn aggregate_type() -> &'static str {
         "test"
     }
@@ -39,12 +37,12 @@ impl<'a> AggregateId for TestId<'a> {
     type Aggregate = TestAggregate;
 }
 
-impl AggregateCommand for TestCommand {
-    type Aggregate = TestAggregate;
+impl AggregateCommand<TestAggregate> for TestCommand {
     type Error = Void;
+    type Event = TestEvent;
     type Events = Vec<TestEvent>;
 
-    fn execute_on(self, _aggregate: &Self::Aggregate) -> Result<Self::Events, Self::Error> {
+    fn execute_on(self, _aggregate: &TestAggregate) -> Result<Self::Events, Self::Error> {
         Ok(Vec::new())
     }
 }
@@ -57,8 +55,6 @@ impl Event for TestEvent {
     }
 }
 
-impl AggregateEvent for TestEvent {
-    type Aggregate = TestAggregate;
-
-    fn apply_to(self, _aggregate: &mut Self::Aggregate) {}
+impl AggregateEvent<TestAggregate> for TestEvent {
+    fn apply_to(self, _aggregate: &mut TestAggregate) {}
 }

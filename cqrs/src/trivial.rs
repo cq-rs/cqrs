@@ -1,23 +1,57 @@
 //! Provides a trivial implementation of event/snapshot/entity source/sink/store constructs.
 
 use cqrs_core::{
-    Aggregate, AggregateId, EventNumber, EventSink, EventSource, Precondition, Since, SnapshotSink,
-    SnapshotSource, Version, VersionedAggregate, VersionedEvent,
+    Aggregate, AggregateEvent, AggregateId, EventNumber, EventSink, EventSource, Precondition,
+    Since, SnapshotSink, SnapshotSource, Version, VersionedAggregate, VersionedEvent,
 };
-use std::iter::Empty;
+use std::{fmt, iter::Empty, marker::PhantomData};
 use void::Void;
 
-/// A trivial store that never has any events or snapshots, and which always succeeds in
+/// A trivial store that never has any events, and which always succeeds in
 /// persisting data (which is immediately dropped).
-#[derive(Debug, Default, PartialEq, Clone, Copy)]
-pub struct NullStore;
-
-impl<A> EventSource<A> for NullStore
+#[derive(Clone, Copy)]
+pub struct NullEventStore<A, E>(PhantomData<*const (A, E)>)
 where
     A: Aggregate,
+    E: AggregateEvent<A>;
+
+impl<A, E> NullEventStore<A, E>
+where
+    A: Aggregate,
+    E: AggregateEvent<A>,
+{
+    /// A constant value representing a trivial event store.
+    pub const DEFAULT: Self = NullEventStore(PhantomData);
+}
+
+impl<A, E> Default for NullEventStore<A, E>
+where
+    A: Aggregate,
+    E: AggregateEvent<A>,
+{
+    #[inline(always)]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+impl<A, E> fmt::Debug for NullEventStore<A, E>
+where
+    A: Aggregate,
+    E: AggregateEvent<A>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("NullEventStore").finish()
+    }
+}
+
+impl<A, E> EventSource<A, E> for NullEventStore<A, E>
+where
+    A: Aggregate,
+    E: AggregateEvent<A>,
 {
     type Error = Void;
-    type Events = Empty<Result<VersionedEvent<A::Event>, Void>>;
+    type Events = Empty<Result<VersionedEvent<E>, Void>>;
 
     #[inline]
     fn read_events<I>(
@@ -33,9 +67,10 @@ where
     }
 }
 
-impl<A, M> EventSink<A, M> for NullStore
+impl<A, E, M> EventSink<A, E, M> for NullEventStore<A, E>
 where
     A: Aggregate,
+    E: AggregateEvent<A>,
 {
     type Error = Void;
 
@@ -43,7 +78,7 @@ where
     fn append_events<I>(
         &self,
         _id: &I,
-        _events: &[A::Event],
+        _events: &[E],
         _expect: Option<Precondition>,
         _metadata: M,
     ) -> Result<EventNumber, Self::Error>
@@ -54,7 +89,41 @@ where
     }
 }
 
-impl<A> SnapshotSource<A> for NullStore
+/// A trivial store that never has any snapshots, and which always succeeds in
+/// persisting data (which is immediately dropped).
+#[derive(Clone, Copy)]
+pub struct NullSnapshotStore<A>(PhantomData<*const A>)
+where
+    A: Aggregate;
+
+impl<A> NullSnapshotStore<A>
+where
+    A: Aggregate,
+{
+    /// A constant value representing a trivial event store.
+    pub const DEFAULT: Self = NullSnapshotStore(PhantomData);
+}
+
+impl<A> Default for NullSnapshotStore<A>
+where
+    A: Aggregate,
+{
+    #[inline(always)]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+impl<A> fmt::Debug for NullSnapshotStore<A>
+where
+    A: Aggregate,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("NullSnapshotStore").finish()
+    }
+}
+
+impl<A> SnapshotSource<A> for NullSnapshotStore<A>
 where
     A: Aggregate,
 {
@@ -70,7 +139,7 @@ where
     }
 }
 
-impl<A> SnapshotSink<A> for NullStore
+impl<A> SnapshotSink<A> for NullSnapshotStore<A>
 where
     A: Aggregate,
 {

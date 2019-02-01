@@ -1,8 +1,8 @@
 //! A basic, in-memory event stream.
 
 use cqrs_core::{
-    Aggregate, AggregateId, EventNumber, EventSink, EventSource, Precondition, Since, SnapshotSink,
-    SnapshotSource, Version, VersionedAggregate, VersionedEvent,
+    Aggregate, AggregateEvent, AggregateId, EventNumber, EventSink, EventSource, Precondition,
+    Since, SnapshotSink, SnapshotSource, Version, VersionedAggregate, VersionedEvent,
 };
 use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
@@ -20,20 +20,20 @@ type LockedEventStream<E, M> = RwLock<EventStream<VersionedEvent<E>, M>>;
 
 /// An in-memory event store
 #[derive(Debug)]
-pub struct EventStore<A, M, Hasher = DefaultHashBuilder>
+pub struct EventStore<A, E, M, Hasher = DefaultHashBuilder>
 where
     A: Aggregate,
-    A::Event: Clone,
+    E: AggregateEvent<A> + Clone,
     Hasher: BuildHasher,
 {
-    inner: LockedHashMap<String, LockedEventStream<A::Event, M>, Hasher>,
-    _phantom: PhantomData<A>,
+    inner: LockedHashMap<String, LockedEventStream<E, M>, Hasher>,
+    _phantom: PhantomData<*const A>,
 }
 
-impl<A, M, Hasher> Default for EventStore<A, M, Hasher>
+impl<A, E, M, Hasher> Default for EventStore<A, E, M, Hasher>
 where
     A: Aggregate,
-    A::Event: Clone,
+    E: AggregateEvent<A> + Clone,
     Hasher: BuildHasher + Default,
 {
     fn default() -> Self {
@@ -44,10 +44,10 @@ where
     }
 }
 
-impl<A, M, Hasher> EventStore<A, M, Hasher>
+impl<A, E, M, Hasher> EventStore<A, E, M, Hasher>
 where
     A: Aggregate,
-    A::Event: Clone,
+    E: AggregateEvent<A> + Clone,
     Hasher: BuildHasher,
 {
     /// Constructs a new event store with the specified hasher.
@@ -59,14 +59,14 @@ where
     }
 }
 
-impl<A, M, Hasher> EventSource<A> for EventStore<A, M, Hasher>
+impl<A, E, M, Hasher> EventSource<A, E> for EventStore<A, E, M, Hasher>
 where
     A: Aggregate,
-    A::Event: Clone,
+    E: AggregateEvent<A> + Clone,
     Hasher: BuildHasher,
 {
     type Error = Void;
-    type Events = Vec<Result<VersionedEvent<A::Event>, Void>>;
+    type Events = Vec<Result<VersionedEvent<E>, Void>>;
 
     fn read_events<I>(
         &self,
@@ -135,10 +135,10 @@ impl fmt::Display for PreconditionFailed {
     }
 }
 
-impl<A, M, Hasher> EventSink<A, M> for EventStore<A, M, Hasher>
+impl<A, E, M, Hasher> EventSink<A, E, M> for EventStore<A, E, M, Hasher>
 where
     A: Aggregate,
-    A::Event: Clone,
+    E: AggregateEvent<A> + Clone,
     Hasher: BuildHasher,
 {
     type Error = PreconditionFailed;
@@ -146,7 +146,7 @@ where
     fn append_events<I>(
         &self,
         id: &I,
-        events: &[A::Event],
+        events: &[E],
         precondition: Option<Precondition>,
         metadata: M,
     ) -> Result<EventNumber, Self::Error>

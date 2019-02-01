@@ -19,12 +19,12 @@ pub struct CreateTodo {
     pub reminder: Option<domain::Reminder>,
 }
 
-impl AggregateCommand for CreateTodo {
-    type Aggregate = TodoAggregate;
+impl AggregateCommand<TodoAggregate> for CreateTodo {
     type Error = CommandError;
-    type Events = ArrayVec<[TodoEvent; 2]>;
+    type Event = TodoEvent;
+    type Events = ArrayVec<[Self::Event; 2]>;
 
-    fn execute_on(self, aggregate: &Self::Aggregate) -> Result<Self::Events, Self::Error> {
+    fn execute_on(self, aggregate: &TodoAggregate) -> Result<Self::Events, Self::Error> {
         if let TodoAggregate::Created(_) = aggregate {
             return Err(CommandError::AlreadyCreated);
         }
@@ -49,12 +49,12 @@ pub struct UpdateDescription {
     pub new_description: domain::Description,
 }
 
-impl AggregateCommand for UpdateDescription {
-    type Aggregate = TodoAggregate;
+impl AggregateCommand<TodoAggregate> for UpdateDescription {
     type Error = CommandError;
-    type Events = ArrayVec<[TodoEvent; 1]>;
+    type Event = TodoEvent;
+    type Events = ArrayVec<[Self::Event; 1]>;
 
-    fn execute_on(self, aggregate: &Self::Aggregate) -> Result<Self::Events, Self::Error> {
+    fn execute_on(self, aggregate: &TodoAggregate) -> Result<Self::Events, Self::Error> {
         if let TodoAggregate::Created(ref data) = aggregate {
             if data.description != self.new_description {
                 let mut events = ArrayVec::new();
@@ -78,12 +78,12 @@ pub struct SetReminder {
     pub new_reminder: domain::Reminder,
 }
 
-impl AggregateCommand for SetReminder {
-    type Aggregate = TodoAggregate;
+impl AggregateCommand<TodoAggregate> for SetReminder {
     type Error = CommandError;
-    type Events = ArrayVec<[TodoEvent; 1]>;
+    type Event = TodoEvent;
+    type Events = ArrayVec<[Self::Event; 1]>;
 
-    fn execute_on(self, aggregate: &Self::Aggregate) -> Result<Self::Events, Self::Error> {
+    fn execute_on(self, aggregate: &TodoAggregate) -> Result<Self::Events, Self::Error> {
         if let TodoAggregate::Created(ref data) = aggregate {
             let new_reminder = Some(self.new_reminder);
 
@@ -104,12 +104,12 @@ impl AggregateCommand for SetReminder {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CancelReminder;
 
-impl AggregateCommand for CancelReminder {
-    type Aggregate = TodoAggregate;
+impl AggregateCommand<TodoAggregate> for CancelReminder {
     type Error = CommandError;
-    type Events = ArrayVec<[TodoEvent; 1]>;
+    type Event = TodoEvent;
+    type Events = ArrayVec<[Self::Event; 1]>;
 
-    fn execute_on(self, aggregate: &Self::Aggregate) -> Result<Self::Events, Self::Error> {
+    fn execute_on(self, aggregate: &TodoAggregate) -> Result<Self::Events, Self::Error> {
         if let TodoAggregate::Created(ref data) = aggregate {
             if data.reminder.is_some() {
                 let mut events = ArrayVec::new();
@@ -130,12 +130,12 @@ impl AggregateCommand for CancelReminder {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToggleCompletion;
 
-impl AggregateCommand for ToggleCompletion {
-    type Aggregate = TodoAggregate;
+impl AggregateCommand<TodoAggregate> for ToggleCompletion {
     type Error = CommandError;
-    type Events = ArrayVec<[TodoEvent; 1]>;
+    type Event = TodoEvent;
+    type Events = ArrayVec<[Self::Event; 1]>;
 
-    fn execute_on(self, aggregate: &Self::Aggregate) -> Result<Self::Events, Self::Error> {
+    fn execute_on(self, aggregate: &TodoAggregate) -> Result<Self::Events, Self::Error> {
         if let TodoAggregate::Created(ref data) = aggregate {
             let mut events = ArrayVec::new();
             match data.status {
@@ -153,12 +153,12 @@ impl AggregateCommand for ToggleCompletion {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MarkCompleted;
 
-impl AggregateCommand for MarkCompleted {
-    type Aggregate = TodoAggregate;
+impl AggregateCommand<TodoAggregate> for MarkCompleted {
     type Error = CommandError;
-    type Events = ArrayVec<[TodoEvent; 1]>;
+    type Event = TodoEvent;
+    type Events = ArrayVec<[Self::Event; 1]>;
 
-    fn execute_on(self, aggregate: &Self::Aggregate) -> Result<Self::Events, Self::Error> {
+    fn execute_on(self, aggregate: &TodoAggregate) -> Result<Self::Events, Self::Error> {
         if let TodoAggregate::Created(ref data) = aggregate {
             let mut events = ArrayVec::new();
             if data.status == TodoStatus::NotCompleted {
@@ -175,12 +175,12 @@ impl AggregateCommand for MarkCompleted {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResetCompleted;
 
-impl AggregateCommand for ResetCompleted {
-    type Aggregate = TodoAggregate;
+impl AggregateCommand<TodoAggregate> for ResetCompleted {
     type Error = CommandError;
-    type Events = ArrayVec<[TodoEvent; 1]>;
+    type Event = TodoEvent;
+    type Events = ArrayVec<[Self::Event; 1]>;
 
-    fn execute_on(self, aggregate: &Self::Aggregate) -> Result<Self::Events, Self::Error> {
+    fn execute_on(self, aggregate: &TodoAggregate) -> Result<Self::Events, Self::Error> {
         if let TodoAggregate::Created(ref data) = aggregate {
             let mut events = ArrayVec::new();
             if data.status == TodoStatus::Completed {
