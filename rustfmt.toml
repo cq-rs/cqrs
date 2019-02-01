@@ -1,6 +1,5 @@
 condense_wildcard_suffixes = true
 merge_imports = true
-match_block_trailing_comma = true
 reorder_impl_items = true
 # report_todo = "Always"
 report_fixme = "Always"

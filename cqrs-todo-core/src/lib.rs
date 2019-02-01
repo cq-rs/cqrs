@@ -217,19 +217,19 @@ impl SerializableEvent for TodoEvent {
         match *self {
             TodoEvent::Created(ref inner) => {
                 serde_json::to_writer(buffer, inner)?;
-            },
+            }
             TodoEvent::ReminderUpdated(ref inner) => {
                 serde_json::to_writer(buffer, inner)?;
-            },
+            }
             TodoEvent::DescriptionUpdated(ref inner) => {
                 serde_json::to_writer(buffer, inner)?;
-            },
+            }
             TodoEvent::Completed(ref inner) => {
                 serde_json::to_writer(buffer, inner)?;
-            },
+            }
             TodoEvent::Uncompleted(ref inner) => {
                 serde_json::to_writer(buffer, inner)?;
-            },
+            }
         }
         Ok(())
     }
@@ -247,7 +247,7 @@ impl DeserializableEvent for TodoEvent {
             "todo_reminder_updated" => TodoEvent::ReminderUpdated(serde_json::from_slice(data)?),
             "todo_description_updated" => {
                 TodoEvent::DescriptionUpdated(serde_json::from_slice(data)?)
-            },
+            }
             "todo_completed" => TodoEvent::Completed(serde_json::from_slice(data)?),
             "todo_uncompleted" => TodoEvent::Uncompleted(serde_json::from_slice(data)?),
             _ => return Ok(None),

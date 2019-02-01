@@ -99,7 +99,7 @@ impl Version {
             Version::Number(mut en) => {
                 en.incr();
                 en
-            },
+            }
         }
     }
 
@@ -212,10 +212,10 @@ impl fmt::Display for Precondition {
             Precondition::New => f.write_str("expect aggregate does not exist"),
             Precondition::ExpectedVersion(Version::Initial) => {
                 f.write_str("expect aggregate to exist in initial state")
-            },
+            }
             Precondition::ExpectedVersion(Version::Number(v)) => {
                 write!(f, "expect aggregate to exist with version {}", v)
-            },
+            }
         }
     }
 }

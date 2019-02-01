@@ -402,10 +402,10 @@ where
                     metadata,
                 )
                 .map_err(EntityExecAndPersistError::Persist)?;
-            },
+            }
             Err(e) => {
                 return Err(EntityExecAndPersistError::Exec(aggregate, e));
-            },
+            }
         }
 
         Ok(aggregate)
@@ -896,10 +896,10 @@ where
         match self {
             EntityLoadError::EventSource(e) => {
                 write!(f, "entity load error, problem loading events: {}", e)
-            },
+            }
             EntityLoadError::SnapshotSource(e) => {
                 write!(f, "entity load error, problem loading snapshot: {}", e)
-            },
+            }
         }
     }
 }
@@ -927,7 +927,7 @@ where
         match self {
             EntityPersistError::EventSink(e) => {
                 write!(f, "entity persist error, problem persisting events: {}", e)
-            },
+            }
             EntityPersistError::SnapshotSink(e) => write!(
                 f,
                 "entity persist error, problem persisting snapshot (events successfully \
@@ -968,10 +968,10 @@ where
         match self {
             EntityExecAndPersistError::PreconditionFailed(p) => {
                 write!(f, "entity exec error, precondition failed: {}", p)
-            },
+            }
             EntityExecAndPersistError::Exec(_, e) => {
                 write!(f, "entity exec error, command was rejected: {}", e)
-            },
+            }
             EntityExecAndPersistError::Persist(e) => fmt::Display::fmt(&e, f),
         }
     }
@@ -1028,7 +1028,7 @@ where
             EntityError::Load(e) => fmt::Display::fmt(&e, f),
             EntityError::PreconditionFailed(p) => {
                 write!(f, "entity error, precondition failed: {}", p)
-            },
+            }
             EntityError::Exec(_, e) => write!(f, "entity error, command was rejected: {}", e),
             EntityError::Persist(e) => fmt::Display::fmt(&e, f),
         }

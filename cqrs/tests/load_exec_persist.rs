@@ -43,7 +43,7 @@ impl EventSource<TodoAggregate, TodoEvent> for EventMap {
             })),
             (Since::BeginningOfStream, None) => {
                 Ok(stream.map(|e| e.into_iter().map(|e| Ok(e.to_owned())).collect()))
-            },
+            }
             (Since::Event(event_number), None) => Ok(stream.map(|e| {
                 e.into_iter()
                     .skip(event_number.get() as usize)
@@ -73,13 +73,13 @@ impl EventSink<TodoAggregate, TodoEvent, TodoMetadata> for EventMap {
         match entry {
             Entry::Occupied(_) if precondition == Some(Precondition::New) => {
                 panic!("Need error type here")
-            },
+            }
             Entry::Vacant(_) => {
                 if let Some(Precondition::ExpectedVersion(_)) = precondition {
                     panic!("Need error type here")
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
 
         let stream = entry.or_insert_with(Vec::default);
@@ -89,13 +89,13 @@ impl EventSink<TodoAggregate, TodoEvent, TodoMetadata> for EventMap {
                 if evt != sequence {
                     panic!("Need error type here")
                 }
-            },
+            }
             Some(Precondition::New) => {
                 if sequence != Version::Initial {
                     panic!("Need error type here")
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
 
         sequence.incr();
