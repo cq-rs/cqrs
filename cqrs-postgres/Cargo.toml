@@ -18,8 +18,8 @@ serde = "1.0"
 serde_json = "1.0"
 
 [dev-dependencies]
-cqrs = { version = "0.1.0-alpha.0", path = "../cqrs" }
-cqrs-todo-core = { version = "0.1.0-alpha.0", path = "../cqrs-todo-core" }
+cqrs = { version = "0.1.0", path = "../cqrs" }
+cqrs-todo-core = { version = "0.1.0", path = "../cqrs-todo-core" }
 static_assertions = "0.3"
 
 [badges]
