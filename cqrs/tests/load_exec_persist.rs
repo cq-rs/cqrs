@@ -23,10 +23,10 @@ impl EventSource<TodoAggregate, TodoEvent> for EventMap {
         max_count: Option<u64>,
     ) -> Result<Option<Self::Events>, Self::Error>
     where
-        I: AggregateId<Aggregate = TodoAggregate>,
+        I: AggregateId<TodoAggregate>,
     {
         let borrow = self.0.borrow();
-        let stream = borrow.get(id.as_ref());
+        let stream = borrow.get(id.as_str());
         match (since, max_count) {
             (Since::BeginningOfStream, Some(max_count)) => Ok(stream.map(|e| {
                 e.into_iter()
@@ -65,10 +65,10 @@ impl EventSink<TodoAggregate, TodoEvent, TodoMetadata> for EventMap {
         _metadata: TodoMetadata,
     ) -> Result<EventNumber, Self::Error>
     where
-        I: AggregateId<Aggregate = TodoAggregate>,
+        I: AggregateId<TodoAggregate>,
     {
         let mut borrow = self.0.borrow_mut();
-        let entry = borrow.entry(id.as_ref().into());
+        let entry = borrow.entry(id.as_str().into());
 
         match entry {
             Entry::Occupied(_) if precondition == Some(Precondition::New) => {

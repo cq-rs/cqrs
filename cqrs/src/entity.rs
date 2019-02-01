@@ -82,7 +82,7 @@ where
 pub struct Entity<I, A>
 where
     A: Aggregate,
-    I: AggregateId<Aggregate = A>,
+    I: AggregateId<A>,
 {
     id: I,
     aggregate: HydratedAggregate<A>,
@@ -91,7 +91,7 @@ where
 impl<I, A> Entity<I, A>
 where
     A: Aggregate,
-    I: AggregateId<Aggregate = A>,
+    I: AggregateId<A>,
 {
     /// Creates a new entity from an identifier and an associated hydrated aggregate.
     pub fn new(id: I, aggregate: HydratedAggregate<A>) -> Self {
@@ -100,7 +100,7 @@ where
 
     /// The entity's identifier.
     pub fn id(&self) -> &str {
-        self.id.as_ref()
+        self.id.as_str()
     }
 
     /// An immutable reference to the underlying aggregate.
@@ -117,7 +117,7 @@ where
 impl<I, A> From<Entity<I, A>> for HydratedAggregate<A>
 where
     A: Aggregate,
-    I: AggregateId<Aggregate = A>,
+    I: AggregateId<A>,
 {
     fn from(entity: Entity<I, A>) -> Self {
         entity.aggregate
@@ -127,7 +127,7 @@ where
 impl<I, A> AsRef<HydratedAggregate<A>> for Entity<I, A>
 where
     A: Aggregate,
-    I: AggregateId<Aggregate = A>,
+    I: AggregateId<A>,
 {
     fn as_ref(&self) -> &HydratedAggregate<A> {
         &self.aggregate
@@ -137,7 +137,7 @@ where
 impl<I, A> AsMut<HydratedAggregate<A>> for Entity<I, A>
 where
     A: Aggregate,
-    I: AggregateId<Aggregate = A>,
+    I: AggregateId<A>,
 {
     fn as_mut(&mut self) -> &mut HydratedAggregate<A> {
         &mut self.aggregate
@@ -147,7 +147,7 @@ where
 impl<I, A> Borrow<HydratedAggregate<A>> for Entity<I, A>
 where
     A: Aggregate,
-    I: AggregateId<Aggregate = A>,
+    I: AggregateId<A>,
 {
     fn borrow(&self) -> &HydratedAggregate<A> {
         &self.aggregate
@@ -157,7 +157,7 @@ where
 impl<I, A> Borrow<A> for Entity<I, A>
 where
     A: Aggregate,
-    I: AggregateId<Aggregate = A>,
+    I: AggregateId<A>,
 {
     fn borrow(&self) -> &A {
         self.aggregate.borrow()
@@ -167,7 +167,7 @@ where
 impl<I, A> BorrowMut<HydratedAggregate<A>> for Entity<I, A>
 where
     A: Aggregate,
-    I: AggregateId<Aggregate = A>,
+    I: AggregateId<A>,
 {
     fn borrow_mut(&mut self) -> &mut HydratedAggregate<A> {
         &mut self.aggregate
@@ -186,7 +186,7 @@ where
     /// for the requested entity, returns `Ok(None)`.
     fn load_from_snapshot<I>(&self, id: &I) -> EntityLoadSnapshotResult<A, Self>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         let entity = if let Some(snapshot) = self.get_snapshot(id)? {
             Some(HydratedAggregate {
@@ -210,7 +210,7 @@ where
         aggregate: &mut HydratedAggregate<A>,
     ) -> Result<(), <Self as EventSource<A, E>>::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         let seq_events = self.read_events(id, aggregate.version.into(), None)?;
 
@@ -234,7 +234,7 @@ where
     /// for the entity, returns `Ok(None)`
     fn rehydrate<I>(&self, id: &I) -> EntityRefreshResult<A, E, Self>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         let aggregate = self
             .load_from_snapshot(id)
@@ -339,7 +339,7 @@ where
         metadata: M,
     ) -> EntityPersistResult<A, E, M, Self>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
         Es: Events<E>,
     {
         self.append_events(
@@ -379,7 +379,7 @@ where
         metadata: M,
     ) -> EntityExecAndPersistResult<A, C, M, Self>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
         C: AggregateCommand<A, Event = E>,
         C::Events: Events<E>,
     {
@@ -436,7 +436,7 @@ where
         metadata: M,
     ) -> EntityResult<A, C, M, Self>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
         C: AggregateCommand<A, Event = E>,
         C::Events: Events<E>,
     {
@@ -458,7 +458,7 @@ where
         metadata: M,
     ) -> EntityOptionResult<A, C, M, Self>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
         C: AggregateCommand<A, Event = E>,
         C::Events: Events<E>,
     {
@@ -566,7 +566,7 @@ where
         max_count: Option<u64>,
     ) -> Result<Option<Self::Events>, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         self.event_source.read_events(id, since, max_count)
     }
@@ -586,7 +586,7 @@ where
         id: &I,
     ) -> Result<Option<VersionedAggregate<A>>, <Self as SnapshotSource<A>>::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         self.snapshot_source.get_snapshot(id)
     }
@@ -677,7 +677,7 @@ where
         metadata: M,
     ) -> Result<EventNumber, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         self.event_sink
             .append_events(id, events, precondition, metadata)
@@ -701,7 +701,7 @@ where
         last_snapshot_version: Version,
     ) -> Result<Version, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         self.snapshot_sink
             .persist_snapshot(id, aggregate, version, last_snapshot_version)
@@ -799,7 +799,7 @@ where
         max_count: Option<u64>,
     ) -> Result<Option<Self::Events>, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         self.entity_source.read_events(id, since, max_count)
     }
@@ -819,7 +819,7 @@ where
         id: &I,
     ) -> Result<Option<VersionedAggregate<A>>, <Self as SnapshotSource<A>>::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         self.entity_source.get_snapshot(id)
     }
@@ -842,7 +842,7 @@ where
         metadata: M,
     ) -> Result<EventNumber, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         self.entity_sink
             .append_events(id, events, precondition, metadata)
@@ -866,7 +866,7 @@ where
         last_snapshot_version: Version,
     ) -> Result<Version, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         self.entity_sink
             .persist_snapshot(id, aggregate, version, last_snapshot_version)

@@ -26,13 +26,13 @@ pub trait Aggregate: Default {
 }
 
 /// An identifier for an aggregate.
-pub trait AggregateId: AsRef<str> {
-    /// The aggregate type identified.
-    type Aggregate: Aggregate;
+pub trait AggregateId<A>
+where
+    A: Aggregate,
+{
+    /// Gets the stringified aggregate identifier.
+    fn as_str(&self) -> &str;
 }
-
-/// The aggregate type identified by a given identifier type.
-pub type AggregateIdentifiedBy<I> = <I as AggregateId>::Aggregate;
 
 /// A command that can be executed against an aggregate.
 pub trait AggregateCommand<A: Aggregate> {

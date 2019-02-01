@@ -306,7 +306,7 @@ where
         metadata: M,
     ) -> Result<EventNumber, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         let trans = self.conn.transaction()?;
 
@@ -314,7 +314,7 @@ where
             "SELECT MAX(sequence) FROM events WHERE aggregate_type = $1 AND entity_id = $2",
         )?;
 
-        let result = check_stmt.query(&[&A::aggregate_type(), &id.as_ref()])?;
+        let result = check_stmt.query(&[&A::aggregate_type(), &id.as_str()])?;
         let current_version = result.iter().next().and_then(|r| {
             let max_sequence: Option<Sequence> = r.get(0);
             max_sequence.map(|x| Version::from(x.0))
@@ -322,7 +322,7 @@ where
 
         log::trace!(
             "entity {}: current version: {:?}",
-            id.as_ref(),
+            id.as_str(),
             current_version
         );
 
@@ -334,7 +334,7 @@ where
             precondition.verify(current_version)?;
         }
 
-        log::trace!("entity {}: precondition satisfied", id.as_ref());
+        log::trace!("entity {}: precondition satisfied", id.as_str());
 
         let first_sequence = current_version.unwrap_or_default().next_event();
         let mut next_sequence = Version::Number(first_sequence);
@@ -351,7 +351,7 @@ where
                 .map_err(PersistError::SerializationError)?;
             let modified_count = stmt.execute(&[
                 &A::aggregate_type(),
-                &id.as_ref(),
+                &id.as_str(),
                 &(next_sequence.get() as i64),
                 &event.event_type(),
                 &RawJsonPersist(&buffer),
@@ -360,7 +360,7 @@ where
             debug_assert!(modified_count > 0);
             log::trace!(
                 "entity {}: inserted event; sequence: {}",
-                id.as_ref(),
+                id.as_str(),
                 next_sequence
             );
             next_sequence.incr();
@@ -388,7 +388,7 @@ where
         max_count: Option<u64>,
     ) -> Result<Option<Self::Events>, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         let last_sequence = match since {
             cqrs_core::Since::BeginningOfStream => 0,
@@ -409,7 +409,7 @@ where
                 .ok_or_else(|| LoadError::UnknownEventType(event_type.clone()))?;
             log::trace!(
                 "entity {}: loaded event; sequence: {}, type: {}",
-                id.as_ref(),
+                id.as_str(),
                 sequence.0,
                 event_type
             );
@@ -434,7 +434,7 @@ where
                     &trans,
                     &[
                         &A::aggregate_type(),
-                        &id.as_ref(),
+                        &id.as_str(),
                         &last_sequence,
                         &(max_count.min(i64::max_value() as u64) as i64),
                     ],
@@ -449,7 +449,7 @@ where
                 )?;
                 rows = stmt.lazy_query(
                     &trans,
-                    &[&A::aggregate_type(), &id.as_ref(), &last_sequence],
+                    &[&A::aggregate_type(), &id.as_str(), &last_sequence],
                     100,
                 )?;
             }
@@ -466,7 +466,7 @@ where
 
         trans.commit()?;
 
-        log::trace!("entity {}: read {} events", id.as_ref(), events.len());
+        log::trace!("entity {}: read {} events", id.as_str(), events.len());
 
         Ok(Some(events))
     }
@@ -488,7 +488,7 @@ where
         last_snapshot_version: Version,
     ) -> Result<Version, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         if version <= last_snapshot_version
             || self
@@ -505,16 +505,16 @@ where
         )?;
         let _modified_count = stmt.execute(&[
             &A::aggregate_type(),
-            &id.as_ref(),
+            &id.as_str(),
             &(version.get() as i64),
             &Json(aggregate),
         ])?;
 
         // Clean up strategy for snapshots?
         //        let stmt = self.conn.prepare_cached("DELETE FROM snapshots WHERE aggregate_type = $1 AND entity_id = $2 AND sequence < $3")?;
-        //        let _modified_count = stmt.execute(&[&A::aggregate_type(), &id.as_ref(), &(version.get() as i64)])?;
+        //        let _modified_count = stmt.execute(&[&A::aggregate_type(), &id.as_str(), &(version.get() as i64)])?;
 
-        log::trace!("entity {}: persisted snapshot", id.as_ref());
+        log::trace!("entity {}: persisted snapshot", id.as_str());
         Ok(version)
     }
 }
@@ -529,7 +529,7 @@ where
 
     fn get_snapshot<I>(&self, id: &I) -> Result<Option<VersionedAggregate<A>>, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         let stmt = self.conn.prepare_cached(
             "SELECT sequence, payload \
@@ -538,17 +538,17 @@ where
              ORDER BY sequence DESC \
              LIMIT 1",
         )?;
-        let rows = stmt.query(&[&A::aggregate_type(), &id.as_ref()])?;
+        let rows = stmt.query(&[&A::aggregate_type(), &id.as_str()])?;
         if let Some(row) = rows.iter().next() {
             let sequence: Sequence = row.get("sequence");
             let raw: Json<A> = row.get("payload");
-            log::trace!("entity {}: loaded snapshot", id.as_ref());
+            log::trace!("entity {}: loaded snapshot", id.as_str());
             Ok(Some(VersionedAggregate {
                 version: Version::from(sequence.0),
                 payload: raw.0,
             }))
         } else {
-            log::trace!("entity {}: no snapshot found", id.as_ref());
+            log::trace!("entity {}: no snapshot found", id.as_str());
             Ok(None)
         }
     }

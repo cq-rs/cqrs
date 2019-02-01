@@ -61,7 +61,7 @@ where
         _max_count: Option<u64>,
     ) -> Result<Option<Self::Events>, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         Ok(None)
     }
@@ -83,7 +83,7 @@ where
         _metadata: M,
     ) -> Result<EventNumber, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         Ok(EventNumber::MIN_VALUE)
     }
@@ -132,7 +132,7 @@ where
     #[inline]
     fn get_snapshot<I>(&self, _id: &I) -> Result<Option<VersionedAggregate<A>>, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
         Self: Sized,
     {
         Ok(None)
@@ -154,7 +154,7 @@ where
         last_snapshot_version: Version,
     ) -> Result<Version, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
         Self: Sized,
     {
         Ok(last_snapshot_version)

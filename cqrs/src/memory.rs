@@ -75,11 +75,11 @@ where
         max_count: Option<u64>,
     ) -> Result<Option<Self::Events>, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         let table = self.inner.read();
 
-        let stream = table.get(id.as_ref());
+        let stream = table.get(id.as_str());
 
         let result = stream.map(|stream| {
             let stream = stream.read();
@@ -151,13 +151,13 @@ where
         metadata: M,
     ) -> Result<EventNumber, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
     {
         let table = self.inner.upgradable_read();
 
-        if table.contains_key(id.as_ref()) {
+        if table.contains_key(id.as_str()) {
             let table = RwLockUpgradableReadGuard::downgrade(table);
-            let stream = table.get(id.as_ref()).unwrap().upgradable_read();
+            let stream = table.get(id.as_str()).unwrap().upgradable_read();
 
             let mut sequence = Version::new(stream.events.len() as u64).next_event();
             let first_sequence = sequence;
@@ -211,7 +211,7 @@ where
             let stream = RwLock::new(new_stream);
 
             let mut table = RwLockUpgradableReadGuard::upgrade(table);
-            table.insert(id.as_ref().into(), stream);
+            table.insert(id.as_str().into(), stream);
 
             Ok(EventNumber::MIN_VALUE)
         }
@@ -265,12 +265,12 @@ where
 
     fn get_snapshot<I>(&self, id: &I) -> Result<Option<VersionedAggregate<A>>, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
         Self: Sized,
     {
         let table = self.inner.read();
 
-        let snapshot = table.get(id.as_ref()).map(|data| data.read().to_owned());
+        let snapshot = table.get(id.as_str()).map(|data| data.read().to_owned());
 
         Ok(snapshot)
     }
@@ -291,7 +291,7 @@ where
         _last_snapshot_version: Version,
     ) -> Result<Version, Self::Error>
     where
-        I: AggregateId<Aggregate = A>,
+        I: AggregateId<A>,
         Self: Sized,
     {
         let table = self.inner.upgradable_read();
@@ -301,12 +301,12 @@ where
             payload: aggregate.to_owned(),
         };
 
-        if table.contains_key(id.as_ref()) {
+        if table.contains_key(id.as_str()) {
             let table = RwLockUpgradableReadGuard::downgrade(table);
-            *table.get(id.as_ref()).unwrap().write() = owned_aggregate;
+            *table.get(id.as_str()).unwrap().write() = owned_aggregate;
         } else {
             let mut table = RwLockUpgradableReadGuard::upgrade(table);
-            table.insert(id.as_ref().into(), RwLock::new(owned_aggregate));
+            table.insert(id.as_str().into(), RwLock::new(owned_aggregate));
         };
 
         Ok(version)

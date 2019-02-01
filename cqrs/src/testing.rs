@@ -21,20 +21,16 @@ pub struct TestCommand;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TestId<'a>(pub &'a str);
 
-impl<'a> AsRef<str> for TestId<'a> {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
 impl Aggregate for TestAggregate {
     fn aggregate_type() -> &'static str {
         "test"
     }
 }
 
-impl<'a> AggregateId for TestId<'a> {
-    type Aggregate = TestAggregate;
+impl<'a> AggregateId<TestAggregate> for TestId<'a> {
+    fn as_str(&self) -> &str {
+        self.0
+    }
 }
 
 impl AggregateCommand<TestAggregate> for TestCommand {

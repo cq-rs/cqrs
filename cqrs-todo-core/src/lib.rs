@@ -63,14 +63,10 @@ impl Aggregate for TodoAggregate {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TodoId(pub String);
 
-impl AsRef<str> for TodoId {
-    fn as_ref(&self) -> &str {
+impl AggregateId<TodoAggregate> for TodoId {
+    fn as_str(&self) -> &str {
         &self.0
     }
-}
-
-impl AggregateId for TodoId {
-    type Aggregate = TodoAggregate;
 }
 
 /// An identifier for an item to be done.
@@ -83,8 +79,10 @@ impl<'a> AsRef<str> for TodoIdRef<'a> {
     }
 }
 
-impl<'a> AggregateId for TodoIdRef<'a> {
-    type Aggregate = TodoAggregate;
+impl<'a> AggregateId<TodoAggregate> for TodoIdRef<'a> {
+    fn as_str(&self) -> &str {
+        self.0
+    }
 }
 
 /// Metadata about events.

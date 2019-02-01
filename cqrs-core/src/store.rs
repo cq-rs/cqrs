@@ -29,7 +29,7 @@ where
         max_count: Option<u64>,
     ) -> Result<Option<Self::Events>, Self::Error>
     where
-        I: AggregateId<Aggregate = A>;
+        I: AggregateId<A>;
 }
 
 /// A sink for writing/persisting events with associated metadata.
@@ -52,7 +52,7 @@ where
         metadata: M,
     ) -> Result<EventNumber, Self::Error>
     where
-        I: AggregateId<Aggregate = A>;
+        I: AggregateId<A>;
 }
 
 /// A source for reading/loading snapshots of aggregates.
@@ -66,7 +66,7 @@ where
     /// Loads a versioned aggregate from the snapshot source.
     fn get_snapshot<I>(&self, id: &I) -> Result<Option<VersionedAggregate<A>>, Self::Error>
     where
-        I: AggregateId<Aggregate = A>;
+        I: AggregateId<A>;
 }
 
 /// A sink for writing/persisting snapshots of aggregates.
@@ -86,7 +86,7 @@ where
         last_snapshot_version: Version,
     ) -> Result<Version, Self::Error>
     where
-        I: AggregateId<Aggregate = A>;
+        I: AggregateId<A>;
 }
 
 /// A strategy determining when to recommend a snapshot be taken.
