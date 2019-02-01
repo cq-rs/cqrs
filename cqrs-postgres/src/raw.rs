@@ -48,7 +48,7 @@ pub struct RawPostgresStore<'conn> {
 impl<'conn> RawPostgresStore<'conn> {
     /// Reads all events from the event stream, starting with events after `since`,
     pub fn read_all_events(
-        &self,
+        self,
         since: Since,
         max_count: u64,
     ) -> Result<Vec<RawEvent>, postgres::Error> {
@@ -105,7 +105,7 @@ impl<'conn> RawPostgresStore<'conn> {
 
             events = rows
                 .iterator()
-                .map(|row_result| row_result.map(|row| handle_row(row)))
+                .map(|row_result| row_result.map(handle_row))
                 .collect::<Result<_, postgres::Error>>()?;
         }
 
@@ -118,7 +118,7 @@ impl<'conn> RawPostgresStore<'conn> {
 
     /// Reads all events from the event stream, starting with events after `since`,
     pub fn read_all_events_with<E: cqrs_core::CqrsError>(
-        &self,
+        self,
         since: Since,
         max_count: u64,
         mut f: impl for<'row> FnMut(BorrowedRawEvent<'row>) -> Result<(), E>,
