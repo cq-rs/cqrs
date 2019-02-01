@@ -10,7 +10,7 @@ repository = "https://github.com/cq-rs/cqrs"
 edition = "2018"
 
 [dependencies]
-cqrs-core = { path = "../cqrs-core", version = "0.1.0-alpha.0" }
+cqrs-core = { version = "0.1.0-alpha.0" , path = "../cqrs-core"}
 fallible-iterator = "0.1"
 log = "0.4"
 postgres = "0.15"
@@ -18,8 +18,8 @@ serde = "1.0"
 serde_json = "1.0"
 
 [dev-dependencies]
-cqrs = { path = "../cqrs", version = "0.1.0-alpha.0" }
-cqrs-todo-core = { path = "../cqrs-todo-core", version = "0.1.0-alpha.0" }
+cqrs = { version = "0.1.0-alpha.0" , path = "../cqrs" }
+cqrs-todo-core = { version = "0.1.0-alpha.0" , path = "../cqrs-todo-core" }
 static_assertions = "0.3"
 
 [badges]
