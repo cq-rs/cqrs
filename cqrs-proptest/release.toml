@@ -1,13 +1,15 @@
+no-dev-version = true
 pre-release-commit-message = "Release {{crate_name}} {{version}}"
- pro-release-commit-message = "Bump {{crate_name}} version to {{next_version}}"
- tag-message = "Release {{crate_name}} {{version}}"
- upload-doc = false
- pre-release-replacements = [
-   {file="CHANGELOG.md", search="# master", replace="# master\n\n* No changes yet\n\n# [[{{version}}] {{date}}](https://github.com/cq-rs/cqrs/releases/tag/{{crate_name}}-{{version}})"},
-   {file="../cqrs/Cargo.toml", search="cqrs-proptest = \\{ version = \"0.1.0-alpha.0\"", replace="cqrs-proptest = { version = \"{{version}}\""},
-   {file="../cqrs-core/Cargo.toml", search="cqrs-proptest = \\{ version = \"0.1.0-alpha.0\"", replace="cqrs-proptest = { version = \"{{version}}\""},
-   {file="../cqrs-postgres/Cargo.toml", search="cqrs-proptest = \\{ version = \"0.1.0-alpha.0\"", replace="cqrs-proptest = { version = \"{{version}}\""},
-   {file="../cqrs-todo-core/Cargo.toml", search="cqrs-proptest = \\{ version = \"0.1.0-alpha.0\"", replace="cqrs-proptest = { version = \"{{version}}\""},
-   {file="../cqrs-todoql-psql/Cargo.toml", search="cqrs-proptest = \\{ version = \"0.1.0-alpha.0\"", replace="cqrs-proptest = { version = \"{{version}}\""},
-   {file="release.toml", search="0.1.0-alpha.0", replace="{{version}}"},
- ]
+pro-release-commit-message = "Bump {{crate_name}} version to {{next_version}}"
+tag-message = "Release {{crate_name}} {{version}}"
+upload-doc = false
+sign-commit = true
+pre-release-replacements = [
+ {file="CHANGELOG.md", search="# master", replace="# master\n\n* No changes yet\n\n# [[{{version}}] {{date}}](https://github.com/cq-rs/cqrs/releases/tag/{{crate_name}}-{{version}})"},
+ {file="../cqrs/Cargo.toml", search="cqrs-proptest = \\{ version = \"0.1.0\"", replace="cqrs-proptest = { version = \"{{version}}\""},
+ {file="../cqrs-core/Cargo.toml", search="cqrs-proptest = \\{ version = \"0.1.0\"", replace="cqrs-proptest = { version = \"{{version}}\""},
+ {file="../cqrs-postgres/Cargo.toml", search="cqrs-proptest = \\{ version = \"0.1.0\"", replace="cqrs-proptest = { version = \"{{version}}\""},
+ {file="../cqrs-todo-core/Cargo.toml", search="cqrs-proptest = \\{ version = \"0.1.0\"", replace="cqrs-proptest = { version = \"{{version}}\""},
+ {file="../cqrs-todoql-psql/Cargo.toml", search="cqrs-proptest = \\{ version = \"0.1.0\"", replace="cqrs-proptest = { version = \"{{version}}\""},
+ {file="release.toml", search="0.1.0", replace="{{version}}"},
+]

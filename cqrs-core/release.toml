@@ -1,7 +1,9 @@
+no-dev-version = true
 pre-release-commit-message = "Release {{crate_name}} {{version}}"
 pro-release-commit-message = "Bump {{crate_name}} version to {{next_version}}"
 tag-message = "Release {{crate_name}} {{version}}"
 upload-doc = false
+sign-commit = true
 pre-release-replacements = [
   {file="CHANGELOG.md", search="# master", replace="# master\n\n* No changes yet\n\n# [[{{version}}] {{date}}](https://github.com/cq-rs/cqrs/releases/tag/{{crate_name}}-{{version}})"},
   {file="../cqrs/Cargo.toml", search="cqrs-core = \\{ version = \"0.1.0\"", replace="cqrs-core = { version = \"{{version}}\""},

@@ -1,6 +1,6 @@
 [package]
 name = "cqrs-todoql-psql"
-version = "0.1.0-alpha.0"
+version = "0.1.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
 license = "Apache-2.0"
 edition = "2018"
@@ -8,9 +8,9 @@ publish = false
 
 [dependencies]
 base64 = "0.10"
-cqrs = { version = "0.1.0-alpha.0", path = "../cqrs" }
-cqrs-postgres = { version = "0.1.0-alpha.0", path = "../cqrs-postgres" }
-cqrs-todo-core = { version = "0.1.0-alpha.0", path = "../cqrs-todo-core" }
+cqrs = { version = "0.1.0", path = "../cqrs" }
+cqrs-postgres = { version = "0.1.0", path = "../cqrs-postgres" }
+cqrs-todo-core = { version = "0.1.0", path = "../cqrs-todo-core" }
 clap = "2.32"
 chrono = "0.4"
 env_logger = "0.6"

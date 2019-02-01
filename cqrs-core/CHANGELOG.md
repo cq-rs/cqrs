@@ -2,6 +2,6 @@
 
 * No changes yet
 
-# [[0.1.0] 2019-02-01](https://github.com/cq-rs/cqrs/releases/tag/{{crate_name}}-0.1.0)
+# [[0.1.0] 2019-02-01](https://github.com/cq-rs/cqrs/releases/tag/cqrs-core-0.1.0)
 
 * Initial release

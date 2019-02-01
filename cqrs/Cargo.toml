@@ -1,6 +1,6 @@
 [package]
 name = "cqrs"
-version = "0.1.0-alpha.0"
+version = "0.1.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
 description = "An event-sourced command-query system"
 license = "Apache-2.0"
@@ -17,7 +17,7 @@ void = "1.0"
 
 [dev-dependencies]
 static_assertions = "0.3"
-cqrs-todo-core = { version = "0.1.0-alpha.0", path = "../cqrs-todo-core" }
+cqrs-todo-core = { version = "0.1.0", path = "../cqrs-todo-core" }
 
 [badges]
 travis-ci = { repository = "cq-rs/cqrs", branch = "master" }
