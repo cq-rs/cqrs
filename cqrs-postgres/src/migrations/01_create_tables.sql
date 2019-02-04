@@ -12,11 +12,11 @@ CREATE TABLE events (
 
 CREATE TABLE snapshots (
   snapshot_id bigserial NOT NULL PRIMARY KEY,
-  entity_type text NOT NULL,
+  aggregate_type text NOT NULL,
   entity_id text NOT NULL,
   sequence bigint CHECK (sequence >= 0) NOT NULL,
   payload jsonb NOT NULL,
-  UNIQUE (entity_type, entity_id, sequence)
+  UNIQUE (aggregate_type, entity_id, sequence)
 );
 
 INSERT INTO migrations (version) VALUES (1);
