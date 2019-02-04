@@ -99,8 +99,8 @@ where
     }
 
     /// The entity's identifier.
-    pub fn id(&self) -> &str {
-        self.id.as_str()
+    pub fn id(&self) -> &I {
+        &self.id
     }
 
     /// An immutable reference to the underlying aggregate.

@@ -1,7 +1,7 @@
 use crate::TodoStore;
 use base64;
 use chrono::{DateTime, Utc};
-use cqrs::{Entity, EntitySink, EntitySource, EntityStore, Precondition, Version};
+use cqrs::{AggregateId, Entity, EntitySink, EntitySource, EntityStore, Precondition, Version};
 use cqrs_todo_core::{commands, domain, TodoAggregate, TodoId, TodoMetadata, TodoStatus};
 use juniper::{FieldResult, Value, ID};
 
@@ -81,7 +81,7 @@ struct TodoQL(Entity<TodoId, TodoAggregate>);
 
 graphql_object!(TodoQL: Context |&self| {
     field id() -> FieldResult<ID> {
-        Ok(self.0.id().to_string().into())
+        Ok(self.0.id().as_str().to_string().into())
     }
 
     field description() -> FieldResult<&str> {
