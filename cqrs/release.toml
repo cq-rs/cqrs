@@ -6,10 +6,10 @@ upload-doc = false
 sign-commit = true
 pre-release-replacements = [
   {file="CHANGELOG.md", search="# master", replace="# master\n\n* No changes yet\n\n# [[{{version}}] {{date}}](https://github.com/cq-rs/cqrs/releases/tag/{{crate_name}}-{{version}})"},
-  {file="../cqrs-core/Cargo.toml", search="cqrs = \\{ version = \"0.1.0\"", replace="cqrs = { version = \"{{version}}\""},
-  {file="../cqrs-postgres/Cargo.toml", search="cqrs = \\{ version = \"0.1.0\"", replace="cqrs = { version = \"{{version}}\""},
-  {file="../cqrs-proptest/Cargo.toml", search="cqrs = \\{ version = \"0.1.0\"", replace="cqrs = { version = \"{{version}}\""},
-  {file="../cqrs-todo-core/Cargo.toml", search="cqrs = \\{ version = \"0.1.0\"", replace="cqrs = { version = \"{{version}}\""},
-  {file="../cqrs-todoql-psql/Cargo.toml", search="cqrs = \\{ version = \"0.1.0\"", replace="cqrs = { version = \"{{version}}\""},
-  {file="release.toml", search="0.1.0", replace="{{version}}"},
+  {file="../cqrs-core/Cargo.toml", search="cqrs = \\{ version = \"0.2.0\"", replace="cqrs = { version = \"{{version}}\""},
+  {file="../cqrs-postgres/Cargo.toml", search="cqrs = \\{ version = \"0.2.0\"", replace="cqrs = { version = \"{{version}}\""},
+  {file="../cqrs-proptest/Cargo.toml", search="cqrs = \\{ version = \"0.2.0\"", replace="cqrs = { version = \"{{version}}\""},
+  {file="../cqrs-todo-core/Cargo.toml", search="cqrs = \\{ version = \"0.2.0\"", replace="cqrs = { version = \"{{version}}\""},
+  {file="../cqrs-todoql-psql/Cargo.toml", search="cqrs = \\{ version = \"0.2.0\"", replace="cqrs = { version = \"{{version}}\""},
+  {file="release.toml", search="0.2.0", replace="{{version}}"},
 ]
