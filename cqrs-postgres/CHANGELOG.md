@@ -1,5 +1,9 @@
 # master
 
+* No changes yet
+
+# [[0.2.1] 2019-02-04](https://github.com/cq-rs/cqrs/releases/tag/cqrs-postgres-0.2.1)
+
 * Fix DB creation script.
 
 # [[0.2.0] 2019-02-04](https://github.com/cq-rs/cqrs/releases/tag/cqrs-postgres-0.2.0)
