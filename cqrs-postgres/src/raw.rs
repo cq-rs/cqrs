@@ -1,43 +1,9 @@
 //! Types for interacting with raw event data in PostgreSQL event store.
 
 use crate::{error::LoadError, util::Sequence};
-use cqrs_core::{EventNumber, Since};
+use cqrs_core::{BorrowedRawEvent, EventNumber, RawEvent, Since};
 use fallible_iterator::FallibleIterator;
 use postgres::Connection;
-
-/// An owned, raw view of event data.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct RawEvent {
-    /// The event id.
-    pub event_id: EventNumber,
-    /// The aggregate type.
-    pub aggregate_type: String,
-    /// The entity id.
-    pub entity_id: String,
-    /// The sequence number of this event in the entity's event stream.
-    pub sequence: EventNumber,
-    /// The event type.
-    pub event_type: String,
-    /// The raw event payload.
-    pub payload: Vec<u8>,
-}
-
-/// An owned, raw view of event data.
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub struct BorrowedRawEvent<'row> {
-    /// The event id.
-    pub event_id: EventNumber,
-    /// The aggregate type.
-    pub aggregate_type: &'row str,
-    /// The entity id.
-    pub entity_id: &'row str,
-    /// The sequence number of this event in the entity's event stream.
-    pub sequence: EventNumber,
-    /// The event type.
-    pub event_type: &'row str,
-    /// The raw event payload.
-    pub payload: &'row [u8],
-}
 
 /// A connection to a PostgreSQL storage backend that is not specific to any aggregate.
 #[derive(Clone, Copy, Debug)]

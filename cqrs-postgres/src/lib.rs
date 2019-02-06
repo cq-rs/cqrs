@@ -25,6 +25,7 @@ extern crate cqrs_todo_core;
 extern crate static_assertions;
 
 mod error;
+mod reactor;
 mod store;
 mod util;
 

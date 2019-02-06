@@ -9,14 +9,15 @@
     trivial_casts,
     trivial_numeric_casts,
     unsafe_code,
-    unused_must_use,
-    missing_docs
+    unused_must_use
 )]
+#![warn(missing_docs)]
 
 #[cfg(test)]
 extern crate void;
 
 mod aggregate;
+pub mod reactor;
 mod store;
 mod types;
 
@@ -32,6 +33,6 @@ pub use crate::store::{
 };
 #[doc(inline)]
 pub use crate::types::{
-    CqrsError, EventNumber, Precondition, Since, SnapshotRecommendation, Version,
-    VersionedAggregate, VersionedEvent,
+    BorrowedRawEvent, CqrsError, EventNumber, Precondition, RawEvent, Since,
+    SnapshotRecommendation, Version, VersionedAggregate, VersionedEvent,
 };

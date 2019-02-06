@@ -14,8 +14,10 @@ cqrs-core = { version = "0.1.0", path = "../cqrs-core"}
 fallible-iterator = "0.1"
 log = "0.4"
 postgres = "0.15"
+r2d2_postgres = "0.14.0"
 serde = "1.0"
 serde_json = "1.0"
+void = "1.0.2"
 
 [dev-dependencies]
 cqrs = { version = "0.2.0", path = "../cqrs" }
