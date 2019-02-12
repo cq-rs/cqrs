@@ -36,15 +36,17 @@ pub struct SpecificAggregatePredicate {
 }
 
 /// A Reactor “reacts” to events, as they are created.
-/// It may trigger side-effects and might create other events, in turn.
 pub trait Reactor {
-    fn start_reaction<R: Reaction>(reaction: R);
+    fn start_reaction<R: Reaction>(reaction: R, rx: crossbeam_channel::Receiver<bool>);
+    fn stop_reaction();
 }
 
+/// A Reaction may trigger side-effects and might create other events,
+/// in response to an event's creation.
 pub trait Reaction {
     type Error: std::fmt::Display + std::fmt::Debug + Send + Sync + 'static;
 
     fn name() -> &'static str;
-    fn react(&mut self, event: RawEvent) -> Result<(), Self::Error>;
+    fn react(event: RawEvent) -> Result<(), Self::Error>;
     fn predicate() -> ReactionPredicate;
 }

@@ -11,6 +11,7 @@ edition = "2018"
 
 [dependencies]
 cqrs-core = { version = "0.1.0", path = "../cqrs-core"}
+crossbeam-channel = "0.3.8"
 fallible-iterator = "0.1"
 log = "0.4"
 postgres = "0.15"

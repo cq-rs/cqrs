@@ -8,9 +8,18 @@ use cqrs_core::{
     },
     EventNumber, RawEvent, Since,
 };
+use crossbeam_channel::{Receiver, TryRecvError};
 use fallible_iterator::FallibleIterator;
 use postgres::{rows::Rows, types::ToSql, Connection};
-use std::{fmt::Write, time::Duration};
+use std::{
+    fmt::Write,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread::{self, JoinHandle},
+    time::Duration,
+};
 
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Hash)]
 pub struct NullReaction;
@@ -22,7 +31,7 @@ impl Reaction for NullReaction {
         "Null"
     }
 
-    fn react(&mut self, event: RawEvent) -> Result<(), Self::Error> {
+    fn react(event: RawEvent) -> Result<(), Self::Error> {
         Ok(())
     }
 
@@ -31,7 +40,7 @@ impl Reaction for NullReaction {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct PostgresReactor {
     pool: r2d2_postgres::r2d2::Pool<r2d2_postgres::PostgresConnectionManager>,
 }
@@ -41,9 +50,8 @@ impl PostgresReactor {
         PostgresReactor { pool }
     }
 
-    pub fn start_reaction<R: Reaction>(&self, reaction: R) {
+    pub fn start_reaction<R: Reaction>(&self, reaction: R, rx: crossbeam_channel::Receiver<bool>) {
         let mut since = Since::BeginningOfStream;
-        let mut reaction = reaction;
         let mut params: Vec<Box<dyn ToSql>> = Vec::default();
         let query_with_args = self.generate_query_with_args(R::predicate(), &mut params, 100);
 
@@ -59,12 +67,18 @@ impl PostgresReactor {
 
             for event in raw_events {
                 let event_id = event.event_id;
-                reaction.react(event).unwrap();
+                R::react(event).unwrap();
                 since = Since::Event(event_id); // TODO: Persist
             }
 
-            // TODO: Exit loop atomic bool & configurable interval
+            // TODO: Configurable interval
             ::std::thread::sleep(std::time::Duration::from_secs(5));
+
+            if let Err(error) = rx.try_recv() {
+                if error == crossbeam_channel::TryRecvError::Disconnected {
+                    return;
+                }
+            }
         }
     }
 
@@ -213,6 +227,7 @@ mod tests {
         RawEvent,
     };
     use r2d2_postgres::{r2d2::Pool, PostgresConnectionManager, TlsMode};
+    use std::thread::{self, JoinHandle};
 
     #[derive(Debug, Default, Eq, PartialEq, Hash)]
     pub struct MockReaction {
@@ -226,8 +241,8 @@ mod tests {
             "Test"
         }
 
-        fn react(&mut self, event: RawEvent) -> Result<(), Self::Error> {
-            self.react_events.push(dbg!(event));
+        fn react(event: RawEvent) -> Result<(), Self::Error> {
+            //            self.react_events.push(dbg!(event));
             Ok(())
         }
 
@@ -253,8 +268,6 @@ mod tests {
 
     #[test]
     fn can_read() {
-        let reaction = NullReaction;
-
         let manager = PostgresConnectionManager::new(
             "postgresql://postgres:test@localhost:5432/es",
             TlsMode::None,
@@ -263,7 +276,16 @@ mod tests {
         let pool = Pool::new(manager.unwrap());
 
         let reactor = PostgresReactor::new(pool.unwrap());
+        let (tx, rx) = crossbeam_channel::unbounded();
 
-        reactor.start_reaction(reaction);
+        let handle = Some(thread::spawn(move || {
+            reactor.start_reaction(NullReaction, rx);
+        }));
+
+        if let Some(h) = handle {
+            ::std::thread::sleep(std::time::Duration::from_secs(18));
+            drop(tx);
+            h.join().unwrap();
+        }
     }
 }
