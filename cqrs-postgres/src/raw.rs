@@ -1,7 +1,7 @@
 //! Types for interacting with raw event data in PostgreSQL event store.
 
 use crate::{error::LoadError, util::Sequence};
-use cqrs_core::{BorrowedRawEvent, EventNumber, RawEvent, Since};
+use cqrs_core::{BorrowedRawEvent, RawEvent, Since};
 use fallible_iterator::FallibleIterator;
 use postgres::Connection;
 

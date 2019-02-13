@@ -17,6 +17,9 @@
     unused_must_use
 )]
 
+#[macro_use]
+extern crate lazy_static;
+
 #[cfg(test)]
 extern crate cqrs;
 #[cfg(test)]

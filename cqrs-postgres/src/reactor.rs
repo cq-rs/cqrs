@@ -1,22 +1,13 @@
 //! Types for reacting to raw event data in PostgreSQL event store.
-
-use crate::{error::LoadError, util::Sequence};
+use crate::util::Sequence;
 use cqrs_core::{
-    reactor::{
-        AggregatePredicate, EventTypesPredicate, Reaction, ReactionPredicate, Reactor,
-        SpecificAggregatePredicate,
-    },
-    EventNumber, RawEvent, Since,
+    reactor::{AggregatePredicate, EventTypesPredicate, Reaction, ReactionPredicate},
+    RawEvent, Since,
 };
-use fallible_iterator::FallibleIterator;
 use postgres::{rows::Rows, types::ToSql, Connection};
 use std::{
     fmt::Write,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    thread::{self, JoinHandle},
+    sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
 
@@ -30,12 +21,16 @@ impl Reaction for NullReaction {
         "Null"
     }
 
-    fn react(event: RawEvent) -> Result<(), Self::Error> {
+    fn react(_event: RawEvent) -> Result<(), Self::Error> {
         Ok(())
     }
 
     fn predicate() -> ReactionPredicate {
         ReactionPredicate::default()
+    }
+
+    fn interval() -> Duration {
+        Duration::from_secs(1)
     }
 }
 
@@ -57,19 +52,20 @@ impl PostgresReactor {
         self.run.store(false, Ordering::Relaxed);
     }
 
-    pub fn start_reaction<R: Reaction>(&self, reaction: R) {
+    pub fn start_reaction<R: Reaction>(&self, _reaction: R) {
         let mut since = Since::BeginningOfStream;
         let mut params: Vec<Box<dyn ToSql>> = Vec::default();
         let query_with_args = self.generate_query_with_args(R::predicate(), &mut params, 100);
 
-        dbg!(&query_with_args);
-        dbg!(&params);
-
         while self.run.load(Ordering::Relaxed) {
             let raw_events = {
                 let conn = self.pool.get().unwrap();
-                self.read_all_events(&conn, &query_with_args, since, params.as_slice())
-                    .unwrap()
+                match self.read_all_events(&conn, &query_with_args, since, params.as_slice()) {
+                    Ok(events) => events,
+                    Err(error) => {
+                        panic!(error);
+                    }
+                }
             };
 
             for event in raw_events {
@@ -78,8 +74,7 @@ impl PostgresReactor {
                 since = Since::Event(event_id); // TODO: Persist
             }
 
-            // TODO: Configurable interval
-            ::std::thread::sleep(std::time::Duration::from_secs(5));
+            ::std::thread::sleep(R::interval());
         }
     }
 
@@ -137,9 +132,6 @@ impl PostgresReactor {
         }
 
         trans.commit()?;
-
-        eprintln!("read {} events", events.len());
-
         Ok(events)
     }
 
@@ -173,7 +165,7 @@ impl PostgresReactor {
                     "SELECT event_id, aggregate_type, entity_id, sequence, event_type, payload \
                      FROM events \
                      WHERE event_id > $1 \
-                     AND event_type IN ($2) \
+                     AND event_type = ANY ($2) \
                      ORDER BY event_id ASC \
                      LIMIT $3",
                 )
@@ -192,7 +184,7 @@ impl PostgresReactor {
                         EventTypesPredicate::SpecificEventTypes(event_types) => {
                             write!(
                                 query,
-                                " OR (aggregate_type = ${} AND event_type IN (${}))",
+                                " OR (aggregate_type = ${} AND event_type = ANY (${}))",
                                 param_count + 1,
                                 param_count + 2
                             )
@@ -229,49 +221,110 @@ mod tests {
     };
     use r2d2_postgres::{r2d2::Pool, PostgresConnectionManager, TlsMode};
     use std::{
-        sync::Arc,
-        thread::{self, JoinHandle},
+        sync::{Arc, Mutex},
+        thread,
+        time::Duration,
     };
 
-    #[derive(Debug, Default, Eq, PartialEq, Hash)]
-    pub struct MockReaction {
-        pub react_events: Vec<RawEvent>,
+    lazy_static! {
+        static ref EVENTS: Mutex<Vec<RawEvent>> = Mutex::new(vec![]);
+        static ref PREDICATE: Mutex<ReactionPredicate> = Mutex::new(ReactionPredicate::default());
+        static ref TEST_MUTEX: Mutex<()> = Mutex::new(());
     }
+
+    macro_rules! isolated_test {
+        (fn $name:ident() $body:block) => {
+            #[test]
+            fn $name() {
+                let _guard = TEST_MUTEX.lock();
+                $body
+            }
+        };
+    }
+    #[derive(Debug, Default, Eq, PartialEq, Hash)]
+    pub struct MockReaction;
 
     impl Reaction for MockReaction {
         type Error = void::Void;
 
         fn name() -> &'static str {
-            "Test"
+            "Mock"
         }
 
         fn react(event: RawEvent) -> Result<(), Self::Error> {
-            //            self.react_events.push(dbg!(event));
+            EVENTS.lock().unwrap().push(event);
             Ok(())
         }
 
         fn predicate() -> ReactionPredicate {
-            ReactionPredicate {
-                aggregate_predicate: (AggregatePredicate::SpecificAggregates(&[
-                    SpecificAggregatePredicate {
-                        aggregate_type: "Fred",
-                        event_types: EventTypesPredicate::SpecificEventTypes(&[
-                            "Wilma", "Barney", "Betty",
-                        ]),
-                    },
-                    SpecificAggregatePredicate {
-                        aggregate_type: "George",
-                        event_types: EventTypesPredicate::SpecificEventTypes(&[
-                            "Jane", "Judy", "Elroy",
-                        ]),
-                    },
-                ])),
-            }
+            *PREDICATE.lock().unwrap()
+        }
+
+        fn interval() -> Duration {
+            Duration::from_millis(100)
         }
     }
 
-    #[test]
-    fn can_read() {
+    isolated_test! {
+        fn can_read_all_aggregates_and_all_events() {
+            *PREDICATE.lock().unwrap() = ReactionPredicate::default();
+
+            perform_read();
+            assert_eq!(16, EVENTS.lock().unwrap().len());
+        }
+    }
+
+    isolated_test! {
+        fn can_read_specific_aggregates_and_all_events() {
+            *PREDICATE.lock().unwrap() = ReactionPredicate {
+                aggregate_predicate: AggregatePredicate::SpecificAggregates(&[
+                    SpecificAggregatePredicate {
+                        aggregate_type: "material_location_availability",
+                        event_types: EventTypesPredicate::AllEventTypes,
+                    },
+                ]),
+            };
+
+            perform_read();
+            assert_eq!(16, EVENTS.lock().unwrap().len());
+        }
+    }
+
+    isolated_test! {
+        fn can_read_all_aggregates_and_specific_events() {
+            *PREDICATE.lock().unwrap() = ReactionPredicate {
+                aggregate_predicate: AggregatePredicate::AllAggregates(
+                    EventTypesPredicate::SpecificEventTypes(&["sources_updated"]),
+                ),
+            };
+
+            perform_read();
+            assert_eq!(8, EVENTS.lock().unwrap().len());
+        }
+    }
+
+    isolated_test! {
+        fn can_read_specific_aggregates_and_specific_events() {
+            *PREDICATE.lock().unwrap() = ReactionPredicate {
+                aggregate_predicate: AggregatePredicate::SpecificAggregates(&[
+                    SpecificAggregatePredicate {
+                        aggregate_type: "material_location_availability",
+                        event_types: EventTypesPredicate::SpecificEventTypes(&[
+                            "sources_updated",
+                            "end_of_life_updated"
+                        ]),
+                    },
+                ]),
+            };
+
+            perform_read();
+            assert_eq!(10, EVENTS.lock().unwrap().len());
+        }
+    }
+
+    fn perform_read() {
+        EVENTS.lock().unwrap().clear();
+
         let manager = PostgresConnectionManager::new(
             "postgresql://postgres:test@localhost:5432/es",
             TlsMode::None,
@@ -283,13 +336,19 @@ mod tests {
         let thread_reactor = Arc::clone(&local_reactor);
 
         let handle = Some(thread::spawn(move || {
-            thread_reactor.start_reaction(NullReaction);
+            thread_reactor.start_reaction(MockReaction);
         }));
 
         if let Some(h) = handle {
-            ::std::thread::sleep(std::time::Duration::from_secs(18));
+            ::std::thread::sleep(Duration::from_millis(150));
             local_reactor.stop_reaction();
-            h.join().unwrap();
+
+            match h.join() {
+                Ok(_) => {}
+                Err(error) => {
+                    eprintln!("join error: {:?}", error);
+                }
+            }
         }
     }
 }
