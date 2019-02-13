@@ -37,7 +37,7 @@ pub struct SpecificAggregatePredicate {
 
 /// A Reactor “reacts” to events, as they are created.
 pub trait Reactor {
-    fn start_reaction<R: Reaction>(reaction: R, rx: crossbeam_channel::Receiver<bool>);
+    fn start_reaction<R: Reaction>(reaction: R);
     fn stop_reaction();
 }
 

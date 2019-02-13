@@ -8,7 +8,6 @@ use cqrs_core::{
     },
     EventNumber, RawEvent, Since,
 };
-use crossbeam_channel::{Receiver, TryRecvError};
 use fallible_iterator::FallibleIterator;
 use postgres::{rows::Rows, types::ToSql, Connection};
 use std::{
@@ -43,14 +42,22 @@ impl Reaction for NullReaction {
 #[derive(Debug)]
 pub struct PostgresReactor {
     pool: r2d2_postgres::r2d2::Pool<r2d2_postgres::PostgresConnectionManager>,
+    run: AtomicBool,
 }
 
 impl PostgresReactor {
     pub fn new(pool: r2d2_postgres::r2d2::Pool<r2d2_postgres::PostgresConnectionManager>) -> Self {
-        PostgresReactor { pool }
+        PostgresReactor {
+            pool,
+            run: AtomicBool::new(true),
+        }
     }
 
-    pub fn start_reaction<R: Reaction>(&self, reaction: R, rx: crossbeam_channel::Receiver<bool>) {
+    pub fn stop_reaction(&self) {
+        self.run.store(false, Ordering::Relaxed);
+    }
+
+    pub fn start_reaction<R: Reaction>(&self, reaction: R) {
         let mut since = Since::BeginningOfStream;
         let mut params: Vec<Box<dyn ToSql>> = Vec::default();
         let query_with_args = self.generate_query_with_args(R::predicate(), &mut params, 100);
@@ -58,7 +65,7 @@ impl PostgresReactor {
         dbg!(&query_with_args);
         dbg!(&params);
 
-        loop {
+        while self.run.load(Ordering::Relaxed) {
             let raw_events = {
                 let conn = self.pool.get().unwrap();
                 self.read_all_events(&conn, &query_with_args, since, params.as_slice())
@@ -73,12 +80,6 @@ impl PostgresReactor {
 
             // TODO: Configurable interval
             ::std::thread::sleep(std::time::Duration::from_secs(5));
-
-            if let Err(error) = rx.try_recv() {
-                if error == crossbeam_channel::TryRecvError::Disconnected {
-                    return;
-                }
-            }
         }
     }
 
@@ -227,7 +228,10 @@ mod tests {
         RawEvent,
     };
     use r2d2_postgres::{r2d2::Pool, PostgresConnectionManager, TlsMode};
-    use std::thread::{self, JoinHandle};
+    use std::{
+        sync::Arc,
+        thread::{self, JoinHandle},
+    };
 
     #[derive(Debug, Default, Eq, PartialEq, Hash)]
     pub struct MockReaction {
@@ -275,16 +279,16 @@ mod tests {
 
         let pool = Pool::new(manager.unwrap());
 
-        let reactor = PostgresReactor::new(pool.unwrap());
-        let (tx, rx) = crossbeam_channel::unbounded();
+        let local_reactor = Arc::new(PostgresReactor::new(pool.unwrap()));
+        let thread_reactor = Arc::clone(&local_reactor);
 
         let handle = Some(thread::spawn(move || {
-            reactor.start_reaction(NullReaction, rx);
+            thread_reactor.start_reaction(NullReaction);
         }));
 
         if let Some(h) = handle {
             ::std::thread::sleep(std::time::Duration::from_secs(18));
-            drop(tx);
+            local_reactor.stop_reaction();
             h.join().unwrap();
         }
     }
