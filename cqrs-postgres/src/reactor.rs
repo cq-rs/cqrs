@@ -219,9 +219,11 @@ mod tests {
         },
         RawEvent,
     };
+    use lazy_static::lazy_static;
+    use parking_lot::Mutex;
     use r2d2_postgres::{r2d2::Pool, PostgresConnectionManager, TlsMode};
     use std::{
-        sync::{Arc, Mutex},
+        sync::Arc,
         thread,
         time::Duration,
     };
@@ -241,6 +243,7 @@ mod tests {
             }
         };
     }
+
     #[derive(Debug, Default, Eq, PartialEq, Hash)]
     pub struct MockReaction;
 
@@ -252,12 +255,12 @@ mod tests {
         }
 
         fn react(event: RawEvent) -> Result<(), Self::Error> {
-            EVENTS.lock().unwrap().push(event);
+            EVENTS.lock().push(event);
             Ok(())
         }
 
         fn predicate() -> ReactionPredicate {
-            *PREDICATE.lock().unwrap()
+            *PREDICATE.lock()
         }
 
         fn interval() -> Duration {
@@ -267,16 +270,16 @@ mod tests {
 
     isolated_test! {
         fn can_read_all_aggregates_and_all_events() {
-            *PREDICATE.lock().unwrap() = ReactionPredicate::default();
+            *PREDICATE.lock() = ReactionPredicate::default();
 
             perform_read();
-            assert_eq!(16, EVENTS.lock().unwrap().len());
+            assert_eq!(16, EVENTS.lock().len());
         }
     }
 
     isolated_test! {
         fn can_read_specific_aggregates_and_all_events() {
-            *PREDICATE.lock().unwrap() = ReactionPredicate {
+            *PREDICATE.lock() = ReactionPredicate {
                 aggregate_predicate: AggregatePredicate::SpecificAggregates(&[
                     SpecificAggregatePredicate {
                         aggregate_type: "material_location_availability",
@@ -286,26 +289,26 @@ mod tests {
             };
 
             perform_read();
-            assert_eq!(16, EVENTS.lock().unwrap().len());
+            assert_eq!(16, EVENTS.lock().len());
         }
     }
 
     isolated_test! {
         fn can_read_all_aggregates_and_specific_events() {
-            *PREDICATE.lock().unwrap() = ReactionPredicate {
+            *PREDICATE.lock() = ReactionPredicate {
                 aggregate_predicate: AggregatePredicate::AllAggregates(
                     EventTypesPredicate::SpecificEventTypes(&["sources_updated"]),
                 ),
             };
 
             perform_read();
-            assert_eq!(8, EVENTS.lock().unwrap().len());
+            assert_eq!(8, EVENTS.lock().len());
         }
     }
 
     isolated_test! {
         fn can_read_specific_aggregates_and_specific_events() {
-            *PREDICATE.lock().unwrap() = ReactionPredicate {
+            *PREDICATE.lock() = ReactionPredicate {
                 aggregate_predicate: AggregatePredicate::SpecificAggregates(&[
                     SpecificAggregatePredicate {
                         aggregate_type: "material_location_availability",
@@ -318,12 +321,12 @@ mod tests {
             };
 
             perform_read();
-            assert_eq!(10, EVENTS.lock().unwrap().len());
+            assert_eq!(10, EVENTS.lock().len());
         }
     }
 
     fn perform_read() {
-        EVENTS.lock().unwrap().clear();
+        EVENTS.lock().clear();
 
         let manager = PostgresConnectionManager::new(
             "postgresql://postgres:test@localhost:5432/es",

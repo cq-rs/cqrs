@@ -12,7 +12,6 @@ edition = "2018"
 [dependencies]
 cqrs-core = { version = "0.1.0", path = "../cqrs-core"}
 fallible-iterator = "0.1"
-lazy_static = "1.2.0"
 log = "0.4"
 postgres = "0.15"
 r2d2_postgres = "0.14.0"
@@ -23,6 +22,8 @@ void = "1.0.2"
 [dev-dependencies]
 cqrs = { version = "0.2.0", path = "../cqrs" }
 cqrs-todo-core = { version = "0.1.0", path = "../cqrs-todo-core" }
+lazy_static = "1.2.0"
+parking_lot = "0.7.1"
 static_assertions = "0.3"
 
 [badges]
