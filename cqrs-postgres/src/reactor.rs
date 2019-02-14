@@ -2,8 +2,9 @@
 use crate::util::Sequence;
 use cqrs_core::{
     reactor::{AggregatePredicate, EventTypesPredicate, Reaction, ReactionPredicate},
-    RawEvent, Since,
+    EventNumber, RawEvent, Since,
 };
+use num_traits::ToPrimitive;
 use postgres::{rows::Rows, types::ToSql, Connection};
 use std::{
     fmt::Write,
@@ -17,7 +18,7 @@ pub struct NullReaction;
 impl Reaction for NullReaction {
     type Error = void::Void;
 
-    fn name() -> &'static str {
+    fn reaction_name() -> &'static str {
         "Null"
     }
 
@@ -53,13 +54,13 @@ impl PostgresReactor {
     }
 
     pub fn start_reaction<R: Reaction>(&self, _reaction: R) {
-        let mut since = Since::BeginningOfStream;
+        let conn = self.pool.get().unwrap();
+        let mut since = self.load_since(&conn, R::reaction_name()).unwrap();
         let mut params: Vec<Box<dyn ToSql>> = Vec::default();
         let query_with_args = self.generate_query_with_args(R::predicate(), &mut params, 100);
 
         while self.run.load(Ordering::Relaxed) {
             let raw_events = {
-                let conn = self.pool.get().unwrap();
                 match self.read_all_events(&conn, &query_with_args, since, params.as_slice()) {
                     Ok(events) => events,
                     Err(error) => {
@@ -71,11 +72,66 @@ impl PostgresReactor {
             for event in raw_events {
                 let event_id = event.event_id;
                 R::react(event).unwrap();
-                since = Since::Event(event_id); // TODO: Persist
+                since = self
+                    .save_since(&conn, R::reaction_name(), event_id)
+                    .unwrap();
             }
 
             ::std::thread::sleep(R::interval());
         }
+    }
+
+    fn load_since(&self, conn: &Connection, reaction_name: &str) -> Result<Since, postgres::Error> {
+        let trans =
+            conn.transaction_with(postgres::transaction::Config::default().read_only(true))?;
+
+        let rows: Rows = {
+            let stmt = trans.prepare_cached(
+                "SELECT event_id \
+                 FROM reactions \
+                 WHERE reaction_name = $1 \
+                 LIMIT 1",
+            )?;
+            stmt.query(&[&reaction_name])?
+        };
+
+        for row in rows.iter() {
+            let event_id: Sequence = row.get(0);
+            return Ok(Since::Event(event_id.0));
+        }
+
+        Ok(Since::BeginningOfStream)
+    }
+
+    fn save_since(
+        &self,
+        conn: &Connection,
+        reaction_name: &str,
+        event_id: EventNumber,
+    ) -> Result<Since, postgres::Error> {
+        let trans =
+            conn.transaction_with(postgres::transaction::Config::default().read_only(false))?;
+
+        let stmt = trans.prepare_cached(
+            "INSERT INTO reactions (reaction_name, event_id) \
+             VALUES ($1, $2) \
+             ON CONFLICT (reaction_name) \
+             DO UPDATE SET event_id = EXCLUDED.event_id",
+        )?;
+
+        // TODO: assert 1 row updated
+        let rows_updated = stmt
+            .execute(&[
+                &reaction_name,
+                &event_id
+                    .get()
+                    .to_i64()
+                    .expect("Not expecting event_id > several billions"),
+            ])
+            .unwrap();
+
+        trans.commit()?;
+        Ok(Since::Event(event_id))
     }
 
     /// Reads all events from the event stream, starting with events after `since`,
@@ -217,16 +273,13 @@ mod tests {
             AggregatePredicate, EventTypesPredicate, Reaction, ReactionPredicate,
             SpecificAggregatePredicate,
         },
-        RawEvent,
+        EventNumber, RawEvent, Since,
     };
     use lazy_static::lazy_static;
     use parking_lot::Mutex;
+    use postgres::Connection;
     use r2d2_postgres::{r2d2::Pool, PostgresConnectionManager, TlsMode};
-    use std::{
-        sync::Arc,
-        thread,
-        time::Duration,
-    };
+    use std::{sync::Arc, thread, time::Duration};
 
     lazy_static! {
         static ref EVENTS: Mutex<Vec<RawEvent>> = Mutex::new(vec![]);
@@ -250,7 +303,7 @@ mod tests {
     impl Reaction for MockReaction {
         type Error = void::Void;
 
-        fn name() -> &'static str {
+        fn reaction_name() -> &'static str {
             "Mock"
         }
 
@@ -272,7 +325,7 @@ mod tests {
         fn can_read_all_aggregates_and_all_events() {
             *PREDICATE.lock() = ReactionPredicate::default();
 
-            perform_read();
+            perform_test();
             assert_eq!(16, EVENTS.lock().len());
         }
     }
@@ -288,7 +341,7 @@ mod tests {
                 ]),
             };
 
-            perform_read();
+            perform_test();
             assert_eq!(16, EVENTS.lock().len());
         }
     }
@@ -301,7 +354,7 @@ mod tests {
                 ),
             };
 
-            perform_read();
+            perform_test();
             assert_eq!(8, EVENTS.lock().len());
         }
     }
@@ -320,12 +373,12 @@ mod tests {
                 ]),
             };
 
-            perform_read();
+            perform_test();
             assert_eq!(10, EVENTS.lock().len());
         }
     }
 
-    fn perform_read() {
+    fn perform_test() {
         EVENTS.lock().clear();
 
         let manager = PostgresConnectionManager::new(
@@ -333,9 +386,11 @@ mod tests {
             TlsMode::None,
         );
 
-        let pool = Pool::new(manager.unwrap());
+        let pool = Pool::new(manager.unwrap()).unwrap();
 
-        let local_reactor = Arc::new(PostgresReactor::new(pool.unwrap()));
+        delete_mock_reactor_row(pool.clone()).unwrap();
+
+        let local_reactor = Arc::new(PostgresReactor::new(pool));
         let thread_reactor = Arc::clone(&local_reactor);
 
         let handle = Some(thread::spawn(move || {
@@ -353,5 +408,17 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn delete_mock_reactor_row(
+        pool: r2d2_postgres::r2d2::Pool<r2d2_postgres::PostgresConnectionManager>,
+    ) -> Result<(), postgres::Error> {
+        let conn = pool.get().unwrap();
+        let trans =
+            conn.transaction_with(postgres::transaction::Config::default().read_only(false))?;
+        let stmt = trans.prepare_cached("DELETE FROM reactions WHERE reaction_name = 'Mock'")?;
+        let rows_deleted = stmt.execute(&[]).unwrap();
+        trans.commit()?;
+        Ok(())
     }
 }
