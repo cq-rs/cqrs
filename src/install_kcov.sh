@@ -1,5 +1,6 @@
-#!/bin/sh -x
+#!/bin/sh
 set -eu
+set -x
 
 command_exists() {
     command -v $1 &> /dev/null
