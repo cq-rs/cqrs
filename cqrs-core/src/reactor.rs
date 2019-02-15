@@ -41,8 +41,7 @@ pub trait Reactor {
     fn stop_reaction();
 }
 
-/// A Reaction may trigger side-effects and might create other events,
-/// in response to an event's creation.
+/// A Reaction is stateless, triggering side-effects in response to an event's creation.
 pub trait Reaction {
     type Error: std::fmt::Display + std::fmt::Debug + Send + Sync + 'static;
 

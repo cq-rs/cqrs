@@ -95,6 +95,8 @@ impl PostgresReactor {
             stmt.query(&[&reaction_name])?
         };
 
+        trans.commit()?;
+
         for row in rows.iter() {
             let event_id: Sequence = row.get(0);
             return Ok(Since::Event(event_id.0));
@@ -119,7 +121,6 @@ impl PostgresReactor {
              DO UPDATE SET event_id = EXCLUDED.event_id",
         )?;
 
-        // TODO: assert 1 row updated
         let rows_updated = stmt
             .execute(&[
                 &reaction_name,
