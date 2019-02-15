@@ -45,7 +45,7 @@ if [ "$(uname)" = Darwin ]; then
     xcodebuild -configuration Release
     cp src/Release/kcov src/Release/libkcov_system_lib.so "${CARGO_HOME}/bin"
 else
-    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+    cmake -DCMAKE_C_FLAGS:STRING="-O3" -DCMAKE_BUILD_TYPE=Release ..
     make -j ${num_proc}
     ls -ARl
     cp src/kcov src/libkcov_sowrapper.so "${CARGO_HOME}/bin"
