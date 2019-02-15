@@ -47,5 +47,6 @@ if [ "$(uname)" = Darwin ]; then
 else
     cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
     make -j ${num_proc}
+    ls -ARl
     cp src/kcov src/libkcov_sowrapper.so "${CARGO_HOME}/bin"
 fi
