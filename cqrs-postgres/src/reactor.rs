@@ -1,10 +1,12 @@
 //! Types for reacting to raw event data in PostgreSQL event store.
-use crate::util::Sequence;
+use crate::{
+    db_wrapper::{DbConnection, DbPool},
+    util::Sequence,
+};
 use cqrs_core::{
     reactor::{AggregatePredicate, EventTypesPredicate, Reaction, ReactionPredicate},
     EventNumber, RawEvent, Since,
 };
-use num_traits::ToPrimitive;
 use postgres::{rows::Rows, types::ToSql, Connection};
 use std::{
     fmt::Write,
@@ -22,7 +24,7 @@ impl Reaction for NullReaction {
         "Null"
     }
 
-    fn react(_event: RawEvent) -> Result<(), Self::Error> {
+    fn react(&mut self, _event: RawEvent) -> Result<(), Self::Error> {
         Ok(())
     }
 
@@ -36,14 +38,19 @@ impl Reaction for NullReaction {
 }
 
 #[derive(Debug)]
-pub struct PostgresReactor {
-    pool: r2d2_postgres::r2d2::Pool<r2d2_postgres::PostgresConnectionManager>,
+pub struct PostgresReactor<P> {
+    pool: P,
     run: AtomicBool,
 }
 
-impl PostgresReactor {
-    pub fn new(pool: r2d2_postgres::r2d2::Pool<r2d2_postgres::PostgresConnectionManager>) -> Self {
-        PostgresReactor {
+type InnerError<'conn, P> = <<P as DbPool<'conn>>::Connection as DbConnection<'conn>>::Error;
+
+impl<P> PostgresReactor<P>
+where
+    P: for<'conn> DbPool<'conn>,
+{
+    pub fn new(pool: P) -> Self {
+        Self {
             pool,
             run: AtomicBool::new(true),
         }
@@ -53,15 +60,15 @@ impl PostgresReactor {
         self.run.store(false, Ordering::Relaxed);
     }
 
-    pub fn start_reaction<R: Reaction>(&self, _reaction: R) {
-        let conn = self.pool.get().unwrap();
-        let mut since = self.load_since(&conn, R::reaction_name()).unwrap();
-        let mut params: Vec<Box<dyn ToSql>> = Vec::default();
-        let query_with_args = self.generate_query_with_args(R::predicate(), &mut params, 100);
-
+    pub fn start_reaction<R: Reaction>(&self, mut reaction: R) {
         while self.run.load(Ordering::Relaxed) {
+            let conn = self.pool.get().unwrap();
+            let mut since = conn.load_since(R::reaction_name()).unwrap();
+            let mut params: Vec<Box<dyn ToSql>> = Vec::default();
+            let query_with_args = self.generate_query_with_args(R::predicate(), &mut params, 100);
+
             let raw_events = {
-                match self.read_all_events(&conn, &query_with_args, since, params.as_slice()) {
+                match conn.read_all_events(&query_with_args, since, params.as_slice()) {
                     Ok(events) => events,
                     Err(error) => {
                         panic!(error);
@@ -71,125 +78,14 @@ impl PostgresReactor {
 
             for event in raw_events {
                 let event_id = event.event_id;
-                R::react(event).unwrap();
-                since = self
-                    .save_since(&conn, R::reaction_name(), event_id)
-                    .unwrap();
+                reaction.react(event).unwrap();
+                conn.save_since(R::reaction_name(), event_id).unwrap();
             }
+
+            drop(conn);
 
             ::std::thread::sleep(R::interval());
         }
-    }
-
-    fn load_since(&self, conn: &Connection, reaction_name: &str) -> Result<Since, postgres::Error> {
-        let trans =
-            conn.transaction_with(postgres::transaction::Config::default().read_only(true))?;
-
-        let rows: Rows = {
-            let stmt = trans.prepare_cached(
-                "SELECT event_id \
-                 FROM reactions \
-                 WHERE reaction_name = $1 \
-                 LIMIT 1",
-            )?;
-            stmt.query(&[&reaction_name])?
-        };
-
-        trans.commit()?;
-
-        for row in rows.iter() {
-            let event_id: Sequence = row.get(0);
-            return Ok(Since::Event(event_id.0));
-        }
-
-        Ok(Since::BeginningOfStream)
-    }
-
-    fn save_since(
-        &self,
-        conn: &Connection,
-        reaction_name: &str,
-        event_id: EventNumber,
-    ) -> Result<Since, postgres::Error> {
-        let trans =
-            conn.transaction_with(postgres::transaction::Config::default().read_only(false))?;
-
-        let stmt = trans.prepare_cached(
-            "INSERT INTO reactions (reaction_name, event_id) \
-             VALUES ($1, $2) \
-             ON CONFLICT (reaction_name) \
-             DO UPDATE SET event_id = EXCLUDED.event_id",
-        )?;
-
-        let rows_updated = stmt
-            .execute(&[
-                &reaction_name,
-                &event_id
-                    .get()
-                    .to_i64()
-                    .expect("Not expecting event_id > several billions"),
-            ])
-            .unwrap();
-
-        trans.commit()?;
-        Ok(Since::Event(event_id))
-    }
-
-    /// Reads all events from the event stream, starting with events after `since`,
-    fn read_all_events(
-        &self,
-        conn: &Connection,
-        query: &str,
-        since: Since,
-        params: &[Box<dyn ToSql>],
-    ) -> Result<Vec<RawEvent>, postgres::Error> {
-        let last_sequence = match since {
-            Since::BeginningOfStream => 0,
-            Since::Event(x) => x.get(),
-        } as i64;
-
-        let trans =
-            conn.transaction_with(postgres::transaction::Config::default().read_only(true))?;
-
-        let handle_row = |row: postgres::rows::Row| {
-            let event_id: Sequence = row.get(0);
-            let aggregate_type = row.get(1);
-            let entity_id = row.get(2);
-            let sequence: Sequence = row.get(3);
-            let event_type = row.get(4);
-            let payload = row.get_bytes(5).unwrap();
-            log::trace!(
-                "entity {}/{}: loaded event; sequence: {}, type: {}",
-                aggregate_type,
-                entity_id,
-                sequence.0,
-                event_type,
-            );
-            RawEvent {
-                event_id: event_id.0,
-                aggregate_type,
-                entity_id,
-                sequence: sequence.0,
-                event_type,
-                payload: payload.to_owned(),
-            }
-        };
-
-        let events: Vec<RawEvent>;
-        {
-            let rows: Rows = {
-                let stmt = trans.prepare_cached(query)?;
-                let local_params: Vec<_> = ::std::iter::once::<&dyn ToSql>(&last_sequence)
-                    .chain(params.iter().map(|p| &**p))
-                    .collect();
-                stmt.query(&local_params)?
-            };
-
-            events = rows.iter().map(handle_row).collect();
-        }
-
-        trans.commit()?;
-        Ok(events)
     }
 
     fn generate_query_with_args(
@@ -308,7 +204,7 @@ mod tests {
             "Mock"
         }
 
-        fn react(event: RawEvent) -> Result<(), Self::Error> {
+        fn react(&mut self, event: RawEvent) -> Result<(), Self::Error> {
             EVENTS.lock().push(event);
             Ok(())
         }
