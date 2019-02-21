@@ -1,11 +1,15 @@
+use super::Context;
 use crate::TodoStore;
 use base64;
 use chrono::{DateTime, Utc};
-use cqrs::{AggregateId, Entity, EntitySink, EntitySource, EntityStore, Precondition, Version};
-use cqrs_todo_core::{commands, domain, TodoAggregate, TodoId, TodoMetadata, TodoStatus};
+use cqrs::{
+    AggregateId, Entity, EntitySink, EntitySource, EntityStore, Precondition, Since, Version,
+};
+use cqrs_todo_core::{
+    commands, domain, TodoAggregate, TodoEvent, TodoId, TodoMetadata, TodoStatus,
+};
 use juniper::{FieldResult, Value, ID};
-
-use super::Context;
+use num_traits::ToPrimitive;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Query;
@@ -80,8 +84,8 @@ graphql_object!(Query: Context |&self| {
 struct TodoQL(Entity<TodoId, TodoAggregate>);
 
 graphql_object!(TodoQL: Context |&self| {
-    field id() -> FieldResult<ID> {
-        Ok(self.0.id().as_str().to_string().into())
+    field id() -> ID {
+        self.0.id().as_str().to_string().into()
     }
 
     field description() -> FieldResult<&str> {
@@ -96,8 +100,36 @@ graphql_object!(TodoQL: Context |&self| {
         Ok(self.0.aggregate().state().get_data().ok_or("uninitialized")?.status == TodoStatus::Completed)
     }
 
-    field version() -> FieldResult<i32> {
-        Ok(self.0.aggregate().version().get() as i32)
+    field version() -> i32 {
+        self.0.aggregate().version().get() as i32
+    }
+
+    field events(
+        &executor,
+        since: Option<i32>,
+        max_count = 100: i32
+    ) -> FieldResult<Vec<VersionedTodoEventQL>>
+    {
+        const MAX_PAGE_SIZE: u64 = 1_000;
+        let conn = executor.context().backend.get()?;
+        let store = TodoStore::new(&*conn);
+
+        let since = if let Some(s) = since {
+            Since::from(Version::new(s.to_u64().ok_or("Invalid since version; must be a positive number")?))
+        } else {
+            Since::BeginningOfStream
+        };
+
+        let max_count = MAX_PAGE_SIZE.min(max_count.to_u64().ok_or("Invalid max_count; must be a positive integer")?);
+
+        let events: Vec<VersionedTodoEventQL> =
+            store.read_events_with_metadata(self.0.id(), since, Some(max_count))?
+                .unwrap_or_default()
+                .into_iter()
+                .map(|r| r.map(VersionedTodoEventQL))
+                .collect::<Result<Vec<_>,_>>()?;
+
+        Ok(events)
     }
 });
 
@@ -163,6 +195,96 @@ graphql_object!(<'a> PageInfo<'a>: Context as "PageInfo" |&self| {
 
     field end_cursor() -> Option<Cursor> {
         self.0.edges.last().map(|e| e.cursor)
+    }
+});
+
+#[derive(Clone, Debug)]
+struct VersionedTodoEventQL(cqrs::VersionedEventWithMetadata<TodoEvent, TodoMetadata>);
+
+graphql_object!(VersionedTodoEventQL: Context as "VersionedTodoEvent" |&self| {
+    description: "A versioned event in the history of a todo aggregate"
+
+    /// The event
+    field event() -> TodoEventQL {
+        TodoEventQL(&self.0.event)
+    }
+
+    /// The sequence number of the event in the event stream of the aggregate
+    field sequence() -> i32 {
+        self.0.sequence.get().to_i32().unwrap_or_else(i32::max_value)
+    }
+
+    field metadata() -> MetadataQL {
+        MetadataQL(&self.0.metadata)
+    }
+});
+
+#[derive(Clone, Debug)]
+struct TodoEventQL<'a>(&'a TodoEvent);
+
+graphql_union!(<'a> TodoEventQL<'a>: Context as "TodoEvent" |&self| {
+    description: "A todo event"
+
+    instance_resolvers: |_| {
+        Created => match self.0 { TodoEvent::Created(ref evt) => Some(Created(evt)), _ => None },
+        DescriptionUpdated => match self.0 { TodoEvent::DescriptionUpdated(ref evt) => Some(DescriptionUpdated(evt)), _ => None },
+        ReminderUpdated => match self.0 { TodoEvent::ReminderUpdated(ref evt) => Some(ReminderUpdated(evt)), _ => None },
+        Completed => match self.0 { TodoEvent::Completed(ref evt) => Some(Completed(evt)), _ => None },
+        Uncompleted => match self.0 { TodoEvent::Uncompleted(ref evt) => Some(Uncompleted(evt)), _ => None },
+    }
+});
+
+#[derive(Clone, Debug)]
+struct Created<'a>(&'a cqrs_todo_core::events::Created);
+
+graphql_object!(<'a> Created<'a>: Context as "Created"|&self| {
+    field initial_description() -> &str {
+        self.0.initial_description.as_str()
+    }
+});
+
+#[derive(Clone, Debug)]
+struct DescriptionUpdated<'a>(&'a cqrs_todo_core::events::DescriptionUpdated);
+
+graphql_object!(<'a> DescriptionUpdated<'a>: Context as "DescriptionUpdated"|&self| {
+    field new_description() -> &str {
+        self.0.new_description.as_str()
+    }
+});
+
+#[derive(Clone, Debug)]
+struct ReminderUpdated<'a>(&'a cqrs_todo_core::events::ReminderUpdated);
+
+graphql_object!(<'a> ReminderUpdated<'a>: Context as "ReminderUpdated"|&self| {
+    field new_reminder() -> Option<DateTime<Utc>> {
+        self.0.new_reminder.map(|r| r.get_time())
+    }
+});
+
+#[derive(Clone, Debug)]
+struct Completed<'a>(&'a cqrs_todo_core::events::Completed);
+
+graphql_object!(<'a> Completed<'a>: Context as "Completed"|&self| {
+    field is_complete() -> bool {
+        true
+    }
+});
+
+#[derive(Clone, Debug)]
+struct Uncompleted<'a>(&'a cqrs_todo_core::events::Uncompleted);
+
+graphql_object!(<'a> Uncompleted<'a>: Context as "Uncompleted"|&self| {
+    field is_complete() -> bool {
+        false
+    }
+});
+
+#[derive(Clone, Debug)]
+struct MetadataQL<'a>(&'a TodoMetadata);
+
+graphql_object!(<'a> MetadataQL<'a>: Context as "Metadata"|&self| {
+    field initiated_by() -> &str {
+        &self.0.initiated_by
     }
 });
 
