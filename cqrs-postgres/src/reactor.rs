@@ -8,6 +8,8 @@ use cqrs_core::{
     EventNumber, RawEvent, Since,
 };
 use postgres::{rows::Rows, types::ToSql, Connection};
+use r2d2::Pool;
+use r2d2_postgres::PostgresConnectionManager;
 use std::{
     fmt::Write,
     sync::atomic::{AtomicBool, Ordering},
@@ -38,12 +40,10 @@ impl Reaction for NullReaction {
 }
 
 #[derive(Debug)]
-pub struct PostgresReactor<P> {
+pub struct PostgresReactor<P = Pool<PostgresConnectionManager>> {
     pool: P,
     run: AtomicBool,
 }
-
-type InnerError<'conn, P> = <<P as DbPool<'conn>>::Connection as DbConnection<'conn>>::Error;
 
 impl<P> PostgresReactor<P>
 where
@@ -164,7 +164,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::reactor::{NullReaction, PostgresReactor};
+    use crate::{
+        db_wrapper::{DbConnection, DbPool},
+        reactor::{NullReaction, PostgresReactor},
+    };
     use cqrs_core::{
         reactor::{
             AggregatePredicate, EventTypesPredicate, Reaction, ReactionPredicate,
@@ -174,7 +177,7 @@ mod tests {
     };
     use lazy_static::lazy_static;
     use parking_lot::Mutex;
-    use postgres::Connection;
+    use postgres::{types::ToSql, Connection};
     use r2d2_postgres::{r2d2::Pool, PostgresConnectionManager, TlsMode};
     use std::{sync::Arc, thread, time::Duration};
 
@@ -194,7 +197,69 @@ mod tests {
         };
     }
 
-    #[derive(Debug, Default, Eq, PartialEq, Hash)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
+    pub struct MockPool;
+
+    impl<'conn> DbPool<'conn> for MockPool {
+        type Connection = MockConnection;
+        type Error = String;
+
+        fn get(&self) -> Result<Self::Connection, Self::Error> {
+            Ok(MockConnection)
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
+    pub struct MockConnection;
+
+    impl<'conn> DbConnection<'conn> for MockConnection {
+        type Error = String;
+
+        fn load_since(&self, reaction_name: &str) -> Result<Since, Self::Error> {
+            Ok(Since::BeginningOfStream)
+        }
+
+        fn save_since(
+            &self,
+            reaction_name: &str,
+            event_id: EventNumber,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn read_all_events(
+            &self,
+            query: &str,
+            since: Since,
+            params: &[Box<dyn ToSql>],
+        ) -> Result<Vec<RawEvent>, Self::Error> {
+            println!("{:?}", params);
+
+            let raw_event = RawEvent {
+                event_id: EventNumber::new(123).unwrap(),
+                aggregate_type: "".to_string(),
+                entity_id: "".to_string(),
+                sequence: EventNumber::new(123).unwrap(),
+                event_type: "".to_string(),
+                payload: Vec::from("{}"),
+            };
+
+            let raw_events = vec![
+                raw_event.clone(),
+                raw_event.clone(),
+                raw_event.clone(),
+                raw_event.clone(),
+                raw_event.clone(),
+                raw_event.clone(),
+                raw_event.clone(),
+                raw_event.clone(),
+            ];
+
+            Ok(raw_events)
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
     pub struct MockReaction;
 
     impl Reaction for MockReaction {
@@ -283,9 +348,8 @@ mod tests {
             TlsMode::None,
         );
 
-        let pool = Pool::new(manager.unwrap()).unwrap();
-
-        delete_mock_reactor_row(pool.clone()).unwrap();
+        //        let pool = Pool::new(manager.unwrap()).unwrap();
+        let pool = MockPool;
 
         let local_reactor = Arc::new(PostgresReactor::new(pool));
         let thread_reactor = Arc::clone(&local_reactor);
@@ -295,7 +359,7 @@ mod tests {
         }));
 
         if let Some(h) = handle {
-            ::std::thread::sleep(Duration::from_millis(150));
+            ::std::thread::sleep(Duration::from_millis(50));
             local_reactor.stop_reaction();
 
             match h.join() {
@@ -305,17 +369,5 @@ mod tests {
                 }
             }
         }
-    }
-
-    fn delete_mock_reactor_row(
-        pool: r2d2_postgres::r2d2::Pool<r2d2_postgres::PostgresConnectionManager>,
-    ) -> Result<(), postgres::Error> {
-        let conn = pool.get().unwrap();
-        let trans =
-            conn.transaction_with(postgres::transaction::Config::default().read_only(false))?;
-        let stmt = trans.prepare_cached("DELETE FROM reactions WHERE reaction_name = 'Mock'")?;
-        let rows_deleted = stmt.execute(&[]).unwrap();
-        trans.commit()?;
-        Ok(())
     }
 }
