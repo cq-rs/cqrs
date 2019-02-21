@@ -1,11 +1,8 @@
 //! Types for reacting to raw event data in PostgreSQL event store.
-use crate::{
-    db_wrapper::{DbConnection, DbPool},
-    util::Sequence,
-};
+use crate::db_wrapper::{DbConnection, DbPool};
 use cqrs_core::{
     reactor::{AggregatePredicate, EventTypesPredicate, Reaction, ReactionPredicate},
-    EventNumber, RawEvent, Since,
+    RawEvent,
 };
 use postgres::{rows::Rows, types::ToSql, Connection};
 use r2d2::Pool;
@@ -63,7 +60,7 @@ where
     pub fn start_reaction<R: Reaction>(&self, mut reaction: R) {
         while self.run.load(Ordering::Relaxed) {
             let conn = self.pool.get().unwrap();
-            let mut since = conn.load_since(R::reaction_name()).unwrap();
+            let since = conn.load_since(R::reaction_name()).unwrap();
             let mut params: Vec<Box<dyn ToSql>> = Vec::default();
             let query_with_args = self.generate_query_with_args(R::predicate(), &mut params, 100);
 
@@ -166,7 +163,9 @@ where
 mod tests {
     use crate::{
         db_wrapper::{DbConnection, DbPool},
-        reactor::{NullReaction, PostgresReactor},
+        reactor::{
+            self, {NullReaction, PostgresReactor},
+        },
     };
     use cqrs_core::{
         reactor::{
@@ -197,26 +196,33 @@ mod tests {
         };
     }
 
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
-    pub struct MockPool;
+    #[derive(Debug, Eq, PartialEq, Hash)]
+    pub struct MockPool {
+        get_result: Result<MockConnection, String>,
+    }
 
     impl<'conn> DbPool<'conn> for MockPool {
         type Connection = MockConnection;
         type Error = String;
 
         fn get(&self) -> Result<Self::Connection, Self::Error> {
-            Ok(MockConnection)
+            self.get_result.clone()
         }
     }
 
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
-    pub struct MockConnection;
+    #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+    pub struct MockConnection {
+        expected_reaction_name: String,
+        load_since_result: Result<Since, String>,
+        save_since_result: Result<(), String>,
+    }
 
     impl<'conn> DbConnection<'conn> for MockConnection {
         type Error = String;
 
         fn load_since(&self, reaction_name: &str) -> Result<Since, Self::Error> {
-            Ok(Since::BeginningOfStream)
+            assert_eq!(reaction_name, self.expected_reaction_name);
+            self.load_since_result.clone()
         }
 
         fn save_since(
@@ -224,7 +230,7 @@ mod tests {
             reaction_name: &str,
             event_id: EventNumber,
         ) -> Result<(), Self::Error> {
-            Ok(())
+            self.save_since_result.clone()
         }
 
         fn read_all_events(
@@ -343,13 +349,15 @@ mod tests {
     fn perform_test() {
         EVENTS.lock().clear();
 
-        let manager = PostgresConnectionManager::new(
-            "postgresql://postgres:test@localhost:5432/es",
-            TlsMode::None,
-        );
+        let connection = MockConnection {
+            expected_reaction_name: String::from("Mock"),
+            load_since_result: Result::Err(String::from("xxx")),
+            save_since_result: Result::Err(String::from("xxx")),
+        };
 
-        //        let pool = Pool::new(manager.unwrap()).unwrap();
-        let pool = MockPool;
+        let pool = MockPool {
+            get_result: Ok(connection),
+        };
 
         let local_reactor = Arc::new(PostgresReactor::new(pool));
         let thread_reactor = Arc::clone(&local_reactor);

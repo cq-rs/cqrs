@@ -1,17 +1,10 @@
 use crate::util::Sequence;
-use core::result;
 use cqrs_core::{EventNumber, RawEvent, Since};
 use num_traits::ToPrimitive;
-use postgres::{
-    rows::{Row, RowIndex, Rows},
-    stmt::Statement,
-    transaction::Transaction,
-    types::{FromSql, ToSql},
-    Connection,
-};
+use postgres::{rows::Row, types::ToSql};
 use r2d2::{Pool, PooledConnection};
 use r2d2_postgres::PostgresConnectionManager;
-use std::{error::Error, fmt};
+use std::fmt;
 
 pub trait DbPool<'conn> {
     type Connection: DbConnection<'conn> + 'conn;
