@@ -163,9 +163,7 @@ where
 mod tests {
     use crate::{
         db_wrapper::{DbConnection, DbPool},
-        reactor::{
-            self, {NullReaction, PostgresReactor},
-        },
+        reactor::{self, NullReaction, PostgresReactor},
     };
     use cqrs_core::{
         reactor::{
@@ -184,7 +182,16 @@ mod tests {
         static ref EVENTS: Mutex<Vec<RawEvent>> = Mutex::new(vec![]);
         static ref PREDICATE: Mutex<ReactionPredicate> = Mutex::new(ReactionPredicate::default());
         static ref TEST_MUTEX: Mutex<()> = Mutex::new(());
-    }
+
+        static ref RAW_EVENT: RawEvent = RawEvent {
+            event_id: EventNumber::new(123).unwrap(),
+            aggregate_type: String::from(""),
+            entity_id: String::from(""),
+            sequence: EventNumber::new(123).unwrap(),
+            event_type: String::from(""),
+            payload: Vec::from("{}"),
+        };
+     }
 
     macro_rules! isolated_test {
         (fn $name:ident() $body:block) => {
@@ -211,18 +218,78 @@ mod tests {
     }
 
     #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-    pub struct MockConnection {
+    pub struct LoadSince {
         expected_reaction_name: String,
-        load_since_result: Result<Since, String>,
-        save_since_result: Result<(), String>,
+        result: Result<Since, String>,
+    }
+
+    impl Default for LoadSince {
+        fn default() -> Self {
+            LoadSince {
+                expected_reaction_name: String::from("Mock"),
+                result: Ok(Since::BeginningOfStream),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+    pub struct SaveSince {
+        expected_reaction_name: String,
+        expected_event_id: EventNumber,
+        result: Result<(), String>,
+    }
+
+    impl Default for SaveSince {
+        fn default() -> Self {
+            SaveSince {
+                expected_reaction_name: String::from("Mock"),
+                expected_event_id: EventNumber::MIN_VALUE,
+                result: Ok(()),
+            }
+        }
+    }
+    #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+    pub struct ReadAllEvents {
+        expected_query: String,
+        expected_since: Since,
+        expected_params: String,
+        result: Result<Vec<RawEvent>, String>,
+    }
+
+    impl Default for ReadAllEvents {
+        fn default() -> Self {
+            ReadAllEvents {
+                expected_query: String::from(""),
+                expected_since: Since::BeginningOfStream,
+                expected_params: String::from(""),
+                result: Ok(vec![]),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+    pub struct MockConnection {
+        load_since_data: LoadSince,
+        save_since_data: SaveSince,
+        read_all_events_data: ReadAllEvents,
+    }
+
+    impl Default for MockConnection {
+        fn default() -> Self {
+            MockConnection {
+                load_since_data: LoadSince::default(),
+                save_since_data: SaveSince::default(),
+                read_all_events_data: ReadAllEvents::default(),
+            }
+        }
     }
 
     impl<'conn> DbConnection<'conn> for MockConnection {
         type Error = String;
 
         fn load_since(&self, reaction_name: &str) -> Result<Since, Self::Error> {
-            assert_eq!(reaction_name, self.expected_reaction_name);
-            self.load_since_result.clone()
+            assert_eq!(reaction_name, self.load_since_data.expected_reaction_name);
+            self.load_since_data.result.clone()
         }
 
         fn save_since(
@@ -230,7 +297,8 @@ mod tests {
             reaction_name: &str,
             event_id: EventNumber,
         ) -> Result<(), Self::Error> {
-            self.save_since_result.clone()
+            assert_eq!(reaction_name, self.save_since_data.expected_reaction_name);
+            self.save_since_data.result.clone()
         }
 
         fn read_all_events(
@@ -239,29 +307,8 @@ mod tests {
             since: Since,
             params: &[Box<dyn ToSql>],
         ) -> Result<Vec<RawEvent>, Self::Error> {
-            println!("{:?}", params);
-
-            let raw_event = RawEvent {
-                event_id: EventNumber::new(123).unwrap(),
-                aggregate_type: "".to_string(),
-                entity_id: "".to_string(),
-                sequence: EventNumber::new(123).unwrap(),
-                event_type: "".to_string(),
-                payload: Vec::from("{}"),
-            };
-
-            let raw_events = vec![
-                raw_event.clone(),
-                raw_event.clone(),
-                raw_event.clone(),
-                raw_event.clone(),
-                raw_event.clone(),
-                raw_event.clone(),
-                raw_event.clone(),
-                raw_event.clone(),
-            ];
-
-            Ok(raw_events)
+            eprintln!("{:?}", params);
+            self.read_all_events_data.result.clone()
         }
     }
 
@@ -289,70 +336,76 @@ mod tests {
         }
     }
 
-    isolated_test! {
-        fn can_read_all_aggregates_and_all_events() {
-            *PREDICATE.lock() = ReactionPredicate::default();
+    fn can_read_all_aggregates_and_all_events() {
+        *PREDICATE.lock() = ReactionPredicate::default();
 
-            perform_test();
-            assert_eq!(16, EVENTS.lock().len());
-        }
+        perform_test();
+        assert_eq!(2, EVENTS.lock().len());
     }
 
-    isolated_test! {
-        fn can_read_specific_aggregates_and_all_events() {
-            *PREDICATE.lock() = ReactionPredicate {
-                aggregate_predicate: AggregatePredicate::SpecificAggregates(&[
-                    SpecificAggregatePredicate {
-                        aggregate_type: "material_location_availability",
-                        event_types: EventTypesPredicate::AllEventTypes,
-                    },
-                ]),
-            };
+    fn can_read_specific_aggregates_and_all_events() {
+        *PREDICATE.lock() = ReactionPredicate {
+            aggregate_predicate: AggregatePredicate::SpecificAggregates(&[
+                SpecificAggregatePredicate {
+                    aggregate_type: "material_location_availability",
+                    event_types: EventTypesPredicate::AllEventTypes,
+                },
+            ]),
+        };
 
-            perform_test();
-            assert_eq!(16, EVENTS.lock().len());
-        }
+        perform_test();
+        assert_eq!(2, EVENTS.lock().len());
     }
 
-    isolated_test! {
-        fn can_read_all_aggregates_and_specific_events() {
-            *PREDICATE.lock() = ReactionPredicate {
-                aggregate_predicate: AggregatePredicate::AllAggregates(
-                    EventTypesPredicate::SpecificEventTypes(&["sources_updated"]),
-                ),
-            };
+    fn can_read_all_aggregates_and_specific_events() {
+        *PREDICATE.lock() = ReactionPredicate {
+            aggregate_predicate: AggregatePredicate::AllAggregates(
+                EventTypesPredicate::SpecificEventTypes(&["sources_updated"]),
+            ),
+        };
 
-            perform_test();
-            assert_eq!(8, EVENTS.lock().len());
-        }
+        perform_test();
+        assert_eq!(2, EVENTS.lock().len());
     }
 
-    isolated_test! {
-        fn can_read_specific_aggregates_and_specific_events() {
-            *PREDICATE.lock() = ReactionPredicate {
-                aggregate_predicate: AggregatePredicate::SpecificAggregates(&[
-                    SpecificAggregatePredicate {
-                        aggregate_type: "material_location_availability",
-                        event_types: EventTypesPredicate::SpecificEventTypes(&[
-                            "sources_updated",
-                            "end_of_life_updated"
-                        ]),
-                    },
-                ]),
-            };
+    fn can_read_specific_aggregates_and_specific_events() {
+        *PREDICATE.lock() = ReactionPredicate {
+            aggregate_predicate: AggregatePredicate::SpecificAggregates(&[
+                SpecificAggregatePredicate {
+                    aggregate_type: "material_location_availability",
+                    event_types: EventTypesPredicate::SpecificEventTypes(&[
+                        "sources_updated",
+                        "end_of_life_updated"
+                    ]),
+                },
+            ]),
+        };
 
-            perform_test();
-            assert_eq!(10, EVENTS.lock().len());
-        }
+        perform_test();
+        assert_eq!(2, EVENTS.lock().len());
     }
 
-    fn perform_test() {
+    // TODO: Use this in a non-mocked scenario:
+    //        let manager = PostgresConnectionManager::new(
+    //            "postgresql://postgres:test@localhost:5432/es",
+    //            TlsMode::None,
+    //        );
+    //        let pool = Pool::new(manager.unwrap()).unwrap();
+
+    fn perform_test(/*connection: MockConnection*/) {
         EVENTS.lock().clear();
 
+        let raw_events = vec![
+            RAW_EVENT.clone(),
+            RAW_EVENT.clone(),
+        ];
+
         let connection = MockConnection {
-            expected_reaction_name: String::from("Mock"),
-            load_since_result: Result::Err(String::from("xxx")),
-            save_since_result: Result::Err(String::from("xxx")),
+            read_all_events_data: ReadAllEvents {
+                result: Ok(raw_events),
+                ..ReadAllEvents::default()
+            },
+            ..MockConnection::default()
         };
 
         let pool = MockPool {

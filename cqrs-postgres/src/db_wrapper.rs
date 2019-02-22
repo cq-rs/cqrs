@@ -47,7 +47,8 @@ impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> 
         let rows = stmt.query(&[&reaction_name])?;
 
         for row in &rows {
-            let event_id: Sequence = row.get(0);
+            let event_id: Sequence = row.get("event_id");
+            dbg!(event_id);
             return Ok(Since::Event(event_id.0));
         }
 
@@ -92,12 +93,9 @@ impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> 
             let sequence: Sequence = row.get(3);
             let event_type = row.get(4);
             let payload = row.get_bytes(5).unwrap();
-            log::trace!(
+            eprintln!(
                 "entity {}/{}: loaded event; sequence: {}, type: {}",
-                aggregate_type,
-                entity_id,
-                sequence.0,
-                event_type,
+                aggregate_type, entity_id, sequence.0, event_type,
             );
             RawEvent {
                 event_id: event_id.0,
@@ -116,10 +114,13 @@ impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> 
                     .chain(params.iter().map(|p| &**p))
                     .collect();
                 let stmt = self.prepare_cached(query)?;
+                dbg!(&query);
+                dbg!(&local_params);
                 stmt.query(&local_params)?
             };
 
             events = (&rows).into_iter().map(handle_row).collect();
+            dbg!(&events);
         }
 
         Ok(events)
