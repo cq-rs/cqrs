@@ -14,7 +14,7 @@ struct EventMap(RefCell<HashMap<String, Vec<cqrs::VersionedEvent<cqrs_todo_core:
 
 impl EventSource<TodoAggregate, TodoEvent> for EventMap {
     type Error = Void;
-    type Events = Vec<Result<VersionedEvent<TodoEvent>, Void>>;
+    type Events = Vec<VersionedEvent<TodoEvent>>;
 
     fn read_events<I>(
         &self,
@@ -31,23 +31,23 @@ impl EventSource<TodoAggregate, TodoEvent> for EventMap {
             (Since::BeginningOfStream, Some(max_count)) => Ok(stream.map(|e| {
                 e.into_iter()
                     .take(max_count.min(usize::max_value() as u64) as usize)
-                    .map(|e| Ok(e.to_owned()))
+                    .map(ToOwned::to_owned)
                     .collect()
             })),
             (Since::Event(event_number), Some(max_count)) => Ok(stream.map(|e| {
                 e.into_iter()
                     .skip(event_number.get() as usize)
                     .take(max_count.min(usize::max_value() as u64) as usize)
-                    .map(|e| Ok(e.to_owned()))
+                    .map(ToOwned::to_owned)
                     .collect()
             })),
             (Since::BeginningOfStream, None) => {
-                Ok(stream.map(|e| e.into_iter().map(|e| Ok(e.to_owned())).collect()))
+                Ok(stream.map(|e| e.into_iter().map(ToOwned::to_owned).collect()))
             }
             (Since::Event(event_number), None) => Ok(stream.map(|e| {
                 e.into_iter()
                     .skip(event_number.get() as usize)
-                    .map(|e| Ok(e.to_owned()))
+                    .map(ToOwned::to_owned)
                     .collect()
             })),
         }
@@ -151,14 +151,14 @@ fn main_test() {
     assert_eq!(event_num, EventNumber::MIN_VALUE.next());
 
     let expected_events = vec![
-        Ok(VersionedEvent {
+        VersionedEvent {
             sequence: EventNumber::MIN_VALUE,
             event: cqrs_todo_core::TodoEvent::Completed(cqrs_todo_core::events::Completed {}),
-        }),
-        Ok(VersionedEvent {
+        },
+        VersionedEvent {
             sequence: EventNumber::MIN_VALUE.next(),
             event: cqrs_todo_core::TodoEvent::Uncompleted(cqrs_todo_core::events::Uncompleted {}),
-        }),
+        },
     ];
 
     assert_eq!(

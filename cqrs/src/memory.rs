@@ -66,7 +66,7 @@ where
     Hasher: BuildHasher,
 {
     type Error = Void;
-    type Events = Vec<Result<VersionedEvent<E>, Void>>;
+    type Events = Vec<VersionedEvent<E>>;
 
     fn read_events<I>(
         &self,
@@ -84,25 +84,20 @@ where
         let result = stream.map(|stream| {
             let stream = stream.read();
             match (since, max_count) {
-                (Since::BeginningOfStream, None) => stream
-                    .events
-                    .iter()
-                    .map(ToOwned::to_owned)
-                    .map(Ok)
-                    .collect(),
+                (Since::BeginningOfStream, None) => {
+                    stream.events.iter().map(ToOwned::to_owned).collect()
+                }
                 (Since::Event(event_number), None) => stream
                     .events
                     .iter()
                     .skip(event_number.get() as usize)
                     .map(ToOwned::to_owned)
-                    .map(Ok)
                     .collect(),
                 (Since::BeginningOfStream, Some(max_count)) => stream
                     .events
                     .iter()
                     .take(max_count.min(usize::max_value() as u64) as usize)
                     .map(ToOwned::to_owned)
-                    .map(Ok)
                     .collect(),
                 (Since::Event(event_number), Some(max_count)) => stream
                     .events
@@ -110,7 +105,6 @@ where
                     .skip(event_number.get() as usize)
                     .take(max_count.min(usize::max_value() as u64) as usize)
                     .map(ToOwned::to_owned)
-                    .map(Ok)
                     .collect(),
             }
         });

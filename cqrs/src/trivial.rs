@@ -51,7 +51,7 @@ where
     E: AggregateEvent<A>,
 {
     type Error = Void;
-    type Events = Empty<Result<VersionedEvent<E>, Void>>;
+    type Events = Empty<VersionedEvent<E>>;
 
     #[inline]
     fn read_events<I>(

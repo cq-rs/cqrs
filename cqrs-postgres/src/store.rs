@@ -7,7 +7,8 @@ use cqrs_core::{
     EventSource, NeverSnapshot, Precondition, SerializableEvent, Since, SnapshotRecommendation,
     SnapshotSink, SnapshotSource, SnapshotStrategy, Version, VersionedAggregate, VersionedEvent,
 };
-use fallible_iterator::FallibleIterator;
+use fallible_iterator::{FallibleIterator, IntoFallibleIterator};
+use num_traits::FromPrimitive;
 use postgres::Connection;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{fmt, marker::PhantomData};
@@ -379,7 +380,7 @@ where
     S: SnapshotStrategy,
 {
     type Error = LoadError<<E as DeserializableEvent>::Error>;
-    type Events = Vec<Result<VersionedEvent<E>, Self::Error>>;
+    type Events = Vec<VersionedEvent<E>>;
 
     fn read_events<I>(
         &self,
@@ -395,7 +396,6 @@ where
             cqrs_core::Since::Event(x) => x.get(),
         } as i64;
 
-        let events;
         let trans = self
             .conn
             .transaction_with(postgres::transaction::Config::default().read_only(true))?;
@@ -419,50 +419,46 @@ where
             })
         };
 
-        let stmt;
-        {
-            let mut rows;
-            if let Some(max_count) = max_count {
-                stmt = trans.prepare_cached(
+        let events: Vec<VersionedEvent<E>> =
+            if let Some(max_count) = max_count.and_then(i64::from_u64) {
+                let stmt = trans.prepare_cached(
                     "SELECT sequence, event_type, payload \
                      FROM events \
                      WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
                      ORDER BY sequence ASC \
                      LIMIT $4",
                 )?;
-                rows = stmt.lazy_query(
+                let rows = stmt.lazy_query(
                     &trans,
                     &[
                         &A::aggregate_type(),
                         &id.as_str(),
                         &last_sequence,
-                        &(max_count.min(i64::max_value() as u64) as i64),
+                        &max_count,
                     ],
                     100,
                 )?;
+                rows.into_fallible_iterator()
+                    .map_err(LoadError::Postgres)
+                    .and_then(handle_row)
+                    .collect()?
             } else {
-                stmt = trans.prepare_cached(
+                let stmt = trans.prepare_cached(
                     "SELECT sequence, event_type, payload \
                      FROM events \
                      WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
                      ORDER BY sequence ASC",
                 )?;
-                rows = stmt.lazy_query(
+                let rows = stmt.lazy_query(
                     &trans,
                     &[&A::aggregate_type(), &id.as_str(), &last_sequence],
                     100,
                 )?;
-            }
-
-            let (lower, upper) = rows.size_hint();
-            let cap = upper.unwrap_or(lower);
-            let mut inner_events = Vec::with_capacity(cap);
-
-            while let Some(row) = rows.next()? {
-                inner_events.push(handle_row(row));
-            }
-            events = inner_events;
-        }
+                rows.into_fallible_iterator()
+                    .map_err(LoadError::Postgres)
+                    .and_then(handle_row)
+                    .collect()?
+            };
 
         trans.commit()?;
 
