@@ -1,21 +1,24 @@
 use crate::util::Sequence;
-use cqrs_core::{EventNumber, RawEvent, Since};
+use cqrs_core::{CqrsError, EventNumber, RawEvent, Since};
 use num_traits::ToPrimitive;
 use postgres::{rows::Row, types::ToSql};
 use r2d2::{Pool, PooledConnection};
 use r2d2_postgres::PostgresConnectionManager;
 use std::{error, fmt, sync::Arc};
-use cqrs_core::CqrsError;
 
 #[derive(Debug, Clone)]
 pub enum DbError {
     Pool(Arc<dyn CqrsError>),
-    Postgres(Arc<postgres::Error>),
+    Postgres(Arc<dyn CqrsError>),
 }
 
 impl DbError {
     pub fn pool(err: impl CqrsError) -> Self {
         DbError::Pool(Arc::new(err))
+    }
+
+    pub fn postgres(err: impl CqrsError) -> Self {
+        DbError::Postgres(Arc::new(err))
     }
 }
 
@@ -34,8 +37,8 @@ impl From<postgres::Error> for DbError {
 impl fmt::Display for DbError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            DbError::Pool(ref err) => write!(f, "Pool error: {}", err),
-            DbError::Postgres(ref err) => write!(f, "Postgres error: {}", err),
+            DbError::Pool(ref err) => write!(f, "{}", err),
+            DbError::Postgres(ref err) => write!(f, "{}", err),
         }
     }
 }
@@ -85,7 +88,6 @@ impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> 
 
         for row in &rows {
             let event_id: Sequence = row.get("event_id");
-            dbg!(event_id);
             return Ok(Since::Event(event_id.0));
         }
 
@@ -130,10 +132,6 @@ impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> 
             let sequence: Sequence = row.get(3);
             let event_type = row.get(4);
             let payload = row.get_bytes(5).unwrap();
-            eprintln!(
-                "entity {}/{}: loaded event; sequence: {}, type: {}",
-                aggregate_type, entity_id, sequence.0, event_type,
-            );
             RawEvent {
                 event_id: event_id.0,
                 aggregate_type,

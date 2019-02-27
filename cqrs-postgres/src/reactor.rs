@@ -62,23 +62,23 @@ where
 
         while self.run.load(Ordering::Relaxed) {
             let conn = self.pool.get().map_err(DbError::pool)?;
-            let since = conn.load_since(R::reaction_name()).unwrap();
+            let since = conn
+                .load_since(R::reaction_name())
+                .map_err(DbError::postgres)?;
             let mut params: Vec<Box<dyn ToSql>> = Vec::default();
             let query_with_args = self.generate_query_with_args(R::predicate(), &mut params, 100);
 
-            let raw_events = {
-                match conn.read_all_events(&query_with_args, since, params.as_slice()) {
-                    Ok(events) => events,
-                    Err(error) => {
-                        panic!(error);
-                    }
-                }
-            };
+            let raw_events = conn
+                .read_all_events(&query_with_args, since, params.as_slice())
+                .map_err(DbError::postgres)?;
 
             for event in raw_events {
                 let event_id = event.event_id;
                 reaction.react(event).unwrap();
-                conn.save_since(R::reaction_name(), event_id).unwrap();
+
+                conn.save_since(R::reaction_name(), event_id)
+                    .map_err(DbError::postgres)?;
+
                 event_count += 1;
             }
 
@@ -179,9 +179,9 @@ mod tests {
     };
     use lazy_static::lazy_static;
     use parking_lot::Mutex;
-    use postgres::{types::ToSql, Connection};
+    use postgres::{error, types::ToSql, Connection};
     use r2d2_postgres::{r2d2::Pool, PostgresConnectionManager, TlsMode};
-    use std::{sync::Arc, thread, time::Duration};
+    use std::{io, sync::Arc, thread, time::Duration};
 
     lazy_static! {
         static ref PREDICATE: Mutex<ReactionPredicate> = Mutex::new(ReactionPredicate::default());
@@ -346,7 +346,7 @@ mod tests {
     fn can_read_all_aggregates_and_all_events() {
         *PREDICATE.lock() = ReactionPredicate::default();
 
-        assert_eq!(Some(2), test_reaction(ok_pool()));
+        assert_eq!(2, test_reaction(ok_pool()).unwrap());
     }
 
     #[test]
@@ -360,7 +360,7 @@ mod tests {
             ]),
         };
 
-        assert_eq!(Some(2), test_reaction(ok_pool()));
+        assert_eq!(2, test_reaction(ok_pool()).unwrap());
     }
 
     #[test]
@@ -371,7 +371,7 @@ mod tests {
             ),
         };
 
-        assert_eq!(Some(2), test_reaction(ok_pool()));
+        assert_eq!(2, test_reaction(ok_pool()).unwrap());
     }
 
     #[test]
@@ -388,22 +388,88 @@ mod tests {
             ]),
         };
 
-        assert_eq!(Some(2), test_reaction(ok_pool()));
+        assert_eq!(2, test_reaction(ok_pool()).unwrap());
     }
 
     #[test]
     fn get_connection_error() {
-        assert_eq!(None, test_reaction(MockPool {
-            get_result: Err(DbError::pool("No connection for you")),
-        }));
+        let error_message = "connection pool error";
+        let test_error = Err(DbError::pool(error_message));
+
+        let result = test_reaction(MockPool {
+            get_result: test_error,
+        });
+
+        assert!(result.is_err());
+        assert_eq!(error_message, result.err().unwrap().to_string());
     }
 
-    // TODO: Use this in a non-mocked scenario:
-    //        let manager = PostgresConnectionManager::new(
-    //            "postgresql://postgres:test@localhost:5432/es",
-    //            TlsMode::None,
-    //        );
-    //        let pool = Pool::new(manager.unwrap()).unwrap();
+    #[test]
+    fn load_since_error() {
+        let error_message = "load_since error";
+        let test_error = Err(DbError::postgres(error_message));
+
+        let connection = MockConnection {
+            load_since_data: LoadSince {
+                result: test_error,
+                ..LoadSince::default()
+            },
+            ..MockConnection::default()
+        };
+
+        let result = test_reaction(MockPool {
+            get_result: Ok(connection),
+        });
+
+        assert!(result.is_err());
+        assert_eq!(error_message, result.err().unwrap().to_string());
+    }
+
+    #[test]
+    fn read_all_events_error() {
+        let error_message = "read_all_events error";
+        let test_error = Err(DbError::postgres(error_message));
+
+        let connection = MockConnection {
+            read_all_events_data: ReadAllEvents {
+                result: test_error,
+                ..ReadAllEvents::default()
+            },
+            ..MockConnection::default()
+        };
+
+        let result = test_reaction(MockPool {
+            get_result: Ok(connection),
+        });
+
+        assert!(result.is_err());
+        assert_eq!(error_message, result.err().unwrap().to_string());
+    }
+
+    #[test]
+    fn save_since_error() {
+        let error_message = "save_since error";
+        let test_error = Err(DbError::postgres(error_message));
+
+        let connection = MockConnection {
+            read_all_events_data: ReadAllEvents {
+                result: Ok(RAW_EVENTS.to_vec()),
+                ..ReadAllEvents::default()
+            },
+            save_since_data: SaveSince {
+                result: test_error,
+                ..SaveSince::default()
+            },
+            ..MockConnection::default()
+        };
+
+        let result = test_reaction(MockPool {
+            get_result: Ok(connection),
+        });
+
+        assert!(result.is_err());
+        assert_eq!(error_message, result.err().unwrap().to_string());
+    }
 
     fn ok_pool() -> MockPool {
         let connection = MockConnection {
@@ -419,28 +485,15 @@ mod tests {
         }
     }
 
-    fn test_reaction(pool: MockPool) -> Option<usize> {
+    fn test_reaction(pool: MockPool) -> Result<usize, DbError> {
         let local_reactor = Arc::new(PostgresReactor::new(pool));
         let thread_reactor = Arc::clone(&local_reactor);
 
-        let handle = Some(thread::spawn(move || {
-            thread_reactor.start_reaction(MockReaction::default())
-        }));
+        let handle = thread::spawn(move || thread_reactor.start_reaction(MockReaction::default()));
 
-        if let Some(h) = handle {
-            ::std::thread::sleep(Duration::from_millis(50));
-            local_reactor.stop_reaction();
+        ::std::thread::sleep(Duration::from_millis(50));
+        local_reactor.stop_reaction();
 
-            match h.join().unwrap() {
-                Ok(event_count) => {
-                    return Some(event_count);
-                }
-                Err(err) => {
-                    eprintln!("{}", err);
-                }
-            }
-        }
-
-        None
+        handle.join().unwrap()
     }
 }
