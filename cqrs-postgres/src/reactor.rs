@@ -184,9 +184,7 @@ mod tests {
     use std::{sync::Arc, thread, time::Duration};
 
     lazy_static! {
-        static ref EVENTS: Mutex<Vec<RawEvent>> = Mutex::new(vec![]);
         static ref PREDICATE: Mutex<ReactionPredicate> = Mutex::new(ReactionPredicate::default());
-        static ref TEST_MUTEX: Mutex<()> = Mutex::new(());
         static ref RAW_EVENT: RawEvent = RawEvent {
             event_id: EventNumber::new(123).unwrap(),
             aggregate_type: String::from(""),
@@ -196,16 +194,6 @@ mod tests {
             payload: Vec::from("{}"),
         };
         static ref RAW_EVENTS: Vec<RawEvent> = vec![RAW_EVENT.clone(), RAW_EVENT.clone(),];
-    }
-
-    macro_rules! isolated_test {
-        (fn $name:ident() $body:block) => {
-            #[test]
-            fn $name() {
-                let _guard = TEST_MUTEX.lock();
-                $body
-            }
-        };
     }
 
     #[derive(Debug)]
@@ -312,7 +300,6 @@ mod tests {
             since: Since,
             params: &[Box<dyn ToSql>],
         ) -> Result<Vec<RawEvent>, Self::Error> {
-            eprintln!("{:?}", params);
             self.read_all_events_data.result.clone()
         }
     }
@@ -342,7 +329,7 @@ mod tests {
         }
 
         fn react(&mut self, event: RawEvent) -> Result<(), Self::Error> {
-            EVENTS.lock().push(event);
+            self.events.push(event);
             Ok(())
         }
 
@@ -359,7 +346,7 @@ mod tests {
     fn can_read_all_aggregates_and_all_events() {
         *PREDICATE.lock() = ReactionPredicate::default();
 
-        assert_eq!(2, test_reaction(ok_pool()));
+        assert_eq!(Some(2), test_reaction(ok_pool()));
     }
 
     #[test]
@@ -373,7 +360,7 @@ mod tests {
             ]),
         };
 
-        assert_eq!(2, test_reaction(ok_pool()));
+        assert_eq!(Some(2), test_reaction(ok_pool()));
     }
 
     #[test]
@@ -384,7 +371,7 @@ mod tests {
             ),
         };
 
-        assert_eq!(2, test_reaction(ok_pool()));
+        assert_eq!(Some(2), test_reaction(ok_pool()));
     }
 
     #[test]
@@ -401,14 +388,14 @@ mod tests {
             ]),
         };
 
-        assert_eq!(2, test_reaction(ok_pool()));
+        assert_eq!(Some(2), test_reaction(ok_pool()));
     }
 
     #[test]
     fn get_connection_error() {
-        test_reaction(MockPool {
+        assert_eq!(None, test_reaction(MockPool {
             get_result: Err(DbError::pool("No connection for you")),
-        });
+        }));
     }
 
     // TODO: Use this in a non-mocked scenario:
@@ -432,7 +419,7 @@ mod tests {
         }
     }
 
-    fn test_reaction(pool: MockPool) -> usize {
+    fn test_reaction(pool: MockPool) -> Option<usize> {
         let local_reactor = Arc::new(PostgresReactor::new(pool));
         let thread_reactor = Arc::clone(&local_reactor);
 
@@ -446,7 +433,7 @@ mod tests {
 
             match h.join().unwrap() {
                 Ok(event_count) => {
-                    return event_count;
+                    return Some(event_count);
                 }
                 Err(err) => {
                     eprintln!("{}", err);
@@ -454,6 +441,6 @@ mod tests {
             }
         }
 
-        usize::default()
+        None
     }
 }
