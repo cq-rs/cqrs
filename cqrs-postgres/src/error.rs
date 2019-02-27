@@ -64,3 +64,5 @@ impl<E: CqrsError> From<postgres::Error> for LoadError<E> {
         LoadError::Postgres(err)
     }
 }
+
+// TODO: ReactionError

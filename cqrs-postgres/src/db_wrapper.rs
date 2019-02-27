@@ -4,16 +4,50 @@ use num_traits::ToPrimitive;
 use postgres::{rows::Row, types::ToSql};
 use r2d2::{Pool, PooledConnection};
 use r2d2_postgres::PostgresConnectionManager;
-use std::fmt;
+use std::{error, fmt, sync::Arc};
+use cqrs_core::CqrsError;
+
+#[derive(Debug, Clone)]
+pub enum DbError {
+    Pool(Arc<dyn CqrsError>),
+    Postgres(Arc<postgres::Error>),
+}
+
+impl DbError {
+    pub fn pool(err: impl CqrsError) -> Self {
+        DbError::Pool(Arc::new(err))
+    }
+}
+
+impl From<r2d2::Error> for DbError {
+    fn from(err: r2d2::Error) -> Self {
+        DbError::Pool(Arc::new(err))
+    }
+}
+
+impl From<postgres::Error> for DbError {
+    fn from(err: postgres::Error) -> Self {
+        DbError::Postgres(Arc::new(err))
+    }
+}
+
+impl fmt::Display for DbError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            DbError::Pool(ref err) => write!(f, "Pool error: {}", err),
+            DbError::Postgres(ref err) => write!(f, "Postgres error: {}", err),
+        }
+    }
+}
 
 pub trait DbPool<'conn> {
     type Connection: DbConnection<'conn> + 'conn;
-    type Error: fmt::Debug + fmt::Display + Send + Sync + 'static;
+    type Error: CqrsError;
     fn get(&self) -> Result<Self::Connection, Self::Error>;
 }
 
 pub trait DbConnection<'conn> {
-    type Error: fmt::Debug + fmt::Display + Send + Sync + 'static;
+    type Error: CqrsError;
     fn load_since(&self, reaction_name: &str) -> Result<Since, Self::Error>;
     fn save_since(&self, reaction_name: &str, event_id: EventNumber) -> Result<(), Self::Error>;
     fn read_all_events(
@@ -26,15 +60,18 @@ pub trait DbConnection<'conn> {
 
 impl<'conn> DbPool<'conn> for Pool<PostgresConnectionManager> {
     type Connection = PooledConnection<PostgresConnectionManager>;
-    type Error = r2d2::Error;
+    type Error = DbError;
 
     fn get(&self) -> Result<Self::Connection, Self::Error> {
-        self.get()
+        match self.get() {
+            Ok(c) => Ok(c),
+            Err(err) => Err(DbError::from(err)),
+        }
     }
 }
 
 impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> {
-    type Error = postgres::Error;
+    type Error = DbError;
 
     fn load_since(&self, reaction_name: &str) -> Result<Since, Self::Error> {
         let stmt = self.prepare_cached(
