@@ -47,6 +47,6 @@ pub trait Reaction {
 
     fn reaction_name() -> &'static str;
     fn react(&mut self, event: RawEvent) -> Result<(), Self::Error>;
-    fn predicate() -> ReactionPredicate;
+    fn predicate(&self) -> ReactionPredicate;
     fn interval() -> std::time::Duration;
 }
