@@ -75,7 +75,7 @@ where
 
             for event in raw_events {
                 let event_id = event.event_id;
-                reaction.react(event).unwrap();
+                reaction.react(event).map_err(DbError::postgres)?; // TODO: Error type
 
                 conn.save_since(R::reaction_name(), event_id)
                     .map_err(DbError::postgres)?;
@@ -320,6 +320,7 @@ mod tests {
     pub struct MockReaction {
         events: Vec<RawEvent>,
         predicate: ReactionPredicate,
+        react_result: Result<(), DbError>,
     }
 
     impl MockReaction {
@@ -333,12 +334,13 @@ mod tests {
             MockReaction {
                 predicate: ReactionPredicate::default(),
                 events: vec![],
+                react_result: Ok(()),
             }
         }
     }
 
     impl Reaction for MockReaction {
-        type Error = String;
+        type Error = DbError;
 
         fn reaction_name() -> &'static str {
             "Mock"
@@ -346,7 +348,7 @@ mod tests {
 
         fn react(&mut self, event: RawEvent) -> Result<(), Self::Error> {
             self.events.push(event);
-            Ok(())
+            self.react_result.clone()
         }
 
         fn predicate(&self) -> ReactionPredicate {
@@ -527,6 +529,34 @@ mod tests {
         };
 
         let reaction = MockReaction {
+            ..MockReaction::default()
+        };
+
+        let result = test_reaction(pool, reaction);
+
+        assert!(result.is_err());
+        assert_eq!(error_message, result.err().unwrap().to_string());
+    }
+
+    #[test]
+    fn react_error() {
+        let error_message = "react error";
+        let test_error = Err(DbError::postgres(error_message)); // TODO: Error type
+
+        let connection = MockConnection {
+            read_all_events_data: ReadAllEvents {
+                result: Ok(RAW_EVENTS.to_vec()),
+                ..ReadAllEvents::default()
+            },
+            ..MockConnection::default()
+        };
+
+        let pool = MockPool {
+            get_result: Ok(connection),
+        };
+
+        let reaction = MockReaction {
+            react_result: test_error,
             ..MockReaction::default()
         };
 

@@ -10,6 +10,7 @@ use std::{error, fmt, sync::Arc};
 pub enum DbError {
     Pool(Arc<dyn CqrsError>),
     Postgres(Arc<dyn CqrsError>),
+//    React(Arc<dyn CqrsError>),
 }
 
 impl DbError {
