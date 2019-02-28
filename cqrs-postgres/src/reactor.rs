@@ -309,7 +309,7 @@ mod tests {
             }
 
             if let Some(expected_params) = &self.read_all_events_data.expected_params {
-//                assert_eq!(params, expected_params);
+                assert_eq!(&format!("{:?}", params), expected_params);
             }
 
             self.read_all_events_data.result.clone()
@@ -360,13 +360,16 @@ mod tests {
 
     #[test]
     fn can_read_all_aggregates_and_all_events() {
-        let pool = ok_pool(String::from(
-            "SELECT event_id, aggregate_type, entity_id, sequence, event_type, payload \
-             FROM events \
-             WHERE event_id > $1 \
-             ORDER BY event_id ASC \
-             LIMIT $2",
-        ));
+        let pool = ok_pool(
+            String::from(
+                "SELECT event_id, aggregate_type, entity_id, sequence, event_type, payload \
+                 FROM events \
+                 WHERE event_id > $1 \
+                 ORDER BY event_id ASC \
+                 LIMIT $2",
+            ),
+            String::from("[100]"),
+        );
 
         let reaction = MockReaction::default();
 
@@ -375,14 +378,17 @@ mod tests {
 
     #[test]
     fn can_read_specific_aggregates_and_all_events() {
-        let pool = ok_pool(String::from(
-            "SELECT event_id, aggregate_type, entity_id, sequence, event_type, payload \
-            FROM events \
-            WHERE event_id > $1 \
-            AND (FALSE OR (aggregate_type = $2)) \
-            ORDER BY event_id ASC \
-            LIMIT $3",
-        ));
+        let pool = ok_pool(
+            String::from(
+                "SELECT event_id, aggregate_type, entity_id, sequence, event_type, payload \
+                 FROM events \
+                 WHERE event_id > $1 \
+                 AND (FALSE OR (aggregate_type = $2)) \
+                 ORDER BY event_id ASC \
+                 LIMIT $3",
+            ),
+            String::from("[\"material_location_availability\", 100]"),
+        );
 
         let reaction = MockReaction {
             predicate: ReactionPredicate {
@@ -401,14 +407,17 @@ mod tests {
 
     #[test]
     fn can_read_all_aggregates_and_specific_events() {
-        let pool = ok_pool(String::from(
-            "SELECT event_id, aggregate_type, entity_id, sequence, event_type, payload \
-                     FROM events \
-                     WHERE event_id > $1 \
-                     AND event_type = ANY ($2) \
-                     ORDER BY event_id ASC \
-                     LIMIT $3",
-        ));
+        let pool = ok_pool(
+            String::from(
+                "SELECT event_id, aggregate_type, entity_id, sequence, event_type, payload \
+                 FROM events \
+                 WHERE event_id > $1 \
+                 AND event_type = ANY ($2) \
+                 ORDER BY event_id ASC \
+                 LIMIT $3",
+            ),
+            String::from("[[\"sources_updated\"], 100]"),
+        );
 
         let reaction = MockReaction {
             predicate: ReactionPredicate {
@@ -424,14 +433,17 @@ mod tests {
 
     #[test]
     fn can_read_specific_aggregates_and_specific_events() {
-        let pool = ok_pool(String::from(
-            "SELECT event_id, aggregate_type, entity_id, sequence, event_type, payload \
-            FROM events \
-            WHERE event_id > $1 \
-            AND (FALSE OR (aggregate_type = $2 AND event_type = ANY ($3))) \
-            ORDER BY event_id ASC \
-            LIMIT $4",
-        ));
+        let pool = ok_pool(
+            String::from(
+                "SELECT event_id, aggregate_type, entity_id, sequence, event_type, payload \
+                 FROM events \
+                 WHERE event_id > $1 \
+                 AND (FALSE OR (aggregate_type = $2 AND event_type = ANY ($3))) \
+                 ORDER BY event_id ASC \
+                 LIMIT $4",
+            ),
+            String::from("[\"material_location_availability\", [\"sources_updated\", \"end_of_life_updated\"], 100]"),
+        );
 
         let reaction = MockReaction {
             predicate: ReactionPredicate {
@@ -555,10 +567,11 @@ mod tests {
         assert_eq!(error_message, result.err().unwrap().to_string());
     }
 
-    fn ok_pool(expected_query: String) -> MockPool {
+    fn ok_pool(expected_query: String, expected_params: String) -> MockPool {
         let connection = MockConnection {
             read_all_events_data: ReadAllEvents {
                 expected_query: Some(expected_query),
+                expected_params: Some(expected_params),
                 result: Ok(RAW_EVENTS.to_vec()),
                 ..ReadAllEvents::default()
             },
