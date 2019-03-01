@@ -216,8 +216,6 @@ where
 
         if let Some(seq_events) = seq_events {
             for seq_event in seq_events {
-                let seq_event = seq_event?;
-
                 aggregate.apply(seq_event.event);
 
                 debug_assert_eq!(Version::Number(seq_event.sequence), aggregate.version);

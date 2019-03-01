@@ -14,7 +14,7 @@ cqrs-core = { version = "0.1.0", path = "../cqrs-core"}
 failure = "0.1.5"
 fallible-iterator = "0.1"
 log = "0.4"
-num-traits = "0.2.6"
+num-traits = "0.2"
 postgres = "0.15"
 r2d2 = "0.8.3"
 r2d2_postgres = "0.14.0"

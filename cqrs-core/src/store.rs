@@ -13,7 +13,7 @@ where
     E: AggregateEvent<A>,
 {
     /// Represents the sequence of events read from the event source.
-    type Events: IntoIterator<Item = Result<VersionedEvent<E>, Self::Error>>;
+    type Events: IntoIterator<Item = VersionedEvent<E>>;
 
     /// The error type.
     type Error: CqrsError;
