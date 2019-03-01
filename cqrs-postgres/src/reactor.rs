@@ -18,15 +18,19 @@ pub struct NullReaction;
 
 impl Reaction for NullReaction {
     type Error = String;
+
     fn reaction_name() -> &'static str {
         "Null"
     }
+
     fn react(&mut self, _event: RawEvent) -> Result<(), Self::Error> {
         Ok(())
     }
+
     fn predicate(&self) -> ReactionPredicate {
         ReactionPredicate::default()
     }
+
     fn interval() -> Duration {
         Duration::from_secs(1)
     }
