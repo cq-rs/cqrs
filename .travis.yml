@@ -39,14 +39,14 @@ install:
   - cargo -vV
 
   # Install kcov.
-  - mkdir -p ~/.cargo/bin
-  - sh src/install_kcov.sh
-  - export PATH=$HOME/.local/bin:$HOME/.cargo/bin:$HOME/Library/Python/2.7/bin:$PATH
-  - export RUSTFLAGS="-C link-dead-code"
-  - kcov --version
+#  - mkdir -p ~/.cargo/bin
+#  - sh src/install_kcov.sh
+#  - export PATH=$HOME/.local/bin:$HOME/.cargo/bin:$HOME/Library/Python/2.7/bin:$PATH
+#  - export RUSTFLAGS="-C link-dead-code"
+#  - kcov --version
 
 script:
   - cargo build
   - cargo test
 
-  - if [ $TRAVIS_OS_NAME = linux ]; then cargo run -- kcov --verbose --no-clean-rebuild --lib --coveralls; fi
+#  - if [ $TRAVIS_OS_NAME = linux ]; then cargo run -- kcov --verbose --no-clean-rebuild --lib --coveralls; fi
