@@ -143,13 +143,12 @@ impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> 
         } as i64;
 
         fn handle_row(row: Row) -> RawEvent {
-            // TODO: Names...
-            let event_id: Sequence = row.get(0);
-            let aggregate_type = row.get(1);
-            let entity_id = row.get(2);
-            let sequence: Sequence = row.get(3);
-            let event_type = row.get(4);
-            let payload = row.get_bytes(5).unwrap();
+            let event_id: Sequence = row.get("event_id");
+            let aggregate_type = row.get("aggregate_type");
+            let entity_id = row.get("entity_id");
+            let sequence: Sequence = row.get("sequence");
+            let event_type = row.get("event_type");
+            let payload = row.get_bytes("payload").unwrap();
             RawEvent {
                 event_id: event_id.0,
                 aggregate_type,
