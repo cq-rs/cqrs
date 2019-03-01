@@ -1,4 +1,5 @@
 use crate::RawEvent;
+use crate::CqrsError;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum AggregatePredicate {
@@ -43,7 +44,7 @@ pub trait Reactor {
 
 /// A Reaction is stateless, triggering side-effects in response to an event's creation.
 pub trait Reaction {
-    type Error: std::fmt::Display + std::fmt::Debug + Send + Sync + 'static;
+    type Error: CqrsError;
 
     fn reaction_name() -> &'static str;
     fn react(&mut self, event: RawEvent) -> Result<(), Self::Error>;

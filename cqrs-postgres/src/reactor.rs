@@ -75,7 +75,7 @@ where
 
             for event in raw_events {
                 let event_id = event.event_id;
-                reaction.react(event).map_err(DbError::postgres)?; // TODO: Error type
+                reaction.react(event).map_err(DbError::react)?;
 
                 conn.save_since(R::reaction_name(), event_id)
                     .map_err(DbError::postgres)?;
@@ -541,7 +541,7 @@ mod tests {
     #[test]
     fn react_error() {
         let error_message = "react error";
-        let test_error = Err(DbError::postgres(error_message)); // TODO: Error type
+        let test_error = Err(DbError::react(error_message));
 
         let connection = MockConnection {
             read_all_events_data: ReadAllEvents {

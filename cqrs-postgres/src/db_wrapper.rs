@@ -10,7 +10,7 @@ use std::{error, fmt, sync::Arc};
 pub enum DbError {
     Pool(Arc<dyn CqrsError>),
     Postgres(Arc<dyn CqrsError>),
-//    React(Arc<dyn CqrsError>),
+    React(Arc<dyn CqrsError>),
 }
 
 impl DbError {
@@ -20,6 +20,10 @@ impl DbError {
 
     pub fn postgres(err: impl CqrsError) -> Self {
         DbError::Postgres(Arc::new(err))
+    }
+
+    pub fn react(err: impl CqrsError) -> Self {
+        DbError::React(Arc::new(err))
     }
 }
 
@@ -40,6 +44,7 @@ impl fmt::Display for DbError {
         match *self {
             DbError::Pool(ref err) => write!(f, "{}", err),
             DbError::Postgres(ref err) => write!(f, "{}", err),
+            DbError::React(ref err) => write!(f, "{}", err),
         }
     }
 }
