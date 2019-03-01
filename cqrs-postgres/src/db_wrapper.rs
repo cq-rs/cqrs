@@ -104,8 +104,8 @@ impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> 
 
         let rows = stmt.query(&[&reaction_name])?;
 
-        for row in &rows {
-            let event_id: Sequence = row.get("event_id");
+        if rows.len() > 0 {
+            let event_id: Sequence = rows.get(0).get("event_id");
             return Ok(Since::Event(event_id.0));
         }
 
@@ -166,13 +166,10 @@ impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> 
                     .chain(params.iter().map(|p| &**p))
                     .collect();
                 let stmt = self.prepare_cached(query)?;
-                dbg!(&query);
-                dbg!(&local_params);
                 stmt.query(&local_params)?
             };
 
             events = (&rows).into_iter().map(handle_row).collect();
-            dbg!(&events);
         }
 
         Ok(events)
