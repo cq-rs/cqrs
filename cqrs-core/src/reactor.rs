@@ -1,5 +1,4 @@
-use crate::RawEvent;
-use crate::CqrsError;
+use crate::{CqrsError, RawEvent};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum AggregatePredicate {

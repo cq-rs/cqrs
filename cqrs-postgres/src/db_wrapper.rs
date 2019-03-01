@@ -8,12 +8,17 @@ use std::{error, fmt, sync::Arc};
 
 #[derive(Debug, Clone)]
 pub enum DbError {
+    Format(Arc<dyn CqrsError>),
     Pool(Arc<dyn CqrsError>),
     Postgres(Arc<dyn CqrsError>),
     React(Arc<dyn CqrsError>),
 }
 
 impl DbError {
+    pub fn format(err: impl CqrsError) -> Self {
+        DbError::Format(Arc::new(err))
+    }
+
     pub fn pool(err: impl CqrsError) -> Self {
         DbError::Pool(Arc::new(err))
     }
@@ -39,9 +44,16 @@ impl From<postgres::Error> for DbError {
     }
 }
 
+impl From<fmt::Error> for DbError {
+    fn from(err: fmt::Error) -> Self {
+        DbError::Format(Arc::new(err))
+    }
+}
+
 impl fmt::Display for DbError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            DbError::Format(ref err) => write!(f, "{}", err),
             DbError::Pool(ref err) => write!(f, "{}", err),
             DbError::Postgres(ref err) => write!(f, "{}", err),
             DbError::React(ref err) => write!(f, "{}", err),

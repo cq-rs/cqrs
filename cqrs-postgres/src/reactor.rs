@@ -67,7 +67,7 @@ where
                 .map_err(DbError::postgres)?;
             let mut params: Vec<Box<dyn ToSql>> = Vec::default();
             let query_with_args =
-                self.generate_query_with_args(reaction.predicate(), &mut params, 100);
+                self.generate_query_with_args(reaction.predicate(), &mut params, 100)?;
 
             let raw_events = conn
                 .read_all_events(&query_with_args, since, params.as_slice())
@@ -96,20 +96,20 @@ where
         predicate: ReactionPredicate,
         params: &mut Vec<Box<dyn ToSql>>,
         max_count: u64,
-    ) -> String {
+    ) -> Result<String, DbError> {
         let max_count = Box::new(max_count.min(i64::max_value() as u64) as i64);
 
         match predicate.aggregate_predicate {
             AggregatePredicate::AllAggregates(EventTypesPredicate::AllEventTypes) => {
                 params.push(max_count);
 
-                String::from(
+                Ok(String::from(
                     "SELECT event_id, aggregate_type, entity_id, sequence, event_type, payload \
                      FROM events \
                      WHERE event_id > $1 \
                      ORDER BY event_id ASC \
                      LIMIT $2",
-                )
+                ))
             }
             AggregatePredicate::AllAggregates(EventTypesPredicate::SpecificEventTypes(
                 event_types,
@@ -117,14 +117,14 @@ where
                 params.push(Box::new(event_types));
                 params.push(max_count);
 
-                String::from(
+                Ok(String::from(
                     "SELECT event_id, aggregate_type, entity_id, sequence, event_type, payload \
                      FROM events \
                      WHERE event_id > $1 \
                      AND event_type = ANY ($2) \
                      ORDER BY event_id ASC \
                      LIMIT $3",
-                )
+                ))
             }
             AggregatePredicate::SpecificAggregates(aggregate_predicates) => {
                 let mut query = String::from(
@@ -144,22 +144,27 @@ where
                                 param_count + 1,
                                 param_count + 2
                             )
-                            .unwrap();
+                            .map_err(DbError::format)?;
+
                             params.push(Box::new(predicate.aggregate_type));
                             params.push(Box::new(event_types));
                             param_count += 2;
                         }
                         EventTypesPredicate::AllEventTypes => {
-                            write!(query, " OR (aggregate_type = ${})", param_count + 1).unwrap();
+                            write!(query, " OR (aggregate_type = ${})", param_count + 1)
+                                .map_err(DbError::format)?;
+
                             params.push(Box::new(predicate.aggregate_type));
                             param_count += 1;
                         }
                     }
                 }
 
-                write!(query, ") ORDER BY event_id ASC LIMIT ${}", param_count + 1).unwrap();
+                write!(query, ") ORDER BY event_id ASC LIMIT ${}", param_count + 1)
+                    .map_err(DbError::format)?;
+
                 params.push(max_count);
-                query
+                Ok(query)
             }
         }
     }
@@ -242,6 +247,7 @@ mod tests {
             }
         }
     }
+
     #[derive(Debug, Clone)]
     pub struct ReadAllEvents {
         expected_query: Option<String>,
