@@ -1,5 +1,6 @@
 # master
 
+* Add `VersionedEventWithMetadata`.
 * Breaking change to `EventSource::Events` so that the iterated items are no
   longer results.
 
