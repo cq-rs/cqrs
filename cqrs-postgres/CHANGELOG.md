@@ -1,6 +1,7 @@
 # master
 
-* No changes yet
+* Add `read_events_with_metadata`.
+* Bump minimum required version for `cqrs-core`.
 
 # [[0.2.1] 2019-02-04](https://github.com/cq-rs/cqrs/releases/tag/cqrs-postgres-0.2.1)
 
