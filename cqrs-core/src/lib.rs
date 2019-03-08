@@ -33,5 +33,5 @@ pub use crate::store::{
 #[doc(inline)]
 pub use crate::types::{
     CqrsError, EventNumber, Precondition, Since, SnapshotRecommendation, Version,
-    VersionedAggregate, VersionedEvent,
+    VersionedAggregate, VersionedEvent, VersionedEventWithMetadata,
 };

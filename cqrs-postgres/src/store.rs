@@ -6,6 +6,7 @@ use cqrs_core::{
     Aggregate, AggregateEvent, AggregateId, DeserializableEvent, EventNumber, EventSink,
     EventSource, NeverSnapshot, Precondition, SerializableEvent, Since, SnapshotRecommendation,
     SnapshotSink, SnapshotSource, SnapshotStrategy, Version, VersionedAggregate, VersionedEvent,
+    VersionedEventWithMetadata,
 };
 use fallible_iterator::{FallibleIterator, IntoFallibleIterator};
 use num_traits::FromPrimitive;
@@ -288,6 +289,107 @@ where
         ])?;
         Ok(rows.iter().map(|r| r.get(0)).collect())
     }
+
+    /// Reads events and associated metadata from the event source for a given identifier.
+    ///
+    /// Only loads events after the event number provided in `since` (See [Since]), and will only load a maximum of
+    /// `max_count` events, if given. If not given, will read all remaining events.
+    pub fn read_events_with_metadata<I>(
+        &self,
+        id: &I,
+        since: Since,
+        max_count: Option<u64>,
+    ) -> Result<
+        Option<Vec<Result<VersionedEventWithMetadata<E, M>, LoadError<E::Error>>>>,
+        LoadError<E::Error>,
+    >
+    where
+        I: AggregateId<A>,
+        E: DeserializableEvent,
+        M: for<'de> serde::Deserialize<'de>,
+    {
+        let last_sequence = match since {
+            cqrs_core::Since::BeginningOfStream => 0,
+            cqrs_core::Since::Event(x) => x.get(),
+        } as i64;
+
+        let events;
+        let trans = self
+            .conn
+            .transaction_with(postgres::transaction::Config::default().read_only(true))?;
+
+        let handle_row = |row: postgres::rows::Row| {
+            let sequence: Sequence = row.get(0);
+            let event_type: String = row.get(1);
+            let raw: RawJsonRead = row.get(2);
+            let metadata: Json<M> = row.get(3);
+            let event = E::deserialize_event_from_buffer(&raw.0, &event_type)
+                .map_err(LoadError::DeserializationError)?
+                .ok_or_else(|| LoadError::UnknownEventType(event_type.clone()))?;
+            log::trace!(
+                "entity {}: loaded event; sequence: {}, type: {}",
+                id.as_str(),
+                sequence.0,
+                event_type
+            );
+            Ok(VersionedEventWithMetadata {
+                sequence: sequence.0,
+                event,
+                metadata: metadata.0,
+            })
+        };
+
+        let stmt;
+        {
+            let mut rows;
+            if let Some(max_count) = max_count {
+                stmt = trans.prepare_cached(
+                    "SELECT sequence, event_type, payload, metadata \
+                     FROM events \
+                     WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
+                     ORDER BY sequence ASC \
+                     LIMIT $4",
+                )?;
+                rows = stmt.lazy_query(
+                    &trans,
+                    &[
+                        &A::aggregate_type(),
+                        &id.as_str(),
+                        &last_sequence,
+                        &(max_count.min(i64::max_value() as u64) as i64),
+                    ],
+                    100,
+                )?;
+            } else {
+                stmt = trans.prepare_cached(
+                    "SELECT sequence, event_type, payload, metadata \
+                     FROM events \
+                     WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
+                     ORDER BY sequence ASC",
+                )?;
+                rows = stmt.lazy_query(
+                    &trans,
+                    &[&A::aggregate_type(), &id.as_str(), &last_sequence],
+                    100,
+                )?;
+            }
+
+            let (lower, upper) = rows.size_hint();
+            let cap = upper.unwrap_or(lower);
+            let mut inner_events = Vec::with_capacity(cap);
+
+            while let Some(row) = rows.next()? {
+                inner_events.push(handle_row(row));
+            }
+            events = inner_events;
+        }
+
+        trans.commit()?;
+
+        log::trace!("entity {}: read {} events", id.as_str(), events.len());
+
+        Ok(Some(events))
+    }
 }
 
 impl<'conn, A, E, M, S> EventSink<A, E, M> for PostgresStore<'conn, A, E, M, S>
@@ -401,9 +503,9 @@ where
             .transaction_with(postgres::transaction::Config::default().read_only(true))?;
 
         let handle_row = |row: postgres::rows::Row| {
-            let event_type: String = row.get("event_type");
-            let sequence: Sequence = row.get("sequence");
-            let raw: RawJsonRead = row.get("payload");
+            let sequence: Sequence = row.get(0);
+            let event_type: String = row.get(1);
+            let raw: RawJsonRead = row.get(2);
             let event = E::deserialize_event_from_buffer(&raw.0, &event_type)
                 .map_err(LoadError::DeserializationError)?
                 .ok_or_else(|| LoadError::UnknownEventType(event_type.clone()))?;
@@ -536,8 +638,8 @@ where
         )?;
         let rows = stmt.query(&[&A::aggregate_type(), &id.as_str()])?;
         if let Some(row) = rows.iter().next() {
-            let sequence: Sequence = row.get("sequence");
-            let raw: Json<A> = row.get("payload");
+            let sequence: Sequence = row.get(0);
+            let raw: Json<A> = row.get(1);
             log::trace!("entity {}: loaded snapshot", id.as_str());
             Ok(Some(VersionedAggregate {
                 version: Version::from(sequence.0),
