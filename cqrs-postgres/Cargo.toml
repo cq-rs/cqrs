@@ -1,6 +1,6 @@
 [package]
 name = "cqrs-postgres"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Marcus Griep <marcus@griep.us>"]
 description = "An implementation of cqrs for a PostgreSQL backend."
 license = "Apache-2.0"
@@ -10,7 +10,7 @@ repository = "https://github.com/cq-rs/cqrs"
 edition = "2018"
 
 [dependencies]
-cqrs-core = { version = "0.1.0", path = "../cqrs-core"}
+cqrs-core = { version = "0.1.1", path = "../cqrs-core"}
 failure = "0.1.5"
 fallible-iterator = "0.1"
 log = "0.4"
@@ -23,7 +23,7 @@ serde_json = "1.0"
 void = "1.0.2"
 
 [dev-dependencies]
-cqrs = { version = "0.2.0", path = "../cqrs" }
+cqrs = { version = "0.2.1", path = "../cqrs" }
 cqrs-todo-core = { version = "0.1.0", path = "../cqrs-todo-core" }
 lazy_static = "1.2.0"
 parking_lot = "0.7.1"

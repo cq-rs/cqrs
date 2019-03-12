@@ -10,7 +10,7 @@ repository = "https://github.com/cq-rs/cqrs"
 edition = "2018"
 
 [dependencies]
-cqrs-core = { version = "0.1.0", path = "../cqrs-core" }
+cqrs-core = { version = "0.1.1", path = "../cqrs-core" }
 proptest = "0.8"
 
 [dev-dependencies]

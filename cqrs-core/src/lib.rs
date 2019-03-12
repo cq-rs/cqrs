@@ -35,4 +35,5 @@ pub use crate::store::{
 pub use crate::types::{
     BorrowedRawEvent, CqrsError, EventNumber, Precondition, RawEvent, Since,
     SnapshotRecommendation, Version, VersionedAggregate, VersionedEvent,
+    VersionedEventWithMetadata,
 };

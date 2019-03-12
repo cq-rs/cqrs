@@ -8,8 +8,8 @@ publish = false
 
 [dependencies]
 base64 = "0.10"
-cqrs = { version = "0.2.0", path = "../cqrs" }
-cqrs-postgres = { version = "0.2.1", path = "../cqrs-postgres" }
+cqrs = { version = "0.2.1", path = "../cqrs" }
+cqrs-postgres = { version = "0.2.2", path = "../cqrs-postgres" }
 cqrs-todo-core = { version = "0.1.0", path = "../cqrs-todo-core" }
 clap = "2.32"
 chrono = "0.4"
@@ -19,6 +19,7 @@ juniper = "0.11"
 juniper_codegen = "0.11"
 juniper_iron = "0.3"
 mount = "0.4"
+num-traits = "0.2"
 parking_lot = "0.7"
 r2d2_postgres = "0.14.0"
 r2d2 = "0.8"

@@ -230,6 +230,19 @@ pub struct VersionedEvent<E> {
     pub event: E,
 }
 
+/// A structured tuple combining an event number and an event.
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub struct VersionedEventWithMetadata<E, M> {
+    /// The event number.
+    pub sequence: EventNumber,
+
+    /// The event.
+    pub event: E,
+
+    /// The event metadata.
+    pub metadata: M,
+}
+
 /// A structured tuple combining an aggregate and its current version.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct VersionedAggregate<A> {
