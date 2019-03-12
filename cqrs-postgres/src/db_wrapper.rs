@@ -1,62 +1,64 @@
 use crate::util::Sequence;
-use cqrs_core::{CqrsError, EventNumber, RawEvent, Since};
+use cqrs_core::{reactor::Reaction, CqrsError, EventNumber, RawEvent, Since};
 use num_traits::ToPrimitive;
 use postgres::{rows::Row, types::ToSql};
 use r2d2::{Pool, PooledConnection};
 use r2d2_postgres::PostgresConnectionManager;
 use std::{error, fmt, sync::Arc};
 
-#[derive(Debug, Clone)]
-pub enum DbError {
-    Format(Arc<dyn CqrsError>),
-    Pool(Arc<dyn CqrsError>),
-    Postgres(Arc<dyn CqrsError>),
-    React(Arc<dyn CqrsError>),
+#[derive(Debug)]
+pub enum ReactorError<R, P = r2d2::Error, D = postgres::Error>
+where
+    R: Reaction,
+{
+    Pool(Arc<P>),
+    Postgres(Arc<D>),
+    React(R::Error),
 }
 
-impl DbError {
-    pub fn format(err: impl CqrsError) -> Self {
-        DbError::Format(Arc::new(err))
-    }
-
-    pub fn pool(err: impl CqrsError) -> Self {
-        DbError::Pool(Arc::new(err))
-    }
-
-    pub fn postgres(err: impl CqrsError) -> Self {
-        DbError::Postgres(Arc::new(err))
-    }
-
-    pub fn react(err: impl CqrsError) -> Self {
-        DbError::React(Arc::new(err))
-    }
-}
-
-impl From<r2d2::Error> for DbError {
-    fn from(err: r2d2::Error) -> Self {
-        DbError::Pool(Arc::new(err))
+impl<R, P, D> Clone for ReactorError<R, P, D>
+where
+    R: Reaction,
+    R::Error: Clone,
+{
+    fn clone(&self) -> Self {
+        match self {
+            ReactorError::Pool(e) => ReactorError::Pool(e.clone()),
+            ReactorError::Postgres(e) => ReactorError::Postgres(e.clone()),
+            ReactorError::React(e) => ReactorError::React(e.clone()),
+        }
     }
 }
 
-impl From<postgres::Error> for DbError {
-    fn from(err: postgres::Error) -> Self {
-        DbError::Postgres(Arc::new(err))
+impl<R, P, D> ReactorError<R, P, D>
+where
+    R: Reaction,
+{
+    pub fn pool(err: P) -> Self {
+        ReactorError::Pool(Arc::new(err))
+    }
+
+    pub fn postgres(err: D) -> Self {
+        ReactorError::Postgres(Arc::new(err))
+    }
+
+    pub fn react(err: R::Error) -> Self {
+        ReactorError::React(err)
     }
 }
 
-impl From<fmt::Error> for DbError {
-    fn from(err: fmt::Error) -> Self {
-        DbError::Format(Arc::new(err))
-    }
-}
-
-impl fmt::Display for DbError {
+impl<R, P, D> fmt::Display for ReactorError<R, P, D>
+where
+    R: Reaction,
+    R::Error: fmt::Display,
+    P: fmt::Display,
+    D: fmt::Display,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            DbError::Format(ref err) => write!(f, "{}", err),
-            DbError::Pool(ref err) => write!(f, "{}", err),
-            DbError::Postgres(ref err) => write!(f, "{}", err),
-            DbError::React(ref err) => write!(f, "{}", err),
+            ReactorError::Pool(ref err) => write!(f, "Pool error during reaction: {}", err),
+            ReactorError::Postgres(ref err) => write!(f, "Postgres error during reaction: {}", err),
+            ReactorError::React(ref err) => write!(f, "React error during reaction: {}", err),
         }
     }
 }
@@ -81,18 +83,15 @@ pub trait DbConnection<'conn> {
 
 impl<'conn> DbPool<'conn> for Pool<PostgresConnectionManager> {
     type Connection = PooledConnection<PostgresConnectionManager>;
-    type Error = DbError;
+    type Error = r2d2::Error;
 
     fn get(&self) -> Result<Self::Connection, Self::Error> {
-        match self.get() {
-            Ok(c) => Ok(c),
-            Err(err) => Err(DbError::from(err)),
-        }
+        (*self).get()
     }
 }
 
 impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> {
-    type Error = DbError;
+    type Error = postgres::Error;
 
     fn load_since(&self, reaction_name: &str) -> Result<Since, Self::Error> {
         let stmt = self.prepare_cached(
