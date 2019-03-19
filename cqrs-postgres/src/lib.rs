@@ -24,7 +24,9 @@ extern crate cqrs_todo_core;
 #[cfg(test)]
 extern crate static_assertions;
 
+mod db_wrapper;
 mod error;
+mod reactor;
 mod store;
 mod util;
 
