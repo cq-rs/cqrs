@@ -21,9 +21,9 @@ impl cqrs::SnapshotStrategy for SnapshotEvery10 {
     fn snapshot_recommendation(
         &self,
         version: cqrs::Version,
-        last_snapshot_version: cqrs::Version,
+        last_snapshot_version: Option<cqrs::Version>,
     ) -> cqrs::SnapshotRecommendation {
-        if version - last_snapshot_version >= 10 {
+        if version - last_snapshot_version.unwrap_or_default() >= 10 {
             cqrs::SnapshotRecommendation::ShouldSnapshot
         } else {
             cqrs::SnapshotRecommendation::DoNotSnapshot
@@ -134,7 +134,7 @@ mod helper {
         });
 
         store
-            .persist_snapshot(id, &quick_aggregate, Version::new(2), Version::Initial)
+            .persist_snapshot(id, &quick_aggregate, Version::new(2), None)
             .unwrap();
     }
 }
