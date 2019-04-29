@@ -17,7 +17,7 @@ where
     A: Aggregate,
 {
     version: Version,
-    snapshot_version: Version,
+    snapshot_version: Option<Version>,
     state: A,
 }
 
@@ -31,13 +31,13 @@ where
     }
 
     /// The version of the snapshot from which the aggregate was loaded.
-    pub fn snapshot_version(&self) -> Version {
+    pub fn snapshot_version(&self) -> Option<Version> {
         self.snapshot_version
     }
 
     /// Updates the snapshot version. Generally used to indicate that a snapshot was taken.
     pub fn set_snapshot_version(&mut self, new_snapshot_version: Version) {
-        self.snapshot_version = new_snapshot_version;
+        self.snapshot_version = Some(new_snapshot_version);
     }
 
     /// The actual aggregate.
@@ -191,7 +191,7 @@ where
         let entity = if let Some(snapshot) = self.get_snapshot(id)? {
             Some(HydratedAggregate {
                 version: snapshot.version,
-                snapshot_version: snapshot.version,
+                snapshot_version: Some(snapshot.version),
                 state: snapshot.payload,
             })
         } else {
@@ -696,7 +696,7 @@ where
         id: &I,
         aggregate: &A,
         version: Version,
-        last_snapshot_version: Version,
+        last_snapshot_version: Option<Version>,
     ) -> Result<Version, Self::Error>
     where
         I: AggregateId<A>,
@@ -861,7 +861,7 @@ where
         id: &I,
         aggregate: &A,
         version: Version,
-        last_snapshot_version: Version,
+        last_snapshot_version: Option<Version>,
     ) -> Result<Version, Self::Error>
     where
         I: AggregateId<A>,

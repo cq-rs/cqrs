@@ -282,7 +282,7 @@ where
         id: &I,
         aggregate: &A,
         version: Version,
-        _last_snapshot_version: Version,
+        _last_snapshot_version: Option<Version>,
     ) -> Result<Version, Self::Error>
     where
         I: AggregateId<A>,

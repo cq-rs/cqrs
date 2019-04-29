@@ -83,7 +83,7 @@ where
         id: &I,
         aggregate: &A,
         version: Version,
-        last_snapshot_version: Version,
+        last_snapshot_version: Option<Version>,
     ) -> Result<Version, Self::Error>
     where
         I: AggregateId<A>;
@@ -95,7 +95,7 @@ pub trait SnapshotStrategy {
     fn snapshot_recommendation(
         &self,
         version: Version,
-        last_snapshot_version: Version,
+        last_snapshot_version: Option<Version>,
     ) -> SnapshotRecommendation;
 }
 
@@ -104,7 +104,7 @@ pub trait SnapshotStrategy {
 pub struct NeverSnapshot;
 
 impl SnapshotStrategy for NeverSnapshot {
-    fn snapshot_recommendation(&self, _: Version, _: Version) -> SnapshotRecommendation {
+    fn snapshot_recommendation(&self, _: Version, _: Option<Version>) -> SnapshotRecommendation {
         SnapshotRecommendation::DoNotSnapshot
     }
 }
@@ -114,7 +114,7 @@ impl SnapshotStrategy for NeverSnapshot {
 pub struct AlwaysSnapshot;
 
 impl SnapshotStrategy for AlwaysSnapshot {
-    fn snapshot_recommendation(&self, _: Version, _: Version) -> SnapshotRecommendation {
+    fn snapshot_recommendation(&self, _: Version, _: Option<Version>) -> SnapshotRecommendation {
         SnapshotRecommendation::ShouldSnapshot
     }
 }

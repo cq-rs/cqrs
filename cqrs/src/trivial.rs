@@ -151,13 +151,13 @@ where
         _id: &I,
         _aggregate: &A,
         _version: Version,
-        last_snapshot_version: Version,
+        last_snapshot_version: Option<Version>,
     ) -> Result<Version, Self::Error>
     where
         I: AggregateId<A>,
         Self: Sized,
     {
-        Ok(last_snapshot_version)
+        Ok(last_snapshot_version.unwrap_or_default())
     }
 }
 
