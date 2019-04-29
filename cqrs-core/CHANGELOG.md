@@ -1,5 +1,9 @@
 # master
 
+* No changes yet
+
+# [[0.2.1] 2019-04-29](https://github.com/cq-rs/cqrs/releases/tag/cqrs-core-0.2.1)
+
 * Breaking change to `SnapshotSink` and `SnapshotStrategy` to allow
   differentiating between entities with an initial snapshot and those that
   were not in the snapshot store.
