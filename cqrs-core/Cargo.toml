@@ -1,6 +1,6 @@
 [package]
 name = "cqrs-core"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
 description = "Core types and traits for cqrs"
 license = "Apache-2.0"
