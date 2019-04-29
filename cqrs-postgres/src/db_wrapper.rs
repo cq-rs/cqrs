@@ -104,7 +104,7 @@ impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> 
         let rows = stmt.query(&[&reaction_name])?;
 
         if rows.len() > 0 {
-            let event_id: Sequence = rows.get(0).get("event_id");
+            let event_id: Sequence = rows.get(0).get(0);
             return Ok(Since::Event(event_id.0));
         }
 
@@ -142,12 +142,12 @@ impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> 
         } as i64;
 
         fn handle_row(row: Row) -> RawEvent {
-            let event_id: Sequence = row.get("event_id");
-            let aggregate_type = row.get("aggregate_type");
-            let entity_id = row.get("entity_id");
-            let sequence: Sequence = row.get("sequence");
-            let event_type = row.get("event_type");
-            let payload = row.get_bytes("payload").unwrap();
+            let event_id: Sequence = row.get(0);
+            let aggregate_type = row.get(1);
+            let entity_id = row.get(2);
+            let sequence: Sequence = row.get(3);
+            let event_type = row.get(4);
+            let payload = row.get_bytes(5).unwrap();
             RawEvent {
                 event_id: event_id.0,
                 aggregate_type,
