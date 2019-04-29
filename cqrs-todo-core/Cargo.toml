@@ -1,6 +1,6 @@
 [package]
 name = "cqrs-todo-core"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Marcus Griep <marcus@griep.us>"]
 description = "An example aggregate with a simple to-do list implementation"
 license = "Apache-2.0"

@@ -17,7 +17,7 @@ void = "1.0"
 
 [dev-dependencies]
 static_assertions = "0.3"
-cqrs-todo-core = { version = "0.1.0", path = "../cqrs-todo-core" }
+cqrs-todo-core = { version = "0.2.0", path = "../cqrs-todo-core" }
 
 [badges]
 travis-ci = { repository = "cq-rs/cqrs", branch = "master" }
