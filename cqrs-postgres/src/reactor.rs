@@ -1,4 +1,7 @@
+//! > _Note: Experimental!_
+//!
 //! Types for reacting to raw event data in PostgreSQL event store.
+
 use crate::db_wrapper::{DbConnection, DbPool, ReactorError};
 use cqrs_core::{
     reactor::{AggregatePredicate, EventTypesPredicate, Reaction, ReactionPredicate},
