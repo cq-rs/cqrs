@@ -100,8 +100,7 @@ impl<'conn> RawPostgresStore<'conn> {
 
         let mut handle_row = |row: postgres::rows::Row| -> Result<(), LoadError<E>> {
             let event_id: Sequence = row.get(0);
-            let aggregate_type =
-                std::str::from_utf8(row.get_bytes(1).unwrap()).unwrap();
+            let aggregate_type = std::str::from_utf8(row.get_bytes(1).unwrap()).unwrap();
             let entity_id = std::str::from_utf8(row.get_bytes(2).unwrap()).unwrap();
             let sequence: Sequence = row.get(3);
             let event_type = std::str::from_utf8(row.get_bytes(4).unwrap()).unwrap();
