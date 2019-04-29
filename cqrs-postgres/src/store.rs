@@ -583,18 +583,18 @@ where
         id: &I,
         aggregate: &A,
         version: Version,
-        last_snapshot_version: Version,
+        last_snapshot_version: Option<Version>,
     ) -> Result<Version, Self::Error>
     where
         I: AggregateId<A>,
     {
-        if version <= last_snapshot_version
+        if version <= last_snapshot_version.unwrap_or_default()
             || self
                 .snapshot_strategy
                 .snapshot_recommendation(version, last_snapshot_version)
                 == SnapshotRecommendation::DoNotSnapshot
         {
-            return Ok(last_snapshot_version);
+            return Ok(last_snapshot_version.unwrap_or_default());
         }
 
         let stmt = self.conn.prepare_cached(
