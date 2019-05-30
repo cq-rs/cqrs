@@ -133,11 +133,9 @@ where
     /// Loads a page of entity IDs.
     pub fn get_entity_ids(&self, offset: u32, limit: u32) -> Result<Vec<String>, postgres::Error> {
         let stmt = self.conn.prepare_cached(
-            "SELECT entity_id \
+            "SELECT DISTINCT entity_id \
              FROM events \
              WHERE aggregate_type = $1 \
-             GROUP BY entity_id \
-             ORDER BY MIN(event_id) ASC \
              OFFSET $2 LIMIT $3",
         )?;
         let rows = stmt.query(&[
@@ -185,11 +183,9 @@ where
         limit: u32,
     ) -> Result<Vec<String>, postgres::Error> {
         let stmt = self.conn.prepare_cached(
-            "SELECT entity_id \
+            "SELECT DISTINCT entity_id \
              FROM events \
              WHERE aggregate_type = $1 AND entity_id LIKE $2 \
-             GROUP BY entity_id \
-             ORDER BY MIN(event_id) ASC \
              OFFSET $3 LIMIT $4",
         )?;
         let rows = stmt.query(&[
@@ -228,11 +224,9 @@ where
         limit: u32,
     ) -> Result<Vec<String>, postgres::Error> {
         let stmt = self.conn.prepare_cached(
-            "SELECT entity_id \
+            "SELECT DISTINCT entity_id \
              FROM events \
              WHERE aggregate_type = $1 AND entity_id SIMILAR TO $2 \
-             GROUP BY entity_id \
-             ORDER BY MIN(event_id) ASC \
              OFFSET $3 LIMIT $4",
         )?;
         let rows = stmt.query(&[
@@ -274,11 +268,9 @@ where
         limit: u32,
     ) -> Result<Vec<String>, postgres::Error> {
         let stmt = self.conn.prepare_cached(
-            "SELECT entity_id \
+            "SELECT DISTINCT entity_id \
              FROM events \
              WHERE aggregate_type = $1 AND entity_id ~ $2 \
-             GROUP BY entity_id \
-             ORDER BY MIN(event_id) ASC \
              OFFSET $3 LIMIT $4",
         )?;
         let rows = stmt.query(&[
