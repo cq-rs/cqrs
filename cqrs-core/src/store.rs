@@ -1,5 +1,5 @@
 use crate::{
-    aggregate::{Aggregate, AggregateEvent, AggregateId},
+    aggregate::{Aggregate, AggregateEvent},
     types::{
         CqrsError, EventNumber, Precondition, Since, SnapshotRecommendation, Version,
         VersionedAggregate, VersionedEvent,
@@ -22,14 +22,12 @@ where
     ///
     /// Only loads events after the event number provided in `since` (See [Since]), and will only load a maximum of
     /// `max_count` events, if given. If not given, will read all remaining events.
-    fn read_events<I>(
+    fn read_events(
         &self,
-        id: &I,
+        id: &A::Id,
         since: Since,
         max_count: Option<u64>,
-    ) -> Result<Option<Self::Events>, Self::Error>
-    where
-        I: AggregateId<A>;
+    ) -> Result<Option<Self::Events>, Self::Error>;
 }
 
 /// A sink for writing/persisting events with associated metadata.
@@ -44,15 +42,13 @@ where
     /// Appends events to a given source, with an optional precondition, and associated metadata.
     ///
     /// The associated metadata is applied to all events in the append group.
-    fn append_events<I>(
+    fn append_events(
         &self,
-        id: &I,
+        id: &A::Id,
         events: &[E],
         precondition: Option<Precondition>,
         metadata: M,
-    ) -> Result<EventNumber, Self::Error>
-    where
-        I: AggregateId<A>;
+    ) -> Result<EventNumber, Self::Error>;
 }
 
 /// A source for reading/loading snapshots of aggregates.
@@ -64,9 +60,7 @@ where
     type Error: CqrsError;
 
     /// Loads a versioned aggregate from the snapshot source.
-    fn get_snapshot<I>(&self, id: &I) -> Result<Option<VersionedAggregate<A>>, Self::Error>
-    where
-        I: AggregateId<A>;
+    fn get_snapshot(&self, id: &A::Id) -> Result<Option<VersionedAggregate<A>>, Self::Error>;
 }
 
 /// A sink for writing/persisting snapshots of aggregates.
@@ -78,15 +72,13 @@ where
     type Error: CqrsError;
 
     /// Writes an aggregate with its version to the sink. Returns the version number of the latest snapshot.
-    fn persist_snapshot<I>(
+    fn persist_snapshot(
         &self,
-        id: &I,
+        id: &A::Id,
         aggregate: &A,
         version: Version,
         last_snapshot_version: Option<Version>,
-    ) -> Result<Version, Self::Error>
-    where
-        I: AggregateId<A>;
+    ) -> Result<Version, Self::Error>;
 }
 
 /// A strategy determining when to recommend a snapshot be taken.
@@ -141,9 +133,18 @@ mod tests {
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
     pub struct TestMetadata;
 
+    /// Constant ID of test aggregate.
+    const TEST_AGGREGATE_ID: u8 = 1;
+
     impl Aggregate for TestAggregate {
+        type Id = u8;
+
         fn aggregate_type() -> &'static str {
             "test"
+        }
+
+        fn id(&self) -> &u8 {
+            &TEST_AGGREGATE_ID
         }
     }
 

@@ -1,5 +1,7 @@
 use std::{fmt, num::NonZeroU64};
 
+use super::{Aggregate, AggregateCommand, AggregateEvent};
+
 /// Represents an event sequence number, starting at 1
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EventNumber(NonZeroU64);
@@ -251,6 +253,25 @@ pub struct VersionedAggregate<A> {
 
     /// The aggregate.
     pub payload: A,
+}
+
+impl<A: Aggregate> VersionedAggregate<A> {
+    /// Consumes the event, applying its effects to the aggregate.
+    fn apply<E>(&mut self, event: E)
+    where
+        E: AggregateEvent<A>,
+    {
+        event.apply_to(&mut self.payload);
+    }
+
+    /// Consumes a command, attempting to execute it against the aggregate. If the execution is successful, a sequence
+    /// of events is generated, which can be applied to the aggregate.
+    fn execute<C>(&self, command: C) -> Result<C::Events, C::Error>
+    where
+        C: AggregateCommand<A>,
+    {
+        command.execute_on(&self.payload)
+    }
 }
 
 /// The starting point when reading a stream of values from an [EventSource].

@@ -2,36 +2,16 @@ use crate::types::CqrsError;
 
 /// A projected state built from a series of events.
 pub trait Aggregate: Default {
+    /// Type of [`Aggregate`]'s unique identifier (ID).
+    type Id;
+
     /// A static string representing the type of the aggregate.
     ///
     /// Note: This should effectively be a constant value, and should never change.
     fn aggregate_type() -> &'static str;
 
-    /// Consumes the event, applying its effects to the aggregate.
-    fn apply<E>(&mut self, event: E)
-    where
-        E: AggregateEvent<Self>,
-    {
-        event.apply_to(self);
-    }
-
-    /// Consumes a command, attempting to execute it against the aggregate. If the execution is successful, a sequence
-    /// of events is generated, which can be applied to the aggregate.
-    fn execute<C>(&self, command: C) -> Result<C::Events, C::Error>
-    where
-        C: AggregateCommand<Self>,
-    {
-        command.execute_on(self)
-    }
-}
-
-/// An identifier for an aggregate.
-pub trait AggregateId<A>
-where
-    A: Aggregate,
-{
-    /// Gets the stringified aggregate identifier.
-    fn as_str(&self) -> &str;
+    /// Returns unique ID of this [`Aggregate`].
+    fn id(&self) -> &Self::Id;
 }
 
 /// A command that can be executed against an aggregate.
