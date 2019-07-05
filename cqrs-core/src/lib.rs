@@ -23,8 +23,8 @@ mod types;
 
 #[doc(inline)]
 pub use crate::aggregate::{
-    Aggregate, AggregateCommand, AggregateEvent, CommandError, DeserializableEvent,
-    Event, Events, ProducedEvent, ProducedEvents, SerializableEvent,
+    Aggregate, AggregateCommand, AggregateEvent, CommandError, DeserializableEvent, Event, Events,
+    ProducedEvent, ProducedEvents, SerializableEvent,
 };
 #[doc(inline)]
 pub use crate::store::{
@@ -33,7 +33,6 @@ pub use crate::store::{
 };
 #[doc(inline)]
 pub use crate::types::{
-    BorrowedRawEvent, CqrsError, EventNumber, Precondition, RawEvent, Since,
-    SnapshotRecommendation, Version, VersionedAggregate, VersionedEvent,
-    VersionedEventWithMetadata,
+    BorrowedRawEvent, CqrsError, EventNumber, NumberedEvent, NumberedEventWithMeta, Precondition,
+    RawEvent, Since, SnapshotRecommendation, Version, VersionedAggregate,
 };

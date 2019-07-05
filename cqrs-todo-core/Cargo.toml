@@ -10,7 +10,7 @@ repository = "https://github.com/cq-rs/cqrs"
 edition = "2018"
 
 [dependencies]
-cqrs-core = { version = "0.2.1", path = "../cqrs-core" }
+cqrs-core = { version = "0.3", path = "../cqrs-core" }
 log = "0.4.6"
 arrayvec = "0.4"
 chrono = { version = "0.4", features = ["serde"] }

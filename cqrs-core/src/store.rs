@@ -1,8 +1,8 @@
 use crate::{
     aggregate::{Aggregate, AggregateEvent},
     types::{
-        CqrsError, EventNumber, Precondition, Since, SnapshotRecommendation, Version,
-        VersionedAggregate, VersionedEvent,
+        CqrsError, EventNumber, NumberedEvent, Precondition, Since, SnapshotRecommendation,
+        Version, VersionedAggregate,
     },
 };
 
@@ -13,7 +13,7 @@ where
     E: AggregateEvent<A>,
 {
     /// Represents the sequence of events read from the event source.
-    type Events: IntoIterator<Item = VersionedEvent<E>>;
+    type Events: IntoIterator<Item = NumberedEvent<E>>;
 
     /// The error type.
     type Error: CqrsError;
@@ -47,7 +47,7 @@ where
         id: &A::Id,
         events: &[E],
         precondition: Option<Precondition>,
-        metadata: M,
+        meta: M,
     ) -> Result<EventNumber, Self::Error>;
 }
 

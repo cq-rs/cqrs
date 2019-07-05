@@ -1,4 +1,4 @@
-use crate::types::CqrsError;
+use crate::types::{CqrsError, EventVersion};
 
 /// A projected state built from a series of events.
 pub trait Aggregate: Default {
@@ -43,6 +43,12 @@ pub type CommandError<A, C> = <C as AggregateCommand<A>>::Error;
 pub trait Event {
     /// A static description of the event.
     fn event_type(&self) -> &'static str;
+}
+
+/// A different version of the same [`Event`].
+pub trait VersionedEvent: Event {
+    /// A static version of the [`Event`].
+    fn event_version(&self) -> &'static EventVersion;
 }
 
 /// An event that can be applied to an aggregate.

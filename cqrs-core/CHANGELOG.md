@@ -1,6 +1,18 @@
 # master
 
-* No changes yet
+* Breaking changes:
+    * Rename `VersionedEvent` as `NumberedEvent`, and `VersionedEvent` now
+      represents trait with different meaning;
+    * Rename `VersionedEventWithMetadata` as `NumberedEventWithMeta`;
+    * Replace `EventNumber::get()` method with `Into<u64>` implementation;
+    * Move `apply<Event>()` and `execute<Command>()` methods from
+      `Aggregate` trait to `VersionedAggregate` type;
+    * Replace `AggregateId` trait with `Aggregate::Id` associative type;
+    * Require `Aggregate::id()` method implementation.
+* Added:
+    * `VersionedEvent` trait, which may be used to represent a different
+      version of the same `Event`;
+    * `TryInto<i64>` implementation for `EventNumber`.
 
 # [[0.2.1] 2019-04-29](https://github.com/cq-rs/cqrs/releases/tag/cqrs-core-0.2.1)
 

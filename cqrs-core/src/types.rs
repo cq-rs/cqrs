@@ -1,6 +1,30 @@
-use std::{fmt, num::NonZeroU64};
+use std::{
+    convert::{TryFrom, TryInto as _},
+    fmt,
+    num::{NonZeroU64, NonZeroU8, TryFromIntError},
+};
 
 use super::{Aggregate, AggregateCommand, AggregateEvent};
+
+/// Representation of [`VersionedEvent`](super::VersionedEvent)'s version.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EventVersion(NonZeroU8);
+
+impl EventVersion {
+    /// Attempts to create a new [`EventVersion`] from a given number.
+    /// Will return `None` if the given number is `0`.
+    #[inline]
+    pub fn new(x: u8) -> Option<Self> {
+        Some(Self(NonZeroU8::new(x)?))
+    }
+}
+
+impl From<EventVersion> for u8 {
+    #[inline]
+    fn from(v: EventVersion) -> Self {
+        v.0.get()
+    }
+}
 
 /// Represents an event sequence number, starting at 1
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -19,12 +43,6 @@ impl EventNumber {
         Some(EventNumber(NonZeroU64::new(x)?))
     }
 
-    /// Extracts the event number as a plain `u64`.
-    #[inline]
-    pub fn get(self) -> u64 {
-        self.0.get()
-    }
-
     /// Increments the event number to the next value.
     #[inline]
     pub fn incr(&mut self) {
@@ -38,6 +56,22 @@ impl EventNumber {
         let mut slf = self;
         slf.0 = NonZeroU64::new(self.0.get() + 1).unwrap();
         slf
+    }
+}
+
+impl From<EventNumber> for u64 {
+    #[inline]
+    fn from(n: EventNumber) -> Self {
+        n.0.get()
+    }
+}
+
+impl TryFrom<EventNumber> for i64 {
+    type Error = TryFromIntError;
+
+    #[inline]
+    fn try_from(n: EventNumber) -> Result<Self, Self::Error> {
+        n.0.get().try_into()
     }
 }
 
@@ -110,7 +144,7 @@ impl Version {
     pub fn get(self) -> u64 {
         match self {
             Version::Initial => 0,
-            Version::Number(en) => en.get(),
+            Version::Number(en) => en.into(),
         }
     }
 
@@ -163,11 +197,11 @@ impl ::std::ops::Sub for Version {
     fn sub(self, rhs: Version) -> Self::Output {
         let l = match self {
             Version::Initial => 0,
-            Version::Number(n) => n.get() as i64,
+            Version::Number(n) => n.try_into().unwrap(),
         };
         let r = match rhs {
             Version::Initial => 0,
-            Version::Number(n) => n.get() as i64,
+            Version::Number(n) => n.try_into().unwrap(),
         };
 
         l - r
@@ -224,7 +258,7 @@ impl fmt::Display for Precondition {
 
 /// A structured tuple combining an event number and an event.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct VersionedEvent<E> {
+pub struct NumberedEvent<E> {
     /// The event number.
     pub sequence: EventNumber,
 
@@ -234,7 +268,7 @@ pub struct VersionedEvent<E> {
 
 /// A structured tuple combining an event number and an event.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct VersionedEventWithMetadata<E, M> {
+pub struct NumberedEventWithMeta<E, M> {
     /// The event number.
     pub sequence: EventNumber,
 
@@ -242,7 +276,7 @@ pub struct VersionedEventWithMetadata<E, M> {
     pub event: E,
 
     /// The event metadata.
-    pub metadata: M,
+    pub meta: M,
 }
 
 /// A structured tuple combining an aggregate and its current version.
