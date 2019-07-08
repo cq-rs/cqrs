@@ -13,19 +13,20 @@
 )]
 #![warn(missing_docs)]
 
-#[cfg(test)]
-extern crate void;
-
 mod aggregate;
+mod future;
 pub mod reactor;
 mod store;
 mod types;
 
 #[doc(inline)]
 pub use crate::aggregate::{
-    Aggregate, AggregateCommand, AggregateEvent, CommandError, DeserializableEvent, Event, Events,
-    ProducedEvent, ProducedEvents, SerializableEvent,
+    Aggregate, AggregateCommand, AggregateEvent, Command, CommandError, CommandHandler,
+    DeserializableEvent, Event, EventSourced, Events, ProducedEvent, ProducedEvents,
+    SerializableEvent, VersionedEvent,
 };
+#[doc(inline)]
+pub use crate::future::*;
 #[doc(inline)]
 pub use crate::store::{
     AlwaysSnapshot, EventSink, EventSource, NeverSnapshot, SnapshotSink, SnapshotSource,

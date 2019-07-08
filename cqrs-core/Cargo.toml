@@ -1,15 +1,16 @@
 [package]
 name = "cqrs-core"
 version = "0.3.0"
+edition = "2018"
 authors = ["Marcus Griep <marcus@griep.us>"]
 description = "Core types and traits for cqrs"
 license = "Apache-2.0"
 readme = "../README.md"
 documentation = "https://docs.rs/cqrs-core"
 repository = "https://github.com/cq-rs/cqrs"
-edition = "2018"
 
 [dependencies]
+futures-preview = "0.3.0-alpha.17"
 
 [dev-dependencies]
 void = "1.0"

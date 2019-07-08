@@ -27,7 +27,7 @@ impl From<EventVersion> for u8 {
 }
 
 /// Represents an event sequence number, starting at 1
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct EventNumber(NonZeroU64);
 
 impl EventNumber {
@@ -260,23 +260,41 @@ impl fmt::Display for Precondition {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct NumberedEvent<E> {
     /// The event number.
-    pub sequence: EventNumber,
+    pub num: EventNumber,
 
     /// The event.
-    pub event: E,
+    pub data: E,
 }
 
 /// A structured tuple combining an event number and an event.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct NumberedEventWithMeta<E, M> {
     /// The event number.
-    pub sequence: EventNumber,
+    pub num: EventNumber,
 
     /// The event.
-    pub event: E,
+    pub data: E,
 
     /// The event metadata.
     pub meta: M,
+}
+
+impl<'a, E> From<&'a NumberedEvent<E>> for NumberedEvent<&'a E> {
+    fn from(e: &'a NumberedEvent<E>) -> Self {
+        NumberedEvent {
+            num: e.num,
+            data: &e.data,
+        }
+    }
+}
+
+impl<'a, E, M> From<&'a NumberedEventWithMeta<E, M>> for NumberedEvent<&'a E> {
+    fn from(e: &'a NumberedEventWithMeta<E, M>) -> Self {
+        NumberedEvent {
+            num: e.num,
+            data: &e.data,
+        }
+    }
 }
 
 /// A structured tuple combining an aggregate and its current version.

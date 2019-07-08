@@ -14,7 +14,29 @@ pub trait Aggregate: Default {
     fn id(&self) -> &Self::Id;
 }
 
+/// A command that is addressed to an [`Aggregate`].
+pub trait Command<A: Aggregate> {
+    /// Returns ID of the [`Aggregate`] that this [`Command`] is addressed to.
+    /// `None` means that a new [`Aggregate`] should be initialized for
+    /// this [`Command`].
+    fn aggregate_id(&self) -> Option<&A::Id>;
+}
+
+/// A handler of a specific [`Command`] for its [`Aggregate`].
+pub trait CommandHandler<C: Command<Self::Aggregate>> {
+    /// An [`Aggregate`] that the [`Command`] is handled for.
+    type Aggregate: Aggregate;
+    /// A context required by this [`CommandHandler`] for performing operation.
+    type Context: ?Sized;
+    /// A result that this [`CommandHandler`] will return.
+    type Result;
+
+    /// Handles and processes given [`Command`] for its [`Aggregate`].
+    fn handle_command(&self, cmd: &C, ctx: &Self::Context) -> Self::Result;
+}
+
 /// A command that can be executed against an aggregate.
+#[deprecated]
 pub trait AggregateCommand<A: Aggregate> {
     /// The type of event that is produced by this command.
     type Event: AggregateEvent<A>;
@@ -51,7 +73,14 @@ pub trait VersionedEvent: Event {
     fn event_version(&self) -> &'static EventVersion;
 }
 
+/// A state that can be calculated by applying specified [`Event`].
+pub trait EventSourced<E: Event> {
+    /// Applies given [`Event`] to the current state.
+    fn apply_event(&mut self, event: &E);
+}
+
 /// An event that can be applied to an aggregate.
+#[deprecated]
 pub trait AggregateEvent<A: Aggregate>: Event {
     /// Consumes the event, applying its effects to the aggregate.
     fn apply_to(self, aggregate: &mut A);
