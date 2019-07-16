@@ -22,7 +22,7 @@ mod types;
 #[doc(inline)]
 pub use crate::aggregate::{
     Aggregate, AggregateCommand, AggregateEvent, Command, CommandError, CommandHandler,
-    DeserializableEvent, Event, EventSourced, Events, ProducedEvent, ProducedEvents,
+    DeserializableEvent, Event, EventSourced, Events, IntoEvents, ProducedEvent, ProducedEvents,
     SerializableEvent, VersionedEvent,
 };
 #[doc(inline)]

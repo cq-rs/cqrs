@@ -1,4 +1,9 @@
-use crate::types::{CqrsError, EventVersion};
+use std::marker::PhantomData;
+
+use crate::{
+    future::IntoTryFuture,
+    types::{CqrsError, EventVersion},
+};
 
 /// A projected state built from a series of events.
 pub trait Aggregate: Default {
@@ -15,21 +20,24 @@ pub trait Aggregate: Default {
 }
 
 /// A command that is addressed to an [`Aggregate`].
-pub trait Command<A: Aggregate> {
+pub trait Command {
+    type Aggregate: Aggregate;
+
     /// Returns ID of the [`Aggregate`] that this [`Command`] is addressed to.
     /// `None` means that a new [`Aggregate`] should be initialized for
     /// this [`Command`].
-    fn aggregate_id(&self) -> Option<&A::Id>;
+    fn aggregate_id(&self) -> Option<&<Self::Aggregate as Aggregate>::Id>;
 }
 
 /// A handler of a specific [`Command`] for its [`Aggregate`].
-pub trait CommandHandler<C: Command<Self::Aggregate>> {
-    /// An [`Aggregate`] that the [`Command`] is handled for.
-    type Aggregate: Aggregate;
+pub trait CommandHandler<C: Command + ?Sized> {
     /// A context required by this [`CommandHandler`] for performing operation.
     type Context: ?Sized;
+    type Event: Event;
+    type Err;
+    type Ok: IntoEvents<Self::Event>;
     /// A result that this [`CommandHandler`] will return.
-    type Result;
+    type Result: IntoTryFuture<Self::Ok, Self::Err>;
 
     /// Handles and processes given [`Command`] for its [`Aggregate`].
     fn handle_command(&self, cmd: &C, ctx: &Self::Context) -> Self::Result;
@@ -119,4 +127,142 @@ pub trait DeserializableEvent: Event + Sized {
         data: &[u8],
         event_type: &str,
     ) -> Result<Option<Self>, Self::Error>;
+}
+
+pub trait IntoEvents<E> {
+    type Iter: AsRef<[E]>;
+
+    fn into_events(self) -> Self::Iter;
+}
+
+impl<E> IntoEvents<E> for () {
+    type Iter = [E; 0];
+
+    #[inline(always)]
+    fn into_events(self) -> Self::Iter {
+        []
+    }
+}
+
+impl<E, A> IntoEvents<E> for (A,)
+where
+    E: From<A>,
+{
+    type Iter = [E; 1];
+
+    #[inline(always)]
+    fn into_events(self) -> Self::Iter {
+        [self.0.into()]
+    }
+}
+
+impl<E, A, B> IntoEvents<E> for (A, B)
+where
+    E: From<A> + From<B>,
+{
+    type Iter = [E; 2];
+
+    #[inline(always)]
+    fn into_events(self) -> Self::Iter {
+        [self.0.into(), self.1.into()]
+    }
+}
+
+impl<E, A, B, C> IntoEvents<E> for (A, B, C)
+where
+    E: From<A> + From<B> + From<C>,
+{
+    type Iter = [E; 3];
+
+    #[inline(always)]
+    fn into_events(self) -> Self::Iter {
+        [self.0.into(), self.1.into(), self.2.into()]
+    }
+}
+
+impl<E, A, B, C, D> IntoEvents<E> for (A, B, C, D)
+where
+    E: From<A> + From<B> + From<C> + From<D>,
+{
+    type Iter = [E; 4];
+
+    #[inline(always)]
+    fn into_events(self) -> Self::Iter {
+        [self.0.into(), self.1.into(), self.2.into(), self.3.into()]
+    }
+}
+
+impl<E> IntoEvents<E> for Vec<E> {
+    type Iter = Self;
+
+    #[inline(always)]
+    fn into_events(self) -> Self::Iter {
+        self
+    }
+}
+
+impl<E> IntoEvents<E> for [E; 0] {
+    type Iter = Self;
+
+    #[inline(always)]
+    fn into_events(self) -> Self::Iter {
+        self
+    }
+}
+
+impl<E> IntoEvents<E> for [E; 1] {
+    type Iter = Self;
+
+    #[inline(always)]
+    fn into_events(self) -> Self::Iter {
+        self
+    }
+}
+
+impl<E> IntoEvents<E> for [E; 2] {
+    type Iter = Self;
+
+    #[inline(always)]
+    fn into_events(self) -> Self::Iter {
+        self
+    }
+}
+
+impl<E> IntoEvents<E> for [E; 3] {
+    type Iter = Self;
+
+    #[inline(always)]
+    fn into_events(self) -> Self::Iter {
+        self
+    }
+}
+
+impl<E> IntoEvents<E> for [E; 4] {
+    type Iter = Self;
+
+    #[inline(always)]
+    fn into_events(self) -> Self::Iter {
+        self
+    }
+}
+
+impl<E, T> IntoEvents<E> for EventsRef<T>
+where
+    T: AsRef<[E]>,
+{
+    type Iter = T;
+
+    #[inline(always)]
+    fn into_events(self) -> Self::Iter {
+        self.0
+    }
+}
+
+pub struct EventsRef<T>(pub T);
+
+impl<T> From<T> for EventsRef<T> {
+    #[inline(always)]
+    fn from(v: T) -> Self {
+        Self(v)
+    }
 }
