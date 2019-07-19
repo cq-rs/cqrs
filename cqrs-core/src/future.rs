@@ -56,6 +56,15 @@ impl<I, E> IntoTryFuture<I, E> for Result<I, E> {
     }
 }
 
+impl<I> IntoTryFuture<Option<I>, Infallible> for Option<I> {
+    type Future = future::Ready<Result<Self, Infallible>>;
+
+    #[inline(always)]
+    fn into_try_future(self) -> Self::Future {
+        future::ok(self)
+    }
+}
+
 impl IntoTryFuture<(), Infallible> for () {
     type Future = future::Ready<Result<(), Infallible>>;
 
