@@ -384,6 +384,9 @@ where
         if let Some(precondition) = precondition {
             let initial_version = aggregate.as_ref().map(|agg| agg.version);
             precondition.verify(initial_version)?;
+            // If New: allows only None aggregate
+            // If Exists: allows any Some() aggregate
+            // If ExpectedVersion: allows only aggregate of expected version
         }
 
         let mut aggregate = aggregate.unwrap_or_default();
