@@ -1,39 +1,34 @@
-//! # cqrs-core
+//! Core types for the [CQRS]/[ES] aggregate system.
 //!
-//! `cqrs-core` defines the core types for the CQRS aggregate system
+//! [CQRS]: https://martinfowler.com/bliki/CQRS.html
+//! [ES]: https://martinfowler.com/eaaDev/EventSourcing.html
 
-#![warn(unused_import_braces, unused_imports, unused_qualifications)]
+#![feature(async_await)]
 #![deny(
     missing_debug_implementations,
-    missing_copy_implementations,
+    nonstandard_style,
+    rust_2018_idioms,
     trivial_casts,
     trivial_numeric_casts,
     unsafe_code,
     unused_must_use
 )]
-#![warn(missing_docs)]
+#![warn(
+    missing_docs,
+    missing_copy_implementations,
+    unused_import_braces,
+    unused_labels,
+    unused_lifetimes,
+    unused_qualifications,
+    unused_results
+)]
+//#![warn(unreachable_pub)]
 
 mod aggregate;
-mod future;
-pub mod reactor;
-mod store;
-mod types;
+mod command;
+
+mod event;
+mod into;
 
 #[doc(inline)]
-pub use crate::aggregate::{
-    Aggregate, AggregateCommand, AggregateEvent, Command, CommandError, CommandHandler,
-    DeserializableEvent, Event, EventSourced, Events, IntoEvents, ProducedEvent, ProducedEvents,
-    SerializableEvent, VersionedEvent,
-};
-#[doc(inline)]
-pub use crate::future::*;
-#[doc(inline)]
-pub use crate::store::{
-    AlwaysSnapshot, EventSink, EventSource, NeverSnapshot, SnapshotSink, SnapshotSource,
-    SnapshotStrategy,
-};
-#[doc(inline)]
-pub use crate::types::{
-    BorrowedRawEvent, CqrsError, EventNumber, NumberedEvent, NumberedEventWithMeta, Precondition,
-    RawEvent, Since, SnapshotRecommendation, Version, VersionedAggregate,
-};
+pub use self::{aggregate::*, command::*, event::*, into::*};

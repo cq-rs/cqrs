@@ -9,11 +9,12 @@ readme = "../README.md"
 documentation = "https://docs.rs/cqrs-core"
 repository = "https://github.com/cq-rs/cqrs"
 
-[dependencies]
-futures-preview = "0.3.0-alpha.17"
-
-[dev-dependencies]
-void = "1.0"
-
 [badges]
 travis-ci = { repository = "cq-rs/cqrs", branch = "master" }
+
+[dependencies]
+arrayvec = { version = "0.4", optional = true }
+async-trait = "0.1"
+[dependencies.futures-preview]
+    version = "0.3.0-alpha.17"
+    features = ["async-await", "nightly"]
