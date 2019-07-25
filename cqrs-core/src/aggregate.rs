@@ -61,12 +61,7 @@ pub trait SnapshotSink<A: Aggregate> {
     type Err;
 
     /// Persists [`Aggregate`]'s snapshot of a given [`Version`].
-    async fn persist_snapshot(
-        &self,
-        id: &A::Id,
-        aggregate: &A,
-        version: Version,
-    ) -> Result<(), Self::Err>;
+    async fn persist_snapshot(&self, agg: &A, ver: Version) -> Result<(), Self::Err>;
 }
 
 /// [`Aggregate`] that is [`EventSourced`] and keeps track of the version of its

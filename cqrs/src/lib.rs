@@ -27,29 +27,30 @@
 //!
 //!   [juniper]: https://crates.io/crates/juniper
 
-#![warn(unused_import_braces, unused_imports, unused_qualifications)]
+#![feature(async_await)]
 #![deny(
-    missing_debug_implementations,
     missing_copy_implementations,
+    missing_debug_implementations,
+    missing_docs,
+    nonstandard_style,
+    rust_2018_idioms,
     trivial_casts,
     trivial_numeric_casts,
     unsafe_code,
-    unused_must_use,
-    missing_docs
+    unused_must_use
 )]
+#![warn(
+    unused_import_braces,
+    unused_labels,
+    unused_qualifications,
+    unused_results
+)]
+//#![warn(unreachable_pub)]
 
-pub mod memory;
-pub mod trivial;
+mod system;
 
-mod entity;
-
-#[cfg(test)]
-mod testing;
-
-#[doc(inline)]
-pub use crate::entity::{
-    CompositeEntitySink, CompositeEntitySource, CompositeEntityStore, Entity, EntitySink,
-    EntitySource, EntityStore,
-};
 #[doc(inline)]
 pub use cqrs_core::*;
+
+#[doc(inline)]
+pub use self::system::*;

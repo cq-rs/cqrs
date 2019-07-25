@@ -10,73 +10,6 @@ use std::{
     marker::PhantomData,
 };
 
-/// An aggregate that has been loaded from a source, which keeps track of the version of its last snapshot and the current version of the aggregate.
-#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
-pub struct HydratedAggregate<A>
-where
-    A: Aggregate,
-{
-    version: Version,
-    snapshot_version: Option<Version>,
-    state: A,
-}
-
-impl<A> HydratedAggregate<A>
-where
-    A: Aggregate,
-{
-    /// The current version of the aggregate.
-    pub fn version(&self) -> Version {
-        self.version
-    }
-
-    /// The version of the snapshot from which the aggregate was loaded.
-    pub fn snapshot_version(&self) -> Option<Version> {
-        self.snapshot_version
-    }
-
-    /// Updates the snapshot version. Generally used to indicate that a snapshot was taken.
-    pub fn set_snapshot_version(&mut self, new_snapshot_version: Version) {
-        self.snapshot_version = Some(new_snapshot_version);
-    }
-
-    /// The actual aggregate.
-    pub fn state(&self) -> &A {
-        &self.state
-    }
-
-    /// Applies a sequence of events to the internal aggregate.
-    pub fn apply_events<E: AggregateEvent<A>, I: IntoIterator<Item = E>>(&mut self, events: I) {
-        for event in events {
-            self.apply(event);
-        }
-    }
-
-    /// Applies a single event to the aggregate, keeping track of the new aggregate version.
-    pub fn apply<E: AggregateEvent<A>>(&mut self, event: E) {
-        self.state.apply(event);
-        self.version.incr();
-    }
-}
-
-impl<A> AsRef<A> for HydratedAggregate<A>
-where
-    A: Aggregate,
-{
-    fn as_ref(&self) -> &A {
-        &self.state
-    }
-}
-
-impl<A> Borrow<A> for HydratedAggregate<A>
-where
-    A: Aggregate,
-{
-    fn borrow(&self) -> &A {
-        &self.state
-    }
-}
-
 /// An identified, specific instance of a hydrated aggregate.
 #[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
 pub struct Entity<I, A>
@@ -180,51 +113,6 @@ where
     A: Aggregate,
     E: AggregateEvent<A>,
 {
-    /// Loads an identified [Entity] from the latest known snapshot.
-    ///
-    /// If the `SnapshotSource` returns an error, it is passed along. If the source does not have a snapshot
-    /// for the requested entity, returns `Ok(None)`.
-    fn load_from_snapshot<I>(&self, id: &I) -> EntityLoadSnapshotResult<A, Self>
-    where
-        I: AggregateId<A>,
-    {
-        let entity = if let Some(snapshot) = self.get_snapshot(id)? {
-            Some(HydratedAggregate {
-                version: snapshot.version,
-                snapshot_version: Some(snapshot.version),
-                state: snapshot.payload,
-            })
-        } else {
-            None
-        };
-
-        Ok(entity)
-    }
-
-    /// Refreshes an existing hydrated aggregate with the given id.
-    ///
-    /// Errors may occur while loading the events.
-    fn refresh<I>(
-        &self,
-        id: &I,
-        aggregate: &mut HydratedAggregate<A>,
-    ) -> Result<(), <Self as EventSource<A, E>>::Error>
-    where
-        I: AggregateId<A>,
-    {
-        let seq_events = self.read_events(id, aggregate.version.into(), None)?;
-
-        if let Some(seq_events) = seq_events {
-            for seq_event in seq_events {
-                aggregate.apply(seq_event.event);
-
-                debug_assert_eq!(Version::Number(seq_event.sequence), aggregate.version);
-            }
-        }
-
-        Ok(())
-    }
-
     /// Loads an entity from the most recent snapshot of its aggregate, then applies any newer events that have not yet been
     /// applied.
     ///
