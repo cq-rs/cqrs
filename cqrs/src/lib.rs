@@ -49,8 +49,20 @@
 
 mod system;
 
+use async_trait::async_trait;
+
 #[doc(inline)]
 pub use cqrs_core::*;
 
 #[doc(inline)]
 pub use self::system::*;
+
+/// TODO
+#[async_trait]
+pub trait CommandGateway<C: Command, M> {
+    type Err;
+    type Ok;
+
+    /// TODO
+    async fn command(&self, cmd: C, meta: M) -> Result<Self::Ok, Self::Err>;
+}
