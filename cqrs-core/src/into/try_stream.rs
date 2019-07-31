@@ -4,7 +4,7 @@
 
 #![allow(clippy::module_name_repetitions, clippy::type_complexity)]
 
-use std::{convert::Infallible, iter, vec};
+use std::{convert::Infallible, iter, vec, pin::Pin};
 
 #[cfg(feature = "arrayvec")]
 use arrayvec::{Array, ArrayVec};
@@ -232,6 +232,26 @@ impl<I> IntoTryStream<I, Infallible> for BoxStream<'_, I> {
 }
 
 impl<I, E> IntoTryStream<I, E> for BoxStream<'_, Result<I, E>> {
+    type Stream = Self;
+
+    #[inline]
+    fn into_try_stream(self) -> Self::Stream {
+        self
+    }
+}
+
+type LocalBoxStream<'a, T> = Pin<Box<dyn Stream<Item = T> + 'a>>;
+
+impl<I> IntoTryStream<I, Infallible> for LocalBoxStream<'_, I> {
+    type Stream = stream::Map<Self, fn(I) -> Result<I, Infallible>>;
+
+    #[inline]
+    fn into_try_stream(self) -> Self::Stream {
+        self.map(Ok)
+    }
+}
+
+impl<I, E> IntoTryStream<I, E> for LocalBoxStream<'_, Result<I, E>> {
     type Stream = Self;
 
     #[inline]
