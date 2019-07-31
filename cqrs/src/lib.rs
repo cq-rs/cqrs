@@ -58,9 +58,11 @@ pub use cqrs_core::*;
 pub use self::system::*;
 
 /// TODO
-#[async_trait]
+#[async_trait(local)]
 pub trait CommandGateway<C: Command, M> {
+    /// TODO
     type Err;
+    /// TODO
     type Ok;
 
     /// TODO

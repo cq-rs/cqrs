@@ -52,7 +52,7 @@ impl cqrs::Command for TestCommand {
     }
 }
 
-#[async_trait]
+#[async_trait(local)]
 impl cqrs::CommandHandler<TestCommand> for TestAggregate {
     type Context = ();
     type Event = TestEvent;

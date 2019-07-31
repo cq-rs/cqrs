@@ -129,7 +129,7 @@ where
 }
 
 /// Sink for persisting [`Event`]s belonging to some [`Aggregate`].
-#[async_trait]
+#[async_trait(local)]
 pub trait EventSink<A, E, M>
 where
     A: Aggregate + EventSourced<E>,

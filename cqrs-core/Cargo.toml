@@ -14,7 +14,9 @@ travis-ci = { repository = "cq-rs/cqrs", branch = "master" }
 
 [dependencies]
 arrayvec = { version = "0.4", optional = true }
-async-trait = "0.1"
+[dependencies.async-trait]
+    git = "https://github.com/dtolnay/async-trait"
+    branch = "master"
 [dependencies.futures-preview]
     version = "0.3.0-alpha.17"
     features = ["async-await", "nightly"]
