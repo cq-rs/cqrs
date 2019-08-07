@@ -24,7 +24,7 @@ void = "1.0.2"
 
 [dev-dependencies]
 cqrs = { version = "0.3.0", path = "../cqrs" }
-cqrs-todo-core = { version = "0.2.0", path = "../cqrs-todo-core" }
+cqrs-todo-core = { version = "0.2.1", path = "../cqrs-todo-core" }
 lazy_static = "1.2.0"
 parking_lot = "0.9"
 static_assertions = "0.3"
