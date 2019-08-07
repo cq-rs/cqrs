@@ -1,5 +1,9 @@
 # master
 
+* No changes yet
+
+# [[0.3.2] 2019-08-07](https://github.com/cq-rs/cqrs/releases/tag/cqrs-postgres-0.3.2)
+
 * Upgrade `parking_lot` to 0.9
 
 # [[0.3.1] 2019-05-30](https://github.com/cq-rs/cqrs/releases/tag/cqrs-postgres-0.3.1)

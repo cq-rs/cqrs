@@ -9,7 +9,7 @@ publish = false
 [dependencies]
 base64 = "0.10"
 cqrs = { version = "0.3.1", path = "../cqrs" }
-cqrs-postgres = { version = "0.3.1", path = "../cqrs-postgres" }
+cqrs-postgres = { version = "0.3.2", path = "../cqrs-postgres" }
 cqrs-todo-core = { version = "0.2.1", path = "../cqrs-todo-core" }
 clap = "2.32"
 chrono = "0.4"
