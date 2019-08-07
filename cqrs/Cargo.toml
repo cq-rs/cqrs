@@ -1,6 +1,6 @@
 [package]
 name = "cqrs"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Marcus Griep <marcus@griep.us>"]
 description = "An event-sourced command-query system"
 license = "Apache-2.0"
