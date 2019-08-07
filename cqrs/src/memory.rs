@@ -4,9 +4,15 @@ use cqrs_core::{
     Aggregate, AggregateEvent, AggregateId, EventNumber, EventSink, EventSource, Precondition,
     Since, SnapshotSink, SnapshotSource, Version, VersionedAggregate, VersionedEvent,
 };
-use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
-use std::{fmt, hash::BuildHasher, iter, marker::PhantomData, sync::Arc};
+use std::{
+    collections::{hash_map::RandomState, HashMap},
+    fmt,
+    hash::BuildHasher,
+    iter,
+    marker::PhantomData,
+    sync::Arc,
+};
 use void::Void;
 
 #[derive(Debug, Default)]
@@ -20,7 +26,7 @@ type LockedEventStream<E, M> = RwLock<EventStream<VersionedEvent<E>, M>>;
 
 /// An in-memory event store
 #[derive(Debug)]
-pub struct EventStore<A, E, M, Hasher = DefaultHashBuilder>
+pub struct EventStore<A, E, M, Hasher = RandomState>
 where
     A: Aggregate,
     E: AggregateEvent<A> + Clone,
@@ -214,7 +220,7 @@ where
 
 /// An in-memory store for aggregate snapshots.
 #[derive(Debug)]
-pub struct StateStore<A, Hasher = DefaultHashBuilder>
+pub struct StateStore<A, Hasher = RandomState>
 where
     A: Aggregate + Clone,
     Hasher: BuildHasher,

@@ -1,6 +1,6 @@
 # master
 
-* No changes yet
+* Update `insta` to 0.10, `pretty_assertions` to 0.6, `proptest` to 0.9
 
 # [[0.2.0] 2019-04-29](https://github.com/cq-rs/cqrs/releases/tag/cqrs-todo-core-0.2.0)
 

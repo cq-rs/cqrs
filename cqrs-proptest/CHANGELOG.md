@@ -1,6 +1,6 @@
 # master
 
-* No changes yet
+* Upgrade `proptest` to 0.9
 
 # [[0.2.0] 2019-04-29](https://github.com/cq-rs/cqrs/releases/tag/cqrs-proptest-0.2.0)
 

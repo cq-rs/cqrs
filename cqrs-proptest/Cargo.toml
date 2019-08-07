@@ -11,7 +11,7 @@ edition = "2018"
 
 [dependencies]
 cqrs-core = { version = "0.2.1", path = "../cqrs-core" }
-proptest = "0.8"
+proptest = "0.9"
 
 [dev-dependencies]
 serde = {version = "1.0", features = ["derive"] }

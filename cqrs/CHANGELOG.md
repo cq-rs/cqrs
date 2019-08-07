@@ -1,6 +1,7 @@
 # master
 
-* No changes yet
+* Update `parking_lot` to 0.9
+* Remove dependency on separate `hashbrown` crate
 
 # [[0.3.0] 2019-04-29](https://github.com/cq-rs/cqrs/releases/tag/cqrs-0.3.0)
 

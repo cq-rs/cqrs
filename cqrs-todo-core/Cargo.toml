@@ -20,9 +20,9 @@ void = "1.0"
 
 [dev-dependencies]
 cqrs-proptest = { version = "0.2.0", path = "../cqrs-proptest" }
-insta = "0.5"
-pretty_assertions = "0.5"
-proptest = "0.8"
+insta = "0.10"
+pretty_assertions = "0.6"
+proptest = "0.9"
 
 [features]
 default = []

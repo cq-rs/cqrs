@@ -8,7 +8,7 @@
 //! ```
 //! use cqrs_core::{Aggregate, AggregateEvent, Event};
 //! use cqrs_proptest::AggregateFromEventSequence;
-//! use proptest::{prelude::*, strategy::{TupleUnion, ValueTree, W}, test_runner::TestRunner, prop_oneof};
+//! use proptest::{prelude::*, strategy::{LazyTupleUnion, ValueTree, WA}, test_runner::TestRunner, prop_oneof};
 //!
 //! #[derive(Debug, Default)]
 //! struct MyAggregate {
@@ -85,7 +85,7 @@
 //!         ]
 //!     }
 //!
-//!     type Strategy = TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
+//!     type Strategy = LazyTupleUnion<(WA<Just<Self>>, WA<Just<Self>>)>;
 //! }
 //!
 //! any::<AggregateFromEventSequence<MyAggregate, MyEvents>>()
@@ -186,7 +186,7 @@ pub fn arb_events<E: Event + fmt::Debug>(
 /// ```
 /// use cqrs_core::{Aggregate, AggregateEvent, Event};
 /// use cqrs_proptest::{arb_aggregate, arb_events};
-/// use proptest::{prelude::*, strategy::{TupleUnion, ValueTree, W}, test_runner::TestRunner, prop_oneof};
+/// use proptest::{prelude::*, strategy::{LazyTupleUnion, ValueTree, WA}, test_runner::TestRunner, prop_oneof};
 ///
 /// #[derive(Debug, Default)]
 /// struct MyAggregate {
@@ -263,7 +263,7 @@ pub fn arb_events<E: Event + fmt::Debug>(
 ///         ]
 ///     }
 ///
-///     type Strategy = TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
+///     type Strategy = LazyTupleUnion<(WA<Just<Self>>, WA<Just<Self>>)>;
 /// }
 ///
 /// arb_aggregate::<MyAggregate, MyEvents, _>(arb_events(any::<MyEvents>(), 0..10))
@@ -376,7 +376,7 @@ pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEven
 /// ```
 /// use cqrs_core::{Aggregate, AggregateEvent, Event};
 /// use cqrs_proptest::AggregateFromEventSequence;
-/// use proptest::{prelude::*, strategy::{TupleUnion, ValueTree, W}, test_runner::TestRunner, prop_oneof};
+/// use proptest::{prelude::*, strategy::{LazyTupleUnion, ValueTree, WA}, test_runner::TestRunner, prop_oneof};
 ///
 /// #[derive(Debug, Default)]
 /// struct MyAggregate {
@@ -453,7 +453,7 @@ pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEven
 ///         ]
 ///     }
 ///
-///     type Strategy = TupleUnion<(W<Just<Self>>, W<Just<Self>>)>;
+///     type Strategy = LazyTupleUnion<(WA<Just<Self>>, WA<Just<Self>>)>;
 /// }
 ///
 /// any::<AggregateFromEventSequence<MyAggregate, MyEvents>>()
