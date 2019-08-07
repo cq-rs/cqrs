@@ -27,6 +27,8 @@ backend and a GraphQL frontend using the [`juniper`][juniper] crate.
 
   [juniper]: https://crates.io/crates/juniper
 
+Minimum supported version of the Rust compiler is currently 1.32.
+
 ## Development
 
 To build all crates in this repository:

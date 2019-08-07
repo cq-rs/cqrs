@@ -7,7 +7,7 @@ matrix:
     - rust: nightly
       name: "Rust: nightly"
 
-    - rust: 1.31.0
+    - rust: 1.32.0
 
     - rust: stable
       name: clippy
