@@ -43,7 +43,7 @@ pub trait Command {
 }
 
 /// Handler of a specific [`Command`] that processes it for its [`Aggregate`].
-#[async_trait(local)]
+#[async_trait(?Send)]
 pub trait CommandHandler<C: Command> {
     /// Type of context required by this [`CommandHandler`] for performing
     /// an operation.

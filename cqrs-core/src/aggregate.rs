@@ -39,7 +39,7 @@ pub trait Aggregate: Default {
 }
 
 /// Source for loading snapshots of some [`Aggregate`].
-#[async_trait(local)]
+#[async_trait(?Send)]
 pub trait SnapshotSource<A: Aggregate> {
     /// Type of the shapshot loading error.
     /// If it never fails, consider to specify [`Infallible`].
@@ -52,7 +52,7 @@ pub trait SnapshotSource<A: Aggregate> {
 }
 
 /// Sink for persisting snapshots of some [`Aggregate`].
-#[async_trait(local)]
+#[async_trait(?Send)]
 pub trait SnapshotSink<A: Aggregate> {
     /// Type of the shapshot persisting error.
     /// If it never fails, consider to specify [`Infallible`].
