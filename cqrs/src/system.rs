@@ -230,18 +230,20 @@ where
         EvSnk: EventSink<C::Aggregate, CommandHandlerEvent<C>, M>,
         SsSnk: SnapshotSink<C::Aggregate>,
     {
-        let id = cmd.aggregate_id().unwrap(); // TODO: what is None??
+        let agg = if let Some(id) = cmd.aggregate_id() {
+            let agg = self
+                .load_aggregate_and_rehydrate::<SsSrc, EvSrc, _, _>(id)
+                .await?;
+            if agg.is_none() {
+                return Ok(None);
+            }
+            agg
+        } else {
+            Some(HydratedAggregate::default())
+        };
 
         let agg = self
-            .load_aggregate_and_rehydrate::<SsSrc, EvSrc, _, _>(id)
-            .await?;
-        // TODO: what if None??
-        if agg.is_none() {
-            return Ok(None);
-        }
-
-        let agg = self
-            .exec_command_and_persist::<EvSnk, SsSnk, _, _>(cmd, Some(agg.unwrap()), meta)
+            .exec_command_and_persist::<EvSnk, SsSnk, _, _>(cmd, agg, meta)
             .await?;
         Ok(Some(agg))
     }
