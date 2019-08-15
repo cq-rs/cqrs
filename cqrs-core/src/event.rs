@@ -165,8 +165,21 @@ impl EventVersion {
     /// Attempts to create a new [`EventVersion`] from a given number.
     /// Will return [`None`] if the given number is `0`.
     #[inline]
-    pub fn new<N: Into<u8>>(x: N) -> Option<Self> {
-        Some(Self(NonZeroU8::new(x.into())?))
+    pub fn new<N: Into<u8>>(n: N) -> Option<Self> {
+        Some(Self(NonZeroU8::new(n.into())?))
+    }
+
+    #[cfg(feature = "unsafe")]
+    /// Creates new [`EventVersion`] from a raw [`u8`] value without
+    /// checking it.
+    ///
+    /// # Safety
+    ///
+    /// The value must not be zero.
+    #[allow(unsafe_code)]
+    #[inline]
+    pub const unsafe fn new_unchecked(n: u8) -> Self {
+        Self(NonZeroU8::new_unchecked(n))
     }
 }
 
