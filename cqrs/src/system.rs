@@ -1,8 +1,8 @@
 use std::borrow::Borrow;
 
 use cqrs_core::{
-    Aggregate, AlwaysSnapshot, Command, CommandHandler, Event, EventSink, EventSource,
-    EventSourced, HydratedAggregate, IntoEvents, IntoTryStream, NeverSnapshot,
+    Aggregate, AlwaysSnapshot, Command, CommandHandler, Event, EventNumber, EventSink, EventSource,
+    EventSourced, HydratedAggregate, IntoEvents, IntoTryStream, NeverSnapshot, NumberedEvent,
     SnapshotRecommendation, SnapshotSink, SnapshotSource, SnapshotStrategy,
 };
 use futures::{future, TryStreamExt as _};
@@ -186,15 +186,28 @@ where
         EvSnk: EventSink<C::Aggregate, CommandHandlerEvent<C>, M>,
         SsSnk: SnapshotSink<C::Aggregate>,
     {
+        let is_new = agg.is_none();
         let mut agg = agg.unwrap_or_default();
         match agg.state().handle_command(cmd, self.ctx.borrow()).await {
             Ok(ev) => {
-                self.apply_events_and_persist::<EvSnk, SsSnk, _, _, _, _>(
-                    &mut agg,
-                    ev.into_events(),
-                    meta,
-                )
-                .await?;
+                let ev = ev.into_events();
+                let events = ev.as_ref();
+                if !events.is_empty() {
+                    if is_new {
+                        // For newly initiated `Aggregate` this is required,
+                        // because it has no unique ID to persist it's `Event`s
+                        // with. So, we should apply at least one `Event` to
+                        // make it unique before storing its `Event`s.
+                        agg.apply(NumberedEvent {
+                            num: EventNumber::MIN_VALUE,
+                            data: events.first().unwrap(),
+                        });
+                    }
+                    self.apply_events_and_persist::<EvSnk, SsSnk, _, _, _, _>(
+                        &mut agg, events, meta,
+                    )
+                    .await?;
+                }
                 Ok(agg)
             }
             Err(e) => Err(ExecAndPersistError::Exec(agg, e)),
