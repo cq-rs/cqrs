@@ -33,7 +33,7 @@ pub use crate::store::{
 };
 #[doc(inline)]
 pub use crate::types::{
-    BorrowedRawEvent, CqrsError, EventNumber, Precondition, RawEvent, Since,
+    Before, BorrowedRawEvent, CqrsError, EventNumber, Precondition, RawEvent, Since,
     SnapshotRecommendation, Version, VersionedAggregate, VersionedEvent,
     VersionedEventWithMetadata,
 };

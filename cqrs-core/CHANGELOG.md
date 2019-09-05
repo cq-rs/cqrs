@@ -1,6 +1,6 @@
 # master
 
-* No changes yet
+* Add new type `Before` for reading event streams backward
 
 # [[0.2.1] 2019-04-29](https://github.com/cq-rs/cqrs/releases/tag/cqrs-core-0.2.1)
 

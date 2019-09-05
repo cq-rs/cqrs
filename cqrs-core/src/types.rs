@@ -255,6 +255,18 @@ pub struct VersionedAggregate<A> {
 
 /// The starting point when reading a stream of values from an [EventSource].
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Before {
+    /// Begins reading events from the end of the stream.
+    EndOfStream,
+
+    /// Begins reading events before the given [EventNumber].
+    ///
+    /// E.g. if the event number were 4, then reading should begin at event number 3.
+    Event(EventNumber),
+}
+
+/// The starting point when reading a stream of values from an [EventSource].
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Since {
     /// Begins reading events from the very beginning of the stream.
     BeginningOfStream,
