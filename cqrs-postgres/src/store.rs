@@ -386,7 +386,7 @@ where
     /// Reads events and associated metadata from the event source for a given identifier going
     /// backward in sequence.
     ///
-    /// Only loads events after the event number provided in `before` (See [Before]), and will only load a maximum of
+    /// Only loads events before the event number provided in `before` (See [Before]), and will only load a maximum of
     /// `max_count` events, if given. If not given, will read all remaining events.
     pub fn read_events_reverse_with_metadata<I>(
         &self,
