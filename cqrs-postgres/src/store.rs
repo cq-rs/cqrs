@@ -3,7 +3,7 @@ use crate::{
     util::{BorrowedJson, Json, RawJsonPersist, RawJsonRead, Sequence},
 };
 use cqrs_core::{
-    Aggregate, AggregateEvent, AggregateId, DeserializableEvent, EventNumber, EventSink,
+    Aggregate, AggregateEvent, AggregateId, Before, DeserializableEvent, EventNumber, EventSink,
     EventSource, NeverSnapshot, Precondition, SerializableEvent, Since, SnapshotRecommendation,
     SnapshotSink, SnapshotSource, SnapshotStrategy, Version, VersionedAggregate, VersionedEvent,
     VersionedEventWithMetadata,
@@ -358,6 +358,108 @@ where
                      FROM events \
                      WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
                      ORDER BY sequence ASC",
+                )?;
+                rows = stmt.lazy_query(
+                    &trans,
+                    &[&A::aggregate_type(), &id.as_str(), &last_sequence],
+                    100,
+                )?;
+            }
+
+            let (lower, upper) = rows.size_hint();
+            let cap = upper.unwrap_or(lower);
+            let mut inner_events = Vec::with_capacity(cap);
+
+            while let Some(row) = rows.next()? {
+                inner_events.push(handle_row(row));
+            }
+            events = inner_events;
+        }
+
+        trans.commit()?;
+
+        log::trace!("entity {}: read {} events", id.as_str(), events.len());
+
+        Ok(Some(events))
+    }
+
+    /// Reads events and associated metadata from the event source for a given identifier going
+    /// backward in sequence.
+    ///
+    /// Only loads events after the event number provided in `before` (See [Before]), and will only load a maximum of
+    /// `max_count` events, if given. If not given, will read all remaining events.
+    pub fn read_events_reverse_with_metadata<I>(
+        &self,
+        id: &I,
+        before: Before,
+        max_count: Option<u64>,
+    ) -> Result<
+        Option<Vec<Result<VersionedEventWithMetadata<E, M>, LoadError<E::Error>>>>,
+        LoadError<E::Error>,
+    >
+    where
+        I: AggregateId<A>,
+        E: DeserializableEvent,
+        M: for<'de> serde::Deserialize<'de>,
+    {
+        let last_sequence = match before {
+            Before::EndOfStream => std::i64::MAX,
+            Before::Event(x) => x.get() as i64,
+        };
+
+        let events;
+        let trans = self
+            .conn
+            .transaction_with(postgres::transaction::Config::default().read_only(true))?;
+
+        let handle_row = |row: postgres::rows::Row| {
+            let sequence: Sequence = row.get(0);
+            let event_type: String = row.get(1);
+            let raw: RawJsonRead = row.get(2);
+            let metadata: Json<M> = row.get(3);
+            let event = E::deserialize_event_from_buffer(&raw.0, &event_type)
+                .map_err(LoadError::DeserializationError)?
+                .ok_or_else(|| LoadError::UnknownEventType(event_type.clone()))?;
+            log::trace!(
+                "entity {}: loaded event; sequence: {}, type: {}",
+                id.as_str(),
+                sequence.0,
+                event_type
+            );
+            Ok(VersionedEventWithMetadata {
+                sequence: sequence.0,
+                event,
+                metadata: metadata.0,
+            })
+        };
+
+        let stmt;
+        {
+            let mut rows;
+            if let Some(max_count) = max_count {
+                stmt = trans.prepare_cached(
+                    "SELECT sequence, event_type, payload, metadata \
+                     FROM events \
+                     WHERE aggregate_type = $1 AND entity_id = $2 AND sequence < $3 \
+                     ORDER BY sequence DESC \
+                     LIMIT $4",
+                )?;
+                rows = stmt.lazy_query(
+                    &trans,
+                    &[
+                        &A::aggregate_type(),
+                        &id.as_str(),
+                        &last_sequence,
+                        &(max_count.min(i64::max_value() as u64) as i64),
+                    ],
+                    100,
+                )?;
+            } else {
+                stmt = trans.prepare_cached(
+                    "SELECT sequence, event_type, payload, metadata \
+                     FROM events \
+                     WHERE aggregate_type = $1 AND entity_id = $2 AND sequence < $3 \
+                     ORDER BY sequence DESC",
                 )?;
                 rows = stmt.lazy_query(
                     &trans,

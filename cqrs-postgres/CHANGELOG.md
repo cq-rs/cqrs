@@ -1,6 +1,7 @@
 # master
 
-* No changes yet
+* Add new function to read event stream from end
+* Bump version of `cqrs-core`
 
 # [[0.3.2] 2019-08-07](https://github.com/cq-rs/cqrs/releases/tag/cqrs-postgres-0.3.2)
 

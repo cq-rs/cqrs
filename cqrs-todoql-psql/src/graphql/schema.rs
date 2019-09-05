@@ -3,7 +3,8 @@ use crate::TodoStore;
 use base64;
 use chrono::{DateTime, Utc};
 use cqrs::{
-    AggregateId, Entity, EntitySink, EntitySource, EntityStore, Precondition, Since, Version,
+    AggregateId, Before, Entity, EntitySink, EntitySource, EntityStore, EventNumber, Precondition,
+    Version,
 };
 use cqrs_todo_core::{
     commands, domain, TodoAggregate, TodoEvent, TodoId, TodoMetadata, TodoStatus,
@@ -106,7 +107,7 @@ graphql_object!(TodoQL: Context |&self| {
 
     field events(
         &executor,
-        since: Option<i32>,
+        before: Option<i32>,
         max_count = 100: i32
     ) -> FieldResult<Vec<VersionedTodoEventQL>>
     {
@@ -114,16 +115,17 @@ graphql_object!(TodoQL: Context |&self| {
         let conn = executor.context().backend.get()?;
         let store = TodoStore::new(&*conn);
 
-        let since = if let Some(s) = since {
-            Since::from(Version::new(s.to_u64().ok_or("Invalid since version; must be a positive number")?))
+        let before = if let Some(b) = before {
+            let event_number = EventNumber::new(b.to_u64().ok_or("Invalid before version; must be a positive number")?).unwrap_or(EventNumber::MIN_VALUE);
+            Before::Event(event_number)
         } else {
-            Since::BeginningOfStream
+            Before::EndOfStream
         };
 
         let max_count = MAX_PAGE_SIZE.min(max_count.to_u64().ok_or("Invalid max_count; must be a positive integer")?);
 
         let events: Vec<VersionedTodoEventQL> =
-            store.read_events_with_metadata(self.0.id(), since, Some(max_count))?
+            store.read_events_reverse_with_metadata(self.0.id(), before, Some(max_count))?
                 .unwrap_or_default()
                 .into_iter()
                 .map(|r| r.map(VersionedTodoEventQL))
