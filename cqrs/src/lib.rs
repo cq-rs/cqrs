@@ -27,7 +27,6 @@
 //!
 //!   [juniper]: https://crates.io/crates/juniper
 
-#![feature(async_await)]
 #![deny(
     missing_copy_implementations,
     missing_debug_implementations,

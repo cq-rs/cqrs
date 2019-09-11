@@ -188,7 +188,8 @@ where
     {
         let is_new = agg.is_none();
         let mut agg = agg.unwrap_or_default();
-        match agg.state().handle_command(cmd, self.ctx.borrow()).await {
+        let res = agg.state().handle_command(cmd, self.ctx.borrow()).await;
+        match res {
             Ok(ev) => {
                 let ev = ev.into_events();
                 let events = ev.as_ref();

@@ -3,7 +3,6 @@
 //! [CQRS]: https://martinfowler.com/bliki/CQRS.html
 //! [ES]: https://martinfowler.com/eaaDev/EventSourcing.html
 
-#![feature(async_await)]
 #![deny(
     missing_debug_implementations,
     nonstandard_style,
