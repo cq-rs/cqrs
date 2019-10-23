@@ -7,7 +7,7 @@ use std::{
     convert::{TryFrom, TryInto as _},
     fmt,
     num::TryFromIntError,
-    ops,
+    ops, slice,
 };
 
 use async_trait::async_trait;
@@ -28,11 +28,11 @@ pub trait Aggregate: Default {
     /// Type of [`Aggregate`]'s unique identifier (ID).
     type Id;
 
-    /// Returns static string representing the type of this [`Aggregate`].
+    /// Returns type of this [`Aggregate`].
     ///
     /// _Note:_ This should effectively be a constant value, and should never
     /// change.
-    fn aggregate_type() -> &'static str;
+    fn aggregate_type(&self) -> AggregateType;
 
     /// Returns unique ID of this [`Aggregate`].
     fn id(&self) -> &Self::Id;
@@ -40,7 +40,7 @@ pub trait Aggregate: Default {
 
 /// Source for loading snapshots of some [`Aggregate`].
 #[async_trait(?Send)]
-pub trait SnapshotSource<A: Aggregate> {
+pub trait SnapshotSource<Agg: Aggregate> {
     /// Type of the shapshot loading error.
     /// If it never fails, consider to specify [`Infallible`].
     ///
@@ -48,12 +48,21 @@ pub trait SnapshotSource<A: Aggregate> {
     type Err;
 
     /// Loads latest stored snapshot of a given [`Aggregate`].
-    async fn load_snapshot(&self, id: &A::Id) -> Result<Option<(A, Version)>, Self::Err>;
+    #[allow(unused_lifetimes)]
+    async fn load_snapshot(&self, id: &Agg::Id) -> Result<Option<(Agg, Version)>, Self::Err>
+    where
+        Agg: 'async_trait,
+    {
+        Ok(self.load_snapshots(slice::from_ref(id)).await?.pop())
+    }
+
+    /// Loads latest stored snapshots of given [`Aggregate`]s.
+    async fn load_snapshots(&self, ids: &[Agg::Id]) -> Result<Vec<(Agg, Version)>, Self::Err>;
 }
 
 /// Sink for persisting snapshots of some [`Aggregate`].
 #[async_trait(?Send)]
-pub trait SnapshotSink<A: Aggregate> {
+pub trait SnapshotSink<Agg: Aggregate + ?Sized> {
     /// Type of the shapshot persisting error.
     /// If it never fails, consider to specify [`Infallible`].
     ///
@@ -61,36 +70,43 @@ pub trait SnapshotSink<A: Aggregate> {
     type Err;
 
     /// Persists [`Aggregate`]'s snapshot of a given [`Version`].
-    async fn persist_snapshot(&self, agg: &A, ver: Version) -> Result<(), Self::Err>;
+    #[allow(unused_lifetimes)]
+    async fn persist_snapshot(&self, agg: &Agg, ver: Version) -> Result<(), Self::Err> {
+        self.persist_snapshots(slice::from_ref(&(agg, ver))).await
+    }
+
+    /// Persists multiple [`Aggregate`]'s snapshots of given [`Version`]s.
+    async fn persist_snapshots(&self, aggs: &[(&Agg, Version)]) -> Result<(), Self::Err>;
 }
 
 /// [`Aggregate`] that is [`EventSourced`] and keeps track of the version of its
 /// last snapshot and the current version.
 #[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
-pub struct HydratedAggregate<A> {
+pub struct HydratedAggregate<Agg> {
     /// Current [`Version`] of this [`Aggregate`].
     ver: Version,
     /// [`Version`] of last snapshot of this [`Aggregate`].
     snapshot_ver: Option<Version>,
     /// The [`Aggregate`] itself.
-    state: A,
+    state: Agg,
 }
 
-impl<A> HydratedAggregate<A> {
+impl<Agg> HydratedAggregate<Agg> {
     /// Creates new [`HydratedAggregate`] from a given [`Aggregate`] and its
     /// current [`Version`].
     #[inline]
-    pub fn from_version(agg: A, ver: Version) -> Self {
+    pub fn from_version(agg: Agg, ver: Version) -> Self {
         Self {
             ver,
             snapshot_ver: None,
             state: agg,
         }
     }
+
     /// Creates new [`HydratedAggregate`] from a given [`Aggregate`] and its
     /// latest snapshot [`Version`].
     #[inline]
-    pub fn from_snapshot(agg: A, ver: Version) -> Self {
+    pub fn from_snapshot(agg: Agg, ver: Version) -> Self {
         Self {
             ver,
             snapshot_ver: Some(ver),
@@ -100,9 +116,9 @@ impl<A> HydratedAggregate<A> {
 
     /// Returns ID of this [`Aggregate`].
     #[inline(always)]
-    pub fn id(&self) -> &A::Id
+    pub fn id(&self) -> &Agg::Id
     where
-        A: Aggregate,
+        Agg: Aggregate,
     {
         self.state.id()
     }
@@ -127,33 +143,33 @@ impl<A> HydratedAggregate<A> {
 
     /// Returns the inner [`Aggregate`] itself.
     #[inline(always)]
-    pub fn state(&self) -> &A {
+    pub fn state(&self) -> &Agg {
         &self.state
     }
 
     /// Applies given [`NumberedEvent`] to this [`Aggregate`] renewing its
     /// [`Version`] with [`EventNumber`] of the [`NumberedEvent`].
     #[inline]
-    pub fn apply<'a, E, R>(&mut self, event: R)
+    pub fn apply<'a, Ev, IntoEv>(&mut self, event: IntoEv)
     where
-        R: Into<NumberedEvent<&'a E>>,
-        E: Event + 'a,
-        A: EventSourced<E>,
+        IntoEv: Into<NumberedEvent<&'a Ev>>,
+        Ev: Event + 'a,
+        Agg: EventSourced<Ev>,
     {
         let e = event.into();
-        self.state.apply_event(e.data);
+        self.state.apply(e.data);
         self.ver = e.num.into();
     }
 
     /// Applies given [`NumberedEvent`]s to this [`Aggregate`] renewing its
     /// [`Version`] appropriately.
     #[inline]
-    pub fn apply_events<'a, E, R, I>(&mut self, events: I)
+    pub fn apply_events<'a, Ev, IntoEv, Iter>(&mut self, events: Iter)
     where
-        I: IntoIterator<Item = R>,
-        R: Into<NumberedEvent<&'a E>>,
-        E: Event + 'a,
-        A: EventSourced<E>,
+        Iter: IntoIterator<Item = IntoEv>,
+        IntoEv: Into<NumberedEvent<&'a Ev>>,
+        Ev: Event + 'a,
+        Agg: EventSourced<Ev>,
     {
         for event in events {
             self.apply(event);
@@ -161,19 +177,22 @@ impl<A> HydratedAggregate<A> {
     }
 }
 
-impl<A> AsRef<A> for HydratedAggregate<A> {
+impl<Agg> AsRef<Agg> for HydratedAggregate<Agg> {
     #[inline]
-    fn as_ref(&self) -> &A {
+    fn as_ref(&self) -> &Agg {
         &self.state
     }
 }
 
-impl<A> Borrow<A> for HydratedAggregate<A> {
+impl<Agg> Borrow<Agg> for HydratedAggregate<Agg> {
     #[inline]
-    fn borrow(&self) -> &A {
+    fn borrow(&self) -> &Agg {
         &self.state
     }
 }
+
+/// Type of an [`Aggregate`].
+pub type AggregateType = &'static str;
 
 /// Version of an [`Aggregate`].
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -347,7 +366,7 @@ pub enum SnapshotRecommendation {
 pub trait SnapshotStrategy {
     /// Gives the [`SnapshotRecommendation`] on whether or not to perform
     /// a snapshot for an [`Aggregate`].
-    fn snapshot_recommendation(
+    fn recommendation(
         &self,
         ver: Version,
         last_snapshot_ver: Option<Version>,
@@ -361,7 +380,7 @@ pub struct NeverSnapshot;
 impl SnapshotStrategy for NeverSnapshot {
     /// Always returns [`SnapshotRecommendation::DoNotSnapshot`].
     #[inline]
-    fn snapshot_recommendation(&self, _: Version, _: Option<Version>) -> SnapshotRecommendation {
+    fn recommendation(&self, _: Version, _: Option<Version>) -> SnapshotRecommendation {
         SnapshotRecommendation::DoNotSnapshot
     }
 }
@@ -373,7 +392,7 @@ pub struct AlwaysSnapshot;
 impl SnapshotStrategy for AlwaysSnapshot {
     /// Always returns [`SnapshotRecommendation::ShouldSnapshot`].
     #[inline]
-    fn snapshot_recommendation(&self, _: Version, _: Option<Version>) -> SnapshotRecommendation {
+    fn recommendation(&self, _: Version, _: Option<Version>) -> SnapshotRecommendation {
         SnapshotRecommendation::ShouldSnapshot
     }
 }

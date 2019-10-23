@@ -27,7 +27,14 @@ mod aggregate;
 mod command;
 
 mod event;
-mod into;
+//mod into;
+
+use std::pin::Pin;
+
+use futures::Stream;
 
 #[doc(inline)]
-pub use self::{aggregate::*, command::*, event::*, into::*};
+pub use self::{aggregate::*, command::*, event::*};
+
+/// Helper alias for pin-boxed `?Send` [`Stream`] which yields [`Result`]s.
+pub type LocalBoxTryStream<'a, I, E> = Pin<Box<dyn Stream<Item = Result<I, E>> + 'a>>;

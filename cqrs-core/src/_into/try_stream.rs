@@ -4,7 +4,7 @@
 
 #![allow(clippy::module_name_repetitions, clippy::type_complexity)]
 
-use std::{convert::Infallible, iter, vec, pin::Pin};
+use std::{convert::Infallible, iter, pin::Pin, vec};
 
 #[cfg(feature = "arrayvec")]
 use arrayvec::{Array, ArrayVec};

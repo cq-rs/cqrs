@@ -1,5 +1,3 @@
-#![feature(async_await)]
-
 use std::convert::Infallible;
 
 use async_trait::async_trait;
@@ -17,7 +15,7 @@ impl TestAggregate {
 impl cqrs::Aggregate for TestAggregate {
     type Id = u8;
 
-    fn aggregate_type() -> &'static str {
+    fn aggregate_type(&self) -> cqrs::AggregateType {
         "test"
     }
 
@@ -31,13 +29,13 @@ impl cqrs::Aggregate for TestAggregate {
 pub struct TestEvent;
 
 impl cqrs::Event for TestEvent {
-    fn event_type(&self) -> &'static str {
+    fn event_type(&self) -> cqrs::EventType {
         "test"
     }
 }
 
 impl cqrs::EventSourced<TestEvent> for TestAggregate {
-    fn apply_event(&mut self, _: &TestEvent) {}
+    fn apply(&mut self, _: &TestEvent) {}
 }
 
 /// Test command with no data.
@@ -55,11 +53,11 @@ impl cqrs::Command for TestCommand {
 #[async_trait(?Send)]
 impl cqrs::CommandHandler<TestCommand> for TestAggregate {
     type Context = ();
-    type Event = TestEvent;
     type Err = Infallible;
+    type Event = TestEvent;
     type Ok = ();
 
-    async fn handle_command(&self, _: TestCommand, _: &()) -> Result<(), Infallible> {
+    async fn handle(&self, _: TestCommand, _: &()) -> Result<(), Infallible> {
         Ok(())
     }
 }

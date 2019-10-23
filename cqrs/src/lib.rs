@@ -29,8 +29,6 @@
 
 #![deny(
     missing_copy_implementations,
-    missing_debug_implementations,
-    missing_docs,
     nonstandard_style,
     rust_2018_idioms,
     trivial_casts,
@@ -39,6 +37,8 @@
     unused_must_use
 )]
 #![warn(
+    missing_debug_implementations,
+    missing_docs,
     unused_import_braces,
     unused_labels,
     unused_qualifications,
@@ -46,7 +46,8 @@
 )]
 //#![warn(unreachable_pub)]
 
-mod system;
+mod event_processing;
+pub mod lifecycle;
 
 use async_trait::async_trait;
 
@@ -54,16 +55,52 @@ use async_trait::async_trait;
 pub use cqrs_core::*;
 
 #[doc(inline)]
-pub use self::system::*;
+pub use self::{
+    event_processing::{EventHandler, EventProcessingConfiguration, RegisteredEvent},
+    lifecycle::BorrowableAsContext,
+};
 
-/// TODO
 #[async_trait(?Send)]
-pub trait CommandGateway<C: Command, M> {
-    /// TODO
+pub trait CommandGateway<Cmd: Command, Mt> {
     type Err;
-    /// TODO
     type Ok;
 
-    /// TODO
-    async fn command(&self, cmd: C, meta: M) -> Result<Self::Ok, Self::Err>;
+    async fn send(&self, cmd: Cmd, meta: Mt) -> Result<Self::Ok, Self::Err>;
+}
+
+#[async_trait(?Send)]
+pub trait CommandBus<Cmd: Command> {
+    type Err;
+    type Ok;
+
+    async fn dispatch(&self, cmd: Cmd) -> Result<Self::Ok, Self::Err>
+    where
+        Cmd: 'async_trait;
+}
+
+pub trait DomainEvent: Event {}
+
+pub trait AggregateEvent: Event {
+    type Aggregate: Aggregate;
+
+    fn event_types() -> &'static [EventType];
+}
+
+pub trait Query {}
+
+#[async_trait(?Send)]
+pub trait QueryGateway<Qr: Query> {
+    type Err;
+    type Ok;
+
+    async fn query(&self, query: Qr) -> Result<Self::Ok, Self::Err>;
+}
+
+#[async_trait(?Send)]
+pub trait QueryHandler<Qr: Query> {
+    type Context: ?Sized;
+    type Err;
+    type Ok;
+
+    async fn handle(&self, query: Qr, ctx: &Self::Context) -> Result<Self::Ok, Self::Err>;
 }

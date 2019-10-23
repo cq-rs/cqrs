@@ -44,7 +44,7 @@ pub trait Command {
 
 /// Handler of a specific [`Command`] that processes it for its [`Aggregate`].
 #[async_trait(?Send)]
-pub trait CommandHandler<C: Command> {
+pub trait CommandHandler<Cmd: Command> {
     /// Type of context required by this [`CommandHandler`] for performing
     /// an operation.
     ///
@@ -64,5 +64,5 @@ pub trait CommandHandler<C: Command> {
     type Ok: IntoEvents<Self::Event>;
 
     /// Handles and processes given [`Command`] for its [`Aggregate`].
-    async fn handle_command(&self, cmd: C, ctx: &Self::Context) -> Result<Self::Ok, Self::Err>;
+    async fn handle(&self, cmd: Cmd, ctx: &Self::Context) -> Result<Self::Ok, Self::Err>;
 }

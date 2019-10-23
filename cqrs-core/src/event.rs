@@ -12,7 +12,7 @@ use std::{
 use arrayvec::{Array, ArrayVec};
 use async_trait::async_trait;
 
-use super::{Aggregate, IntoTryStream, Version};
+use super::{Aggregate, LocalBoxTryStream, Version};
 
 /// [Event Sourcing] event that describes something that has occurred (happened
 /// fact).
@@ -23,22 +23,22 @@ use super::{Aggregate, IntoTryStream, Version};
 ///
 /// [Event Sourcing]: https://martinfowler.com/eaaDev/EventSourcing.html
 pub trait Event {
-    /// Returns string representation of [`Event`]'s type.
+    /// Returns type of this [`Event`].
     ///
     /// _Note:_ This should effectively be a constant value, and should never
     /// change.
-    fn event_type(&self) -> &'static str;
+    fn event_type(&self) -> EventType;
 }
 
 /// State that can be calculated by applying specified [`Event`].
 ///
 /// Usually, implemented by an [`Aggregate`].
-pub trait EventSourced<E: Event> {
+pub trait EventSourced<Ev: Event + ?Sized> {
     /// Applies given [`Event`] to the current state.
-    fn apply_event(&mut self, event: &E);
+    fn apply(&mut self, event: &Ev);
 }
 
-/// Different [`Event`] version of the same [`Event::event_type`].
+/// Different version of [`Event`] with the same [`EventType`].
 ///
 /// The single type of [`Event`] may have different versions, which allows
 /// evolving [`Event`] in the type. To overcome the necessity of dealing with
@@ -56,31 +56,31 @@ pub trait VersionedEvent: Event {
 
 /// Structured pair combining an [`Event`] and its [`EventNumber`].
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct NumberedEvent<E> {
+pub struct NumberedEvent<Ev> {
     /// Number of the [`Event`].
     pub num: EventNumber,
 
     /// The [`Event`] itself.
-    pub data: E,
+    pub data: Ev,
 }
 
 /// A structured tuple combining an [`Event`], its [`EventNumber`] and
 /// arbitrary metadata related to this [`Event`].
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct NumberedEventWithMeta<E, M> {
+pub struct NumberedEventWithMeta<Ev, Mt> {
     /// Number of the [`Event`].
     pub num: EventNumber,
 
     /// The [`Event`] itself.
-    pub data: E,
+    pub data: Ev,
 
     /// Metadata related to the [`Event`].
-    pub meta: M,
+    pub meta: Mt,
 }
 
-impl<'a, E> From<&'a NumberedEvent<E>> for NumberedEvent<&'a E> {
+impl<'a, Ev> From<&'a NumberedEvent<Ev>> for NumberedEvent<&'a Ev> {
     #[inline]
-    fn from(e: &'a NumberedEvent<E>) -> Self {
+    fn from(e: &'a NumberedEvent<Ev>) -> Self {
         Self {
             num: e.num,
             data: &e.data,
@@ -88,9 +88,9 @@ impl<'a, E> From<&'a NumberedEvent<E>> for NumberedEvent<&'a E> {
     }
 }
 
-impl<'a, E, M> From<&'a NumberedEventWithMeta<E, M>> for NumberedEvent<&'a E> {
+impl<'a, Ev, Mt> From<&'a NumberedEventWithMeta<Ev, Mt>> for NumberedEvent<&'a Ev> {
     #[inline]
-    fn from(e: &'a NumberedEventWithMeta<E, M>) -> Self {
+    fn from(e: &'a NumberedEventWithMeta<Ev, Mt>) -> Self {
         Self {
             num: e.num,
             data: &e.data,
@@ -99,19 +99,14 @@ impl<'a, E, M> From<&'a NumberedEventWithMeta<E, M>> for NumberedEvent<&'a E> {
 }
 
 /// Source of reading all [`Event`]s belonging to some [`Aggregate`].
-pub trait EventSource<A, E>
+pub trait EventSource<Agg, Ev>
 where
-    A: Aggregate + EventSourced<E>,
-    E: Event,
+    Agg: Aggregate + EventSourced<Ev>,
+    Ev: Event,
 {
     /// Type of the error if reading [`NumberedEvent`]s fails.
     /// If it never fails, consider to specify [`Infallible`].
     type Err;
-    /// Type of the overall result of reading [`NumberedEvent`]s, that is
-    /// convertible into [`Stream`] (see [`IntoTryStream`] trait for details).
-    ///
-    /// [`Stream`]: futures::Stream
-    type Result: IntoTryStream<NumberedEvent<E>, Self::Err>;
 
     /// Reads all stored [`Event`]s of a given [`Aggregate`].
     ///
@@ -125,15 +120,20 @@ where
     /// if necessary.
     ///
     /// [`Stream`]: futures::Stream
-    fn read_events(&self, id: &A::Id, since: Since) -> Self::Result;
+    fn read_events(
+        &self,
+        id: &Agg::Id,
+        since: Since,
+    ) -> LocalBoxTryStream<'_, NumberedEvent<Ev>, Self::Err>;
 }
 
 /// Sink for persisting [`Event`]s belonging to some [`Aggregate`].
 #[async_trait(?Send)]
-pub trait EventSink<A, E, M>
+pub trait EventSink<Agg, Ev, Mt>
 where
-    A: Aggregate + EventSourced<E>,
-    E: Event,
+    Agg: Aggregate + EventSourced<Ev>,
+    Ev: Event,
+    Mt: ?Sized,
 {
     /// Type of the error if persisting [`Event`]s fails.
     /// If it never fails, consider to specify [`Infallible`].
@@ -144,7 +144,7 @@ where
     //       lifetime parameter is required, and providing one complicates
     //       the whole framework code as HRTB conflicts with extracting
     //       associated types.
-    type Ok: IntoIterator<Item = NumberedEvent<E>>;
+    type Ok: IntoIterator<Item = NumberedEvent<Ev>>;
 
     /// Persists given [`Event`]s with associated metadata and returns them
     /// as [`NumberedEvent`]s in the order they were persisted.
@@ -153,9 +153,16 @@ where
     ///
     /// It's responsibility of the implementation to assign a correct
     /// [`EventNumber`] for each [`Event`].
-    async fn append_events(&self, id: &A::Id, events: &[E], meta: M)
-        -> Result<Self::Ok, Self::Err>;
+    async fn append_events(
+        &self,
+        id: &Agg::Id,
+        events: &[Ev],
+        meta: &Mt,
+    ) -> Result<Self::Ok, Self::Err>;
 }
+
+/// Type of an [`Event`].
+pub type EventType = &'static str;
 
 /// Representation of [`VersionedEvent`]'s version.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -380,16 +387,16 @@ impl From<Version> for Since {
 }
 
 /// Conversion to a collection of [`Event`]s.
-pub trait IntoEvents<E> {
+pub trait IntoEvents<Ev> {
     /// Type that represents a collection of [`Event`]s viewable as slice.
-    type Iter: AsRef<[E]>;
+    type Iter: AsRef<[Ev]>;
 
     /// Performs the conversion into [`Event`]s collection.
     fn into_events(self) -> Self::Iter;
 }
 
-impl<E> IntoEvents<E> for () {
-    type Iter = [E; 0];
+impl<Ev> IntoEvents<Ev> for () {
+    type Iter = [Ev; 0];
 
     #[inline]
     fn into_events(self) -> Self::Iter {
@@ -397,11 +404,11 @@ impl<E> IntoEvents<E> for () {
     }
 }
 
-impl<E, A> IntoEvents<E> for (A,)
+impl<Ev, A> IntoEvents<Ev> for (A,)
 where
-    E: From<A>,
+    Ev: From<A>,
 {
-    type Iter = [E; 1];
+    type Iter = [Ev; 1];
 
     #[inline]
     fn into_events(self) -> Self::Iter {
@@ -409,11 +416,11 @@ where
     }
 }
 
-impl<E, A, B> IntoEvents<E> for (A, B)
+impl<Ev, A, B> IntoEvents<Ev> for (A, B)
 where
-    E: From<A> + From<B>,
+    Ev: From<A> + From<B>,
 {
-    type Iter = [E; 2];
+    type Iter = [Ev; 2];
 
     #[inline]
     fn into_events(self) -> Self::Iter {
@@ -421,11 +428,11 @@ where
     }
 }
 
-impl<E, A, B, C> IntoEvents<E> for (A, B, C)
+impl<Ev, A, B, C> IntoEvents<Ev> for (A, B, C)
 where
-    E: From<A> + From<B> + From<C>,
+    Ev: From<A> + From<B> + From<C>,
 {
-    type Iter = [E; 3];
+    type Iter = [Ev; 3];
 
     #[inline]
     fn into_events(self) -> Self::Iter {
@@ -433,11 +440,11 @@ where
     }
 }
 
-impl<E, A, B, C, D> IntoEvents<E> for (A, B, C, D)
+impl<Ev, A, B, C, D> IntoEvents<Ev> for (A, B, C, D)
 where
-    E: From<A> + From<B> + From<C> + From<D>,
+    Ev: From<A> + From<B> + From<C> + From<D>,
 {
-    type Iter = [E; 4];
+    type Iter = [Ev; 4];
 
     #[inline]
     fn into_events(self) -> Self::Iter {
@@ -445,7 +452,7 @@ where
     }
 }
 
-impl<E> IntoEvents<E> for Vec<E> {
+impl<Ev> IntoEvents<Ev> for Vec<Ev> {
     type Iter = Self;
 
     #[inline]
@@ -454,7 +461,7 @@ impl<E> IntoEvents<E> for Vec<E> {
     }
 }
 
-impl<E> IntoEvents<E> for [E; 0] {
+impl<Ev> IntoEvents<Ev> for [Ev; 0] {
     type Iter = Self;
 
     #[inline]
@@ -463,7 +470,7 @@ impl<E> IntoEvents<E> for [E; 0] {
     }
 }
 
-impl<E> IntoEvents<E> for [E; 1] {
+impl<Ev> IntoEvents<Ev> for [Ev; 1] {
     type Iter = Self;
 
     #[inline]
@@ -472,7 +479,7 @@ impl<E> IntoEvents<E> for [E; 1] {
     }
 }
 
-impl<E> IntoEvents<E> for [E; 2] {
+impl<Ev> IntoEvents<Ev> for [Ev; 2] {
     type Iter = Self;
 
     #[inline]
@@ -481,7 +488,7 @@ impl<E> IntoEvents<E> for [E; 2] {
     }
 }
 
-impl<E> IntoEvents<E> for [E; 3] {
+impl<Ev> IntoEvents<Ev> for [Ev; 3] {
     type Iter = Self;
 
     #[inline]
@@ -490,7 +497,7 @@ impl<E> IntoEvents<E> for [E; 3] {
     }
 }
 
-impl<E> IntoEvents<E> for [E; 4] {
+impl<Ev> IntoEvents<Ev> for [Ev; 4] {
     type Iter = Self;
 
     #[inline]
@@ -500,7 +507,7 @@ impl<E> IntoEvents<E> for [E; 4] {
 }
 
 #[cfg(feature = "arrayvec")]
-impl<E, A: Array<Item = E>> IntoEvents<E> for ArrayVec<A> {
+impl<Ev, A: Array<Item = Ev>> IntoEvents<Ev> for ArrayVec<A> {
     type Iter = Self;
 
     #[inline]
@@ -509,9 +516,9 @@ impl<E, A: Array<Item = E>> IntoEvents<E> for ArrayVec<A> {
     }
 }
 
-impl<E, T> IntoEvents<E> for AsEventsRef<T>
+impl<Ev, T> IntoEvents<Ev> for AsEventsRef<T>
 where
-    T: AsRef<[E]>,
+    T: AsRef<[Ev]>,
 {
     type Iter = T;
 

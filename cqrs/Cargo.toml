@@ -18,9 +18,11 @@ unsafe = ["cqrs-core/unsafe"]
 [dependencies]
 async-trait = "0.1.8"
 cqrs-core = { version = "0.3", path = "../cqrs-core" }
-[dependencies.futures-preview]
-    version = "=0.3.0-alpha.18"
-    features = ["async-await", "nightly"]
+derive_more = { git = "https://github.com/JelteF/derive_more", branch = "master" }
+futures-preview = "=0.3.0-alpha.19"
+smallvec = "0.6"
+sa = { version = "1.0", package = "static_assertions" }
+
 #hashbrown = "0.1"
 #parking_lot = "0.7"
 
