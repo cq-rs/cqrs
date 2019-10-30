@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "cqrs",
+    "cqrs-codegen",
     "cqrs-core",
     "cqrs-postgres",
     "cqrs-proptest",

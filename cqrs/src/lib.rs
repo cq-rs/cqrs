@@ -52,6 +52,8 @@ pub mod lifecycle;
 use async_trait::async_trait;
 
 #[doc(inline)]
+pub use cqrs_codegen::*;
+#[doc(inline)]
 pub use cqrs_core::*;
 
 #[doc(inline)]
