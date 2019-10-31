@@ -53,6 +53,7 @@ fn derive_struct(input: syn::DeriveInput) -> Result<proc_macro2::TokenStream> {
 
         #[automatically_derived]
         impl#impl_generics ::cqrs::Event for #ident#ty_generics #where_clause {
+            #[inline(always)]
             fn event_type(&self) -> ::cqrs::EventType {
                 Self::EVENT_TYPE
             }
@@ -174,6 +175,7 @@ mod test {
 
             #[automatically_derived]
             impl ::cqrs::Event for Event {
+                #[inline(always)]
                 fn event_type(&self) -> ::cqrs::EventType {
                     Self::EVENT_TYPE
                 }
