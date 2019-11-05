@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use cqrs::Event as _;
 use cqrs_codegen::Event;
 
@@ -47,14 +49,14 @@ fn derives_for_enum() {
 
     assert_eq!(
         TestEvent::TestEventTuple(Default::default()).event_type(),
-        "test.event.1"
+        "test.event.1",
     );
     assert_eq!(
         TestEvent::TestEventStruct {
             event: Default::default()
         }
         .event_type(),
-        "test.event.2"
+        "test.event.2",
     );
 }
 
@@ -94,24 +96,24 @@ fn derives_for_generic_enum() {
 
     assert_eq!(
         TestEvent::TestEventTuple(Default::default()).event_type(),
-        "test.event.1"
+        "test.event.1",
     );
     assert_eq!(
         TestEvent::TestEventStruct {
             event: Default::default()
         }
         .event_type(),
-        "test.event.2"
+        "test.event.2",
     );
     assert_eq!(
         TestEvent::TestEventTupleGeneric(Default::default()).event_type(),
-        "test.event.generic.1"
+        "test.event.generic.1",
     );
     assert_eq!(
         TestEvent::TestEventStructGeneric {
             event: Default::default()
         }
         .event_type(),
-        "test.event.generic.2"
+        "test.event.generic.2",
     );
 }

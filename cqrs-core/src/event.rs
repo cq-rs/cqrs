@@ -176,7 +176,6 @@ impl EventVersion {
         Some(Self(NonZeroU8::new(n.into())?))
     }
 
-    #[cfg(feature = "unsafe")]
     /// Creates new [`EventVersion`] from a raw [`u8`] value without
     /// checking it.
     ///
@@ -186,6 +185,7 @@ impl EventVersion {
     #[allow(unsafe_code)]
     #[inline]
     pub const unsafe fn new_unchecked(n: u8) -> Self {
+        // TODO: use safety guard for debug assertion
         Self(NonZeroU8::new_unchecked(n))
     }
 }
