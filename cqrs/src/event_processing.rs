@@ -99,9 +99,7 @@ where
 
 pub trait RegisteredEvent: Event + 'static {
     #[inline]
-    fn type_id(&self) -> TypeId {
-        TypeId::of::<Self>()
-    }
+    fn type_id(&self) -> TypeId;
 }
 
 #[derive(Clone, Debug)]

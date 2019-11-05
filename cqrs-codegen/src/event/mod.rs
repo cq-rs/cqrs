@@ -2,6 +2,7 @@
 //! (e.g. [`cqrs::VersionedEvent`], etc).
 
 mod event;
+mod registered_event;
 mod versioned_event;
 
 use proc_macro2::TokenStream;
@@ -12,6 +13,7 @@ use synstructure::Structure;
 use crate::util::{self, TryInto as _};
 
 pub(crate) use event::derive;
+pub(crate) use registered_event::derive as registered_derive;
 pub(crate) use versioned_event::derive as versioned_derive;
 
 /// Name of the attribute, used for this family of derives.
