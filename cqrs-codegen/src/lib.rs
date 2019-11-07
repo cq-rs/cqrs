@@ -1,10 +1,31 @@
 extern crate proc_macro;
 
-mod event;
-mod util;
-
 use proc_macro::TokenStream;
-use syn::parse::Result;
+
+#[cfg(all(not(feature = "watt"), feature = "no-watt"))]
+/// Imports proc macro from implementation crate as is.
+macro_rules! import {
+    ($input:expr, $fn:ident) => {
+        cqrs_codegen_impl::expand(syn::parse($input), cqrs_codegen_impl::$fn)
+    };
+}
+
+#[cfg(all(feature = "watt", not(feature = "no-watt")))]
+/// Imports proc macro from implementation crate via WASM ABI.
+macro_rules! import {
+    ($input:expr, $fn:ident) => {
+        wasm::MACRO.proc_macro(stringify!($fn), $input)
+    };
+}
+
+#[cfg(all(feature = "watt", not(feature = "no-watt")))]
+mod wasm {
+    /// Generated WASM of implementation crate.
+    static WASM: &[u8] = include_bytes!("codegen.wasm");
+
+    /// Callable interface of the generated [`WASM`].
+    pub static MACRO: watt::WasmMacro = watt::WasmMacro::new(WASM);
+}
 
 /// Derives [`cqrs::Event`] implementation for structs and enums.
 ///
@@ -48,8 +69,8 @@ use syn::parse::Result;
 /// }
 /// ```
 #[proc_macro_derive(Event, attributes(event))]
-pub fn derive_event(input: TokenStream) -> TokenStream {
-    expand(input, event::derive)
+pub fn event_derive(input: TokenStream) -> TokenStream {
+    import!(input, event_derive)
 }
 
 /// Derives [`cqrs::RegisteredEvent`] implementation for structs and enums.
@@ -92,8 +113,8 @@ pub fn derive_event(input: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_derive(RegisteredEvent)]
-pub fn derive_registered_event(input: TokenStream) -> TokenStream {
-    expand(input, event::registered_derive)
+pub fn registered_event_derive(input: TokenStream) -> TokenStream {
+    import!(input, registered_event_derive)
 }
 
 /// Derives [`cqrs::VersionedEvent`] implementation for structs and enums.
@@ -138,16 +159,6 @@ pub fn derive_registered_event(input: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_derive(VersionedEvent, attributes(event))]
-pub fn derive_versioned_event(input: TokenStream) -> TokenStream {
-    expand(input, event::versioned_derive)
-}
-
-type MacroImpl = fn(syn::DeriveInput) -> Result<proc_macro2::TokenStream>;
-
-/// Expands given input [`TokenStream`] with a given macro implementation.
-fn expand(input: TokenStream, macro_impl: MacroImpl) -> TokenStream {
-    match syn::parse(input).and_then(|i| macro_impl(i)) {
-        Ok(res) => res.into(),
-        Err(err) => err.to_compile_error().into(),
-    }
+pub fn versioned_event_derive(input: TokenStream) -> TokenStream {
+    import!(input, versioned_event_derive)
 }

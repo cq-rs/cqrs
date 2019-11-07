@@ -1,0 +1,26 @@
+[package]
+name = "cqrs-codegen-impl"
+version = "0.1.0-dev"
+edition = "2018"
+# authors =
+description = "Code generation implementation for CQRS/ES"
+# license = "Apache-2.0"
+readme = "../README.md"
+# documentation = "https://docs.rs/cqrs-core"
+# repository = "https://github.com/cq-rs/cqrs"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = []
+watt = []
+
+[dependencies]
+proc-macro2 = "1.0.6"
+quote = "1.0.2"
+syn = "1.0.6"
+synstructure = { git = "https://github.com/ffuugoo/synstructure", default-features = false }
+
+[patch.crates-io]
+proc-macro2 = { git = "https://github.com/dtolnay/watt" }

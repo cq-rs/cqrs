@@ -2,6 +2,7 @@
 members = [
     "cqrs",
     "cqrs-codegen",
+    "cqrs-codegen/impl",
     "cqrs-core",
     "cqrs-postgres",
     "cqrs-proptest",

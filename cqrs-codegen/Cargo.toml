@@ -3,7 +3,7 @@ name = "cqrs-codegen"
 version = "0.1.0-dev"
 edition = "2018"
 # authors =
-description = "Code generation for CQRS/ES"
+description = "Code generation interface for CQRS/ES"
 # license = "Apache-2.0"
 readme = "../README.md"
 # documentation = "https://docs.rs/cqrs-core"
@@ -12,11 +12,14 @@ readme = "../README.md"
 [lib]
 proc-macro = true
 
+[features]
+default = ["watt"]
+no-watt = ["cqrs-codegen-impl", "syn"]
+
 [dependencies]
-proc-macro2 = "1.0.6"
-quote = "1.0.2"
-syn = "1.0.6"
-synstructure = "0.12.1"
+cqrs-codegen-impl = { version = "0.1.0-dev", path = "./impl", optional = true }
+syn = { version = "1.0.7", optional = true }
+watt = { version = "0.3.0", optional = true }
 
 [dev-dependencies]
 cqrs = { version = "0.3", path = "../cqrs" }
