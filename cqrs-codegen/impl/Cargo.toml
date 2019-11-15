@@ -20,7 +20,7 @@ watt = []
 proc-macro2 = "1.0.6"
 quote = "1.0.2"
 syn = "1.0.6"
-synstructure = { git = "https://github.com/ffuugoo/synstructure", default-features = false }
+synstructure = "0.12.3"
 
 [patch.crates-io]
 proc-macro2 = { git = "https://github.com/dtolnay/watt" }
