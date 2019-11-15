@@ -27,6 +27,59 @@ mod wasm {
     pub static MACRO: watt::WasmMacro = watt::WasmMacro::new(WASM);
 }
 
+/// Derives [`cqrs::AggregateEvent`] implementation for enums.
+///
+/// The enum is treated as a sum-type representing a set of possible events.
+///
+/// Specifying `#[event(aggregate = "...")]` attribute is __mandatory__
+/// (and only single such attribute allowed per enum). The attribute is
+/// treated as a type of the aggregate with which event is associated.
+///
+/// In practice this means, that [`cqrs::AggregateEvent`] can only be derived
+/// for an enum when all variants of such enum have exactly one field
+/// (variant can be either a tuple-variant or a struct-variant).
+///
+/// Each field is expected to have a defined associated constant `EVENT_TYPE`.
+/// [`cqrs::Event`] derive macro generates such constant automatically.
+///
+/// Note, that generic enums deriving [`cqrs::AggregateEvent`] cannot have
+/// variants with field of type-parameter type (e.g., `T`) as it's impossible
+/// for type-parameter to have associated constants. However, fields of
+/// generic types that dependent on type-parameters (e.g., `Event<T>`) are fine.
+///
+/// # Examples
+/// ```
+/// # use cqrs_codegen::{AggregateEvent, Event};
+/// #
+/// # #[derive(Default)]
+/// # struct User(i32);
+/// #
+/// # impl cqrs::Aggregate for User {
+/// #   type Id = i32;
+/// #   fn aggregate_type(&self) -> &'static str { "user" }
+/// #   fn id(&self) -> &Self::Id { &self.0 }
+/// # }
+/// #
+/// #[derive(Event)]
+/// #[event(type = "user.created")]
+/// struct UserCreated;
+///
+/// #[derive(Event)]
+/// #[event(type = "user.removed")]
+/// struct UserRemoved;
+///
+/// #[derive(AggregateEvent, Event)]
+/// #[event(aggregate = "User")]
+/// enum UserEvents {
+///     UserCreated(UserCreated),
+///     UserRemoved(UserRemoved),
+/// }
+/// ```
+#[proc_macro_derive(AggregateEvent, attributes(event))]
+pub fn aggregate_event_derive(input: TokenStream) -> TokenStream {
+    import!(input, aggregate_event_derive)
+}
+
 /// Derives [`cqrs::Event`] implementation for structs and enums.
 ///
 /// # Structs

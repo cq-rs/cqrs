@@ -27,12 +27,13 @@ pub fn expand<TS: From<TokenStream>>(
     input: syn::Result<syn::DeriveInput>,
     macro_impl: fn(syn::DeriveInput) -> syn::Result<TokenStream>,
 ) -> TS {
-    match input.and_then(|input| macro_impl(input)) {
+    match input.and_then(macro_impl) {
         Ok(res) => res.into(),
         Err(err) => err.to_compile_error().into(),
     }
 }
 
+export!(aggregate_event_derive);
 export!(event_derive);
 export!(registered_event_derive);
 export!(versioned_event_derive);

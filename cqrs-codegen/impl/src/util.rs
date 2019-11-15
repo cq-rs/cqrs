@@ -30,6 +30,7 @@ where
 
 /// Checks that no attribute with a given `attr_name` exists.
 /// Returns error if found.
+#[allow(dead_code)]
 pub(crate) fn assert_attr_does_not_exist(attrs: &[syn::Attribute], attr_name: &str) -> Result<()> {
     let meta = find_nested_meta_impl(attrs, attr_name)?;
     if let Some((span, _)) = meta {
@@ -41,6 +42,32 @@ pub(crate) fn assert_attr_does_not_exist(attrs: &[syn::Attribute], attr_name: &s
             ),
         ));
     }
+    Ok(())
+}
+
+/// Checks that only given inner arguments `attr_args` are used
+/// inside `attr_name` attribute. Passes if attribute doesn't exist at all.
+pub(crate) fn assert_valid_attr_args_used(
+    attrs: &[syn::Attribute],
+    attr_name: &str,
+    attr_args: &[&str],
+) -> Result<()> {
+    let meta = match find_nested_meta(attrs, attr_name)? {
+        Some(m) => m,
+        None => return Ok(()),
+    };
+
+    for m in &meta {
+        let meta = match m {
+            syn::NestedMeta::Meta(m) => m,
+            _ => return Err(Error::new(meta.span(), "Wrong attribute format")),
+        };
+
+        if !attr_args.iter().any(|attr| meta.path().is_ident(attr)) {
+            return Err(Error::new(meta.span(), "Invalid attribute"));
+        }
+    }
+
     Ok(())
 }
 

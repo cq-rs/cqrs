@@ -30,8 +30,6 @@ fn derive_struct(input: syn::DeriveInput) -> Result<proc_macro2::TokenStream> {
 /// Implements [`crate::derive_registered_event`] macro expansion for enums
 /// via [`synstructure`].
 fn derive_enum(input: syn::DeriveInput) -> Result<proc_macro2::TokenStream> {
-    util::assert_attr_does_not_exist(&input.attrs, super::ATTR_NAME)?;
-
     let mut structure = Structure::try_new(&input)?;
 
     super::render_enum_proxy_method_calls(
