@@ -10,12 +10,12 @@ use crate::util;
 /// Name of the derived trait.
 const TRAIT_NAME: &str = "Event";
 
-/// Implements [`crate::derive_event`] macro expansion.
+/// Implements [`crate::event_derive`] macro expansion.
 pub fn derive(input: syn::DeriveInput) -> Result<TokenStream> {
     util::derive(input, TRAIT_NAME, derive_struct, derive_enum)
 }
 
-/// Implements [`crate::derive_event`] macro expansion for structs.
+/// Implements [`crate::event_derive`] macro expansion for structs.
 fn derive_struct(input: syn::DeriveInput) -> Result<TokenStream> {
     let meta = util::get_nested_meta(&input.attrs, super::ATTR_NAME)?;
 
@@ -33,13 +33,13 @@ fn derive_struct(input: syn::DeriveInput) -> Result<TokenStream> {
         }
     };
 
-    super::render_struct(&input, quote!(::cqrs::Event), body, Some(additional))
+    util::render_struct(&input, quote!(::cqrs::Event), body, Some(additional))
 }
 
-/// Implements [`crate::derive_event`] macro expansion for enums
+/// Implements [`crate::event_derive`] macro expansion for enums
 /// via [`synstructure`].
 fn derive_enum(input: syn::DeriveInput) -> Result<TokenStream> {
-    util::assert_valid_attr_args_used(&input.attrs, super::ATTR_NAME, super::VALID_ENUM_ATTR_ARGS)?;
+    util::assert_valid_attr_args_used(&input.attrs, super::ATTR_NAME, super::VALID_ENUM_ARGS)?;
 
     let mut structure = Structure::try_new(&input)?;
 
@@ -54,11 +54,12 @@ fn derive_enum(input: syn::DeriveInput) -> Result<TokenStream> {
 
 /// Parses type of [`cqrs::Event`] from `#[event(...)]` attribute.
 fn parse_event_type_from_nested_meta(meta: &util::Meta) -> Result<String> {
-    let lit: &syn::LitStr = super::parse_attr_from_nested_meta(
+    let lit: &syn::LitStr = util::parse_lit(
         meta,
         "type",
-        "type = \"...\"",
-        super::VALID_STRUCT_ATTR_ARGS,
+        super::VALID_STRUCT_ARGS,
+        super::ATTR_NAME,
+        "= \"...\"",
     )?;
     Ok(lit.value())
 }

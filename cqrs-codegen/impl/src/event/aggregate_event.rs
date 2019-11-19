@@ -12,12 +12,12 @@ use crate::util;
 /// Name of the derived trait.
 const TRAIT_NAME: &str = "AggregateEvent";
 
-/// Implements [`crate::derive_aggregate_event`] macro expansion.
+/// Implements [`crate::aggregate_event_derive`] macro expansion.
 pub fn derive(input: syn::DeriveInput) -> Result<TokenStream> {
     util::derive(input, TRAIT_NAME, derive_struct, derive_enum)
 }
 
-/// Reports error if [`crate::derive_aggregate_event`] macro applied to structs.
+/// Reports error if [`crate::aggregate_event_derive`] macro applied to structs.
 fn derive_struct(input: syn::DeriveInput) -> Result<TokenStream> {
     match input.data {
         syn::Data::Struct(data) => Err(Error::new(
@@ -28,7 +28,7 @@ fn derive_struct(input: syn::DeriveInput) -> Result<TokenStream> {
     }
 }
 
-/// Implements [`crate::derive_aggregate_event`] macro expansion for enums
+/// Implements [`crate::aggregate_event_derive`] macro expansion for enums
 /// via [`synstructure`].
 fn derive_enum(input: syn::DeriveInput) -> Result<TokenStream> {
     let meta = util::get_nested_meta(&input.attrs, super::ATTR_NAME)?;
@@ -119,11 +119,12 @@ fn derive_enum(input: syn::DeriveInput) -> Result<TokenStream> {
 
 /// Parses aggregate of [`cqrs::AggregateEvent`] from `#[event(...)]` attribute.
 fn parse_event_aggregate_from_nested_meta(meta: &util::Meta) -> Result<String> {
-    let lit: &syn::LitStr = super::parse_attr_from_nested_meta(
+    let lit: &syn::LitStr = util::parse_lit(
         meta,
         "aggregate",
-        "aggregate = \"...\"",
-        super::VALID_ENUM_ATTR_ARGS,
+        super::VALID_ENUM_ARGS,
+        super::ATTR_NAME,
+        "= \"...\"",
     )?;
 
     Ok(lit.value())

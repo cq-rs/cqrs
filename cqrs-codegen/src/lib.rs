@@ -27,6 +27,44 @@ mod wasm {
     pub static MACRO: watt::WasmMacro = watt::WasmMacro::new(WASM);
 }
 
+/// Derives [`cqrs::Aggregate`] implementation for structs.
+///
+/// Specifying `#[aggregate(type = "...")]` attribute is __mandatory__
+/// (and only single such attribute allowed per struct).
+///
+/// Struct deriving [`cqrs::Aggregate`] required to contain an id field.
+/// For named-structs a field with a name `id` is inferred as an id-field.
+/// Any field can be explicitly specified as an id field
+/// with `#[aggregate(id)]` attribute.
+///
+/// # Examples
+/// ```
+/// # use cqrs_codegen::Aggregate;
+/// #
+/// #[derive(Aggregate, Default)]
+/// #[aggregate(type = "inferred.id.aggregate")]
+/// struct InferredIdAggregate {
+///     id: i32,
+///     value: String,
+/// }
+///
+/// #[derive(Aggregate, Default)]
+/// #[aggregate(type = "explicit.id.aggregate")]
+/// struct ExplicitIdAggregate {
+///     #[aggregate(id)]
+///     explicit_id: i32,
+///     value: String,
+/// }
+///
+/// #[derive(Aggregate, Default)]
+/// #[aggregate(type = "tuple.struct.aggregate")]
+/// struct TupleStructAggregate(#[aggregate(id)] i32, String);
+/// ```
+#[proc_macro_derive(Aggregate, attributes(aggregate))]
+pub fn aggregate_derive(input: TokenStream) -> TokenStream {
+    import!(input, aggregate_derive)
+}
+
 /// Derives [`cqrs::AggregateEvent`] implementation for enums.
 ///
 /// The enum is treated as a sum-type representing a set of possible events.
@@ -49,16 +87,13 @@ mod wasm {
 ///
 /// # Examples
 /// ```
-/// # use cqrs_codegen::{AggregateEvent, Event};
+/// # use cqrs_codegen::{Aggregate, AggregateEvent, Event};
 /// #
-/// # #[derive(Default)]
-/// # struct User(i32);
-/// #
-/// # impl cqrs::Aggregate for User {
-/// #   type Id = i32;
-/// #   fn aggregate_type(&self) -> &'static str { "user" }
-/// #   fn id(&self) -> &Self::Id { &self.0 }
-/// # }
+/// # #[derive(Aggregate, Default)]
+/// # #[aggregate(type = "user")]
+/// # struct User {
+/// #     id: i32,
+/// # };
 /// #
 /// #[derive(Event)]
 /// #[event(type = "user.created")]

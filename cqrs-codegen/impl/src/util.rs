@@ -1,7 +1,8 @@
 //! Common crate utils used for codegen.
 
 use proc_macro2::TokenStream;
-use syn::{punctuated::Punctuated, spanned::Spanned as _, Error, Result};
+use quote::quote;
+use syn::{punctuated::Punctuated, spanned::Spanned, Error, Result};
 
 /// Shorten alias for attribute's meta.
 pub(crate) type Meta = Punctuated<syn::NestedMeta, syn::Token![,]>;
@@ -28,6 +29,37 @@ where
     }
 }
 
+/// Renders implementation of a `trait_path` trait for a struct with a given
+/// `body`, and optionally renders some arbitrary `impl` block code with a given
+/// `additional_code`.
+pub(crate) fn render_struct(
+    input: &syn::DeriveInput,
+    trait_path: TokenStream,
+    body: TokenStream,
+    additional_code: Option<TokenStream>,
+) -> Result<TokenStream> {
+    let type_name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    let additional = additional_code.map(|code| {
+        quote! {
+            #[automatically_derived]
+            impl#impl_generics #type_name#ty_generics #where_clause {
+                #code
+            }
+        }
+    });
+
+    Ok(quote! {
+        #additional
+
+        #[automatically_derived]
+        impl#impl_generics #trait_path for #type_name#ty_generics #where_clause {
+            #body
+        }
+    })
+}
+
 /// Checks that no attribute with a given `attr_name` exists.
 /// Returns error if found.
 #[allow(dead_code)]
@@ -45,12 +77,12 @@ pub(crate) fn assert_attr_does_not_exist(attrs: &[syn::Attribute], attr_name: &s
     Ok(())
 }
 
-/// Checks that only given inner arguments `attr_args` are used
+/// Checks that only given inner arguments `valid_args` are used
 /// inside `attr_name` attribute. Passes if attribute doesn't exist at all.
 pub(crate) fn assert_valid_attr_args_used(
     attrs: &[syn::Attribute],
     attr_name: &str,
-    attr_args: &[&str],
+    valid_args: &[&str],
 ) -> Result<()> {
     let meta = match find_nested_meta(attrs, attr_name)? {
         Some(m) => m,
@@ -63,7 +95,7 @@ pub(crate) fn assert_valid_attr_args_used(
             _ => return Err(Error::new(meta.span(), "Wrong attribute format")),
         };
 
-        if !attr_args.iter().any(|attr| meta.path().is_ident(attr)) {
+        if !valid_args.iter().any(|arg| meta.path().is_ident(arg)) {
             return Err(Error::new(meta.span(), "Invalid attribute"));
         }
     }
@@ -138,6 +170,96 @@ fn find_nested_meta_impl(
     }
 
     Ok(nested_meta)
+}
+
+/// Parses specified inner argument `arg` from the given `#[<attr>(...)]` outer
+/// attribute, as a flag.
+/// Returns `true` if attribute is present, and `false` otherwise.
+pub(crate) fn parse_flag(meta: &Meta, arg: &str, valid_args: &[&str], attr: &str) -> Result<bool> {
+    let meta = find_arg(meta, arg, valid_args, attr, "")?;
+
+    let flag = match meta {
+        None => false,
+        Some(syn::Meta::Path(_)) => true,
+        _ => return Err(wrong_format(meta, attr, arg, "")),
+    };
+    Ok(flag)
+}
+
+/// Parses specified inner argument `arg` from the given `#[<attr>(...)]` outer
+/// attribute, converting it to a type `T` (using [`util::TryInto`])
+/// if possible.
+pub(crate) fn parse_lit<'meta, T>(
+    meta: &'meta Meta,
+    arg: &str,
+    valid_args: &[&str],
+    attr: &str,
+    fmt: &str,
+) -> Result<&'meta T>
+where
+    &'meta syn::Lit: TryInto<&'meta T>,
+{
+    let meta = find_arg(meta, arg, valid_args, attr, fmt)?;
+
+    let meta = meta.ok_or_else(|| {
+        Error::new(
+            proc_macro2::Span::call_site(),
+            format!("Expected to have #[{}({}{})] attribute", attr, arg, fmt,),
+        )
+    })?;
+
+    let lit = match meta {
+        syn::Meta::NameValue(meta) => &meta.lit,
+        _ => return Err(wrong_format(meta, attr, arg, fmt)),
+    };
+    let span = lit.span();
+    lit.try_into()
+        .ok_or_else(move || wrong_format(span, attr, arg, fmt))
+}
+
+/// Finds specified inner argument `arg` from `#[<attr>(...)]` outer attribute.
+fn find_arg<'meta>(
+    meta: &'meta Meta,
+    arg: &str,
+    valid_args: &[&str],
+    attr: &str,
+    fmt: &str,
+) -> Result<Option<&'meta syn::Meta>> {
+    let mut result = None;
+
+    for meta in meta {
+        let meta = match meta {
+            syn::NestedMeta::Meta(meta) => meta,
+            _ => return Err(wrong_format(meta, attr, arg, fmt)),
+        };
+
+        if !valid_args.iter().any(|arg| meta.path().is_ident(arg)) {
+            return Err(Error::new(meta.span(), "Invalid attribute"));
+        }
+
+        if meta.path().is_ident(arg) && result.replace(meta).is_some() {
+            return Err(Error::new(
+                meta.span(),
+                format!("Only one #[{}({}{})] attribute is allowed", attr, arg, fmt,),
+            ));
+        }
+    }
+
+    Ok(result)
+}
+
+/// Constructs error message about wrong attribute format.
+fn wrong_format<S>(span: S, attr: &str, arg: &str, fmt: &str) -> Error
+where
+    S: Spanned,
+{
+    Error::new(
+        span.span(),
+        format!(
+            "Wrong attribute format; expected #[{}({}{})]",
+            attr, arg, fmt,
+        ),
+    )
 }
 
 /// Custom simplified [`std::convert::TryInto`] trait, to be implemented on

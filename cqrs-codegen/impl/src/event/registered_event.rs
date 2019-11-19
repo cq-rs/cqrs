@@ -10,12 +10,12 @@ use crate::util;
 /// Name of the derived trait.
 const TRAIT_NAME: &str = "RegisteredEvent";
 
-/// Implements [`crate::derive_registered_event`] macro expansion.
+/// Implements [`crate::registered_event_derive`] macro expansion.
 pub fn derive(input: syn::DeriveInput) -> Result<TokenStream> {
     util::derive(input, TRAIT_NAME, derive_struct, derive_enum)
 }
 
-/// Implements [`crate::derive_registered_event`] macro expansion for structs.
+/// Implements [`crate::registered_event_derive`] macro expansion for structs.
 fn derive_struct(input: syn::DeriveInput) -> Result<proc_macro2::TokenStream> {
     let body = quote! {
         #[inline(always)]
@@ -24,10 +24,10 @@ fn derive_struct(input: syn::DeriveInput) -> Result<proc_macro2::TokenStream> {
         }
     };
 
-    super::render_struct(&input, quote!(::cqrs::RegisteredEvent), body, None)
+    util::render_struct(&input, quote!(::cqrs::RegisteredEvent), body, None)
 }
 
-/// Implements [`crate::derive_registered_event`] macro expansion for enums
+/// Implements [`crate::registered_event_derive`] macro expansion for enums
 /// via [`synstructure`].
 fn derive_enum(input: syn::DeriveInput) -> Result<proc_macro2::TokenStream> {
     let mut structure = Structure::try_new(&input)?;
