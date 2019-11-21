@@ -73,28 +73,7 @@ fn parse_aggregate_type(meta: &util::Meta) -> Result<String> {
 /// Infers or finds via `#[aggregate(id)]` attribute an `id` field
 /// of this aggregate.
 fn get_id_field(fields: &syn::Fields) -> Result<(&syn::Type, TokenStream)> {
-    let mut id = None;
-
-    for (index, field) in fields.iter().enumerate() {
-        let meta = util::find_nested_meta(&field.attrs, ATTR_NAME)?;
-
-        let meta = match meta {
-            Some(meta) => meta,
-            None => continue,
-        };
-
-        if util::parse_flag(&meta, "id", &["id"], ATTR_NAME)? {
-            let span = field.span();
-            if id.replace((index, field)).is_some() {
-                return Err(Error::new(
-                    span,
-                    "Multiple fields marked with '#[aggregate(id)]' attribute; \
-                     only single '#[aggregate(id)]' attribute allowed \
-                     per struct",
-                ));
-            }
-        }
-    }
+    let mut id = util::find_field_with_flag(fields, ATTR_NAME, "id", &["id"])?;
 
     let is_named = match fields {
         syn::Fields::Named(_) => true,
@@ -110,15 +89,8 @@ fn get_id_field(fields: &syn::Fields) -> Result<(&syn::Type, TokenStream)> {
 
     id.map(|(index, field)| {
         let ty = &field.ty;
-        let field = if is_named {
-            // Named fields always have ident, so unwrapping is OK here.
-            let ident = &field.ident.as_ref().unwrap();
-            quote!(#ident)
-        } else {
-            let index = syn::Index::from(index);
-            quote!(#index)
-        };
-        (ty, field)
+        let ident = util::render_field_ident(index, field);
+        (ty, ident)
     })
     .ok_or_else(|| Error::new(fields.span(), "No 'id' field found for an aggregate"))
 }

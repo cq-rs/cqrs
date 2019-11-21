@@ -1,4 +1,5 @@
 mod aggregate;
+mod command;
 mod event;
 mod util;
 
@@ -41,6 +42,7 @@ pub fn expand<TS: From<TokenStream>>(
 }
 
 export!(aggregate::derive as aggregate_derive);
+export!(command::derive as command_derive);
 export!(event::aggregate_event_derive);
 export!(event::event_derive);
 export!(event::registered_event_derive);

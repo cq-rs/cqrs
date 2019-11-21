@@ -115,6 +115,40 @@ pub fn aggregate_event_derive(input: TokenStream) -> TokenStream {
     import!(input, aggregate_event_derive)
 }
 
+/// Derives [`cqrs::Command`] implementation for structs.
+///
+/// Specifying `#[command(aggregate = "...")]` attribute is __mandatory__
+/// (and only single such attribute allowed per struct).
+///
+/// Struct deriving [`cqrs::Command`] can have an optional aggregate-id-field
+/// and/or an optional expected-aggregate-version-field. Such fields
+/// can be explicitly specified with `#[command(id)]` and `#[command(version)]`
+/// attributes respectively.
+///
+/// # Examples
+/// ```
+/// # use cqrs_codegen::{Aggregate, Command};
+/// #
+/// # #[derive(Aggregate, Default)]
+/// # #[aggregate(type = "aggregate")]
+/// # struct MyAggregate {
+/// #     id: i32,
+/// # }
+/// #
+/// #[derive(Command)]
+/// #[command(aggregate = "MyAggregate")]
+/// struct MyCommand {
+///     #[command(id)]
+///     id: i32,
+///     #[command(version)]
+///     version: cqrs::Version,
+/// }
+/// ```
+#[proc_macro_derive(Command, attributes(command))]
+pub fn command_derive(input: TokenStream) -> TokenStream {
+    import!(input, command_derive)
+}
+
 /// Derives [`cqrs::Event`] implementation for structs and enums.
 ///
 /// # Structs

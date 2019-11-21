@@ -1,21 +1,12 @@
 #![allow(dead_code)]
 
 use cqrs::AggregateEvent as _;
-use cqrs_codegen::{AggregateEvent, Event};
+use cqrs_codegen::{Aggregate, AggregateEvent, Event};
 
-#[derive(Default)]
-struct Aggregate;
-
-impl cqrs::Aggregate for Aggregate {
-    type Id = i32;
-
-    fn aggregate_type(&self) -> &'static str {
-        "aggregate"
-    }
-
-    fn id(&self) -> &Self::Id {
-        &0
-    }
+#[derive(Aggregate, Default)]
+#[aggregate(type = "aggregate")]
+struct Aggregate {
+    id: i32,
 }
 
 #[test]
