@@ -1,8 +1,11 @@
 //! Common crate utils used for codegen.
 
+use std::collections::HashSet;
+
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{punctuated::Punctuated, spanned::Spanned, Error, Result};
+use synstructure::Structure;
 
 /// Shorten alias for attribute's meta.
 pub(crate) type Meta = Punctuated<syn::NestedMeta, syn::Token![,]>;
@@ -102,6 +105,30 @@ pub(crate) fn find_field_with_flag<'field>(
     }
 
     Ok(result)
+}
+
+/// Checks that all variants of `structure` contain exactly one field.
+/// Returns error otherwise.
+///
+/// `trait_name` is only used to generate error message.
+pub(crate) fn assert_all_enum_variants_have_single_field(
+    structure: &Structure,
+    trait_name: &str,
+) -> Result<()> {
+    for variant in structure.variants() {
+        let ast = variant.ast();
+        if ast.fields.len() != 1 {
+            return Err(Error::new(
+                ast.ident.span(),
+                format!(
+                    "{} can only be derived for enums with variants \
+                     that have exactly one field",
+                    trait_name
+                ),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Checks that no attribute with a given `attr_name` exists.
@@ -304,6 +331,56 @@ where
             attr, arg, fmt,
         ),
     )
+}
+
+/// Returns `ty` (or type referenced by `ty` if `ty` is a reference-type itself)
+/// if `is_type_param_used_in_type` returns `true`.
+pub(crate) fn get_type_if_type_param_used_in_type<'a>(
+    type_params: &HashSet<&'a syn::Ident>,
+    ty: &'a syn::Type,
+) -> Option<&'a syn::Type> {
+    if !is_type_param_used_in_type(type_params, ty) {
+        return None;
+    }
+    match ty {
+        syn::Type::Reference(syn::TypeReference { elem: ty, .. }) => Some(ty),
+        ty => Some(ty),
+    }
+}
+
+/// Checks if any of given `type_params` is used in `ty` type signature.
+fn is_type_param_used_in_type<'a>(type_params: &HashSet<&syn::Ident>, ty: &syn::Type) -> bool {
+    match ty {
+        syn::Type::Path(ty) => {
+            if let Some(qself) = &ty.qself {
+                if is_type_param_used_in_type(type_params, &qself.ty) {
+                    return true;
+                }
+            }
+
+            if let Some(seg) = ty.path.segments.first() {
+                if type_params.contains(&seg.ident) {
+                    return true;
+                }
+            }
+
+            ty.path.segments.iter().any(|seg| {
+                if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
+                    args.args.iter().any(|arg| match arg {
+                        syn::GenericArgument::Type(ty) => {
+                            is_type_param_used_in_type(type_params, ty)
+                        }
+                        syn::GenericArgument::Constraint(c) => type_params.contains(&c.ident),
+                        _ => false,
+                    })
+                } else {
+                    false
+                }
+            })
+        }
+        syn::Type::Reference(ty) => is_type_param_used_in_type(type_params, &ty.elem),
+        _ => false,
+    }
 }
 
 /// Custom simplified [`std::convert::TryInto`] trait, to be implemented on

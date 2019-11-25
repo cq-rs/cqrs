@@ -37,7 +37,7 @@ fn derive_enum(input: syn::DeriveInput) -> Result<TokenStream> {
     let aggregate: syn::Path = syn::parse_str(&aggregate)?;
 
     let structure = Structure::try_new(&input)?;
-    super::assert_all_enum_variants_have_single_field(&structure, TRAIT_NAME)?;
+    util::assert_all_enum_variants_have_single_field(&structure, TRAIT_NAME)?;
 
     let type_params: HashSet<_> = input
         .generics

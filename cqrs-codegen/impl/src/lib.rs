@@ -1,6 +1,7 @@
 mod aggregate;
 mod command;
 mod event;
+mod event_sourced;
 mod util;
 
 use proc_macro2::TokenStream;
@@ -47,3 +48,4 @@ export!(event::aggregate_event_derive);
 export!(event::event_derive);
 export!(event::registered_event_derive);
 export!(event::versioned_event_derive);
+export!(event_sourced::derive as event_sourced_derive);

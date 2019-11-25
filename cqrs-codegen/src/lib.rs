@@ -69,13 +69,13 @@ pub fn aggregate_derive(input: TokenStream) -> TokenStream {
 ///
 /// The enum is treated as a sum-type representing a set of possible events.
 ///
-/// Specifying `#[event(aggregate = "...")]` attribute is __mandatory__
-/// (and only single such attribute allowed per enum). The attribute is
-/// treated as a type of the aggregate with which event is associated.
-///
 /// In practice this means, that [`cqrs::AggregateEvent`] can only be derived
 /// for an enum when all variants of such enum have exactly one field
 /// (variant can be either a tuple-variant or a struct-variant).
+///
+/// Specifying `#[event(aggregate = "...")]` attribute is __mandatory__
+/// (and only single such attribute allowed per enum). The attribute is
+/// treated as a type of the aggregate with which event is associated.
 ///
 /// Each field is expected to have a defined associated constant `EVENT_TYPE`.
 /// [`cqrs::Event`] derive macro generates such constant automatically.
@@ -283,4 +283,75 @@ pub fn registered_event_derive(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(VersionedEvent, attributes(event))]
 pub fn versioned_event_derive(input: TokenStream) -> TokenStream {
     import!(input, versioned_event_derive)
+}
+
+/// Derives [`cqrs::EventSourced`] implementation on [`cqrs::AggregateEvent`]
+/// for a specified [`cqrs::Aggregate`].
+///
+/// This derive macro should be applied to enum representing a set of possible
+/// events, but it will generate implementation of [`cqrs::EventSourced`]
+/// for the [`cqrs::Aggregate`] type specified via
+/// `#[event_sourced(aggregate = "...")]` attribute.
+///
+/// [`cqrs::EventSourced`] derive macro can only be applied to an enum
+/// when all variants of such enum have exactly one field
+/// (variant can be either a tuple-variant or a struct-variant)
+/// and the reffered [`cqrs::Aggregate`] should implement [`cqrs::EventSourced`]
+/// for each field of enum.
+///
+/// Specifying `#[event_sourced(aggregate = "...")]` attribute is __mandatory__
+/// (and only single such attribute allowed per enum). The attribute is
+/// treated as a type of the aggregate that event is associated with.
+///
+/// # Examples
+/// ```
+/// # use cqrs_codegen::{Aggregate, Event, EventSourced};
+/// #
+/// # #[derive(Aggregate, Default)]
+/// # #[aggregate(type = "user")]
+/// # struct User {
+/// #     id: i32,
+/// # };
+/// #
+/// #[derive(Event)]
+/// #[event(type = "user.created")]
+/// struct UserCreated;
+///
+/// #[derive(Event)]
+/// #[event(type = "user.removed")]
+/// struct UserRemoved;
+///
+/// #[derive(Event, EventSourced)]
+/// #[event_sourced(aggregate = "User")]
+/// enum UserEvents {
+///     UserCreated(UserCreated),
+///     UserRemoved(UserRemoved),
+/// }
+///
+/// // Example macro-generated implementation:
+/// # #[cfg(exclude_from_doctest)]
+/// impl cqrs::EventSourced<UserEvents> for User {
+///     fn apply(&mut self, ev: &UserEvents) {
+///         match ev {
+///             UserEvents::UserCreated(ev) => self.apply(ev),
+///             UserEvents::UserRemoved(ev) => self.apply(ev),
+///         }
+///     }
+/// }
+///
+/// // These implementations should be defined somewhere:
+/// impl cqrs::EventSourced<UserCreated> for User {
+///     fn apply(&mut self, ev: &UserCreated) {
+///         // ...
+///     }
+/// }
+/// impl cqrs::EventSourced<UserRemoved> for User {
+///     fn apply(&mut self, ev: &UserRemoved) {
+///         // ...
+///     }
+/// }
+/// ```
+#[proc_macro_derive(EventSourced, attributes(event_sourced))]
+pub fn event_sourced_derive(input: TokenStream) -> TokenStream {
+    import!(input, event_sourced_derive)
 }

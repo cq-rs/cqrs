@@ -8,8 +8,10 @@ mod versioned_event;
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{Error, Result};
+use syn::Result;
 use synstructure::Structure;
+
+use crate::util;
 
 pub use aggregate_event::derive as aggregate_event_derive;
 pub use event::derive as event_derive;
@@ -27,30 +29,6 @@ const VALID_STRUCT_ARGS: &[&str] = &["type", "version"];
 /// for this family of derives.
 const VALID_ENUM_ARGS: &[&str] = &["aggregate"];
 
-/// Checks that all variants of `structure` contain exactly one field.
-/// Returns error otherwise.
-///
-/// `trait_name` is only used to generate error message.
-fn assert_all_enum_variants_have_single_field(
-    structure: &Structure,
-    trait_name: &str,
-) -> Result<()> {
-    for variant in structure.variants() {
-        let ast = variant.ast();
-        if ast.fields.len() != 1 {
-            return Err(Error::new(
-                ast.ident.span(),
-                format!(
-                    "{} can only be derived for enums with variants \
-                     that have exactly one field",
-                    trait_name
-                ),
-            ));
-        }
-    }
-    Ok(())
-}
-
 /// Renders implementation of a `trait_path` trait as a `method` that proxies
 /// call to it's variants.
 ///
@@ -65,7 +43,7 @@ fn render_enum_proxy_method_calls(
     method: TokenStream,
     method_return_type: TokenStream,
 ) -> Result<TokenStream> {
-    assert_all_enum_variants_have_single_field(&structure, trait_name)?;
+    util::assert_all_enum_variants_have_single_field(&structure, trait_name)?;
 
     structure.add_bounds(synstructure::AddBounds::Fields);
 
