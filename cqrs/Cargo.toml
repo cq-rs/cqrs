@@ -16,7 +16,7 @@ travis-ci = { repository = "cq-rs/cqrs", branch = "master" }
 async-trait = "0.1.8"
 cqrs-codegen = { version = "0.1.0-dev", path = "../cqrs-codegen" }
 cqrs-core = { version = "0.3", path = "../cqrs-core" }
-derive_more = { git = "https://github.com/JelteF/derive_more", branch = "master" }
+derive_more = "0.99.2"
 futures-preview = "=0.3.0-alpha.19"
 smallvec = "0.6.11"
 sa = { version = "1.0", package = "static_assertions" }

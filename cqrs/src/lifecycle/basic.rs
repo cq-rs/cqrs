@@ -424,84 +424,37 @@ where
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, From, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, Eq, From, PartialEq)]
 pub enum LoadRehydrateAndPersistError<SsSrcErr, EvSrcErr, SsSnkErr> {
     Load(LoadError<SsSrcErr, EvSrcErr>),
+    #[display(fmt = "Persisting aggregate snapshot failed: {}", _0)]
     #[from(ignore)]
     Persist(SsSnkErr),
 }
 
-impl<SsSrcErr, EvSrcErr, SsSnkErr> fmt::Display
-    for LoadRehydrateAndPersistError<SsSrcErr, EvSrcErr, SsSnkErr>
-where
-    LoadError<SsSrcErr, EvSrcErr>: fmt::Display,
-    SsSnkErr: fmt::Display,
-{
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Load(e) => fmt::Display::fmt(e, f),
-            Self::Persist(e) => write!(f, "Persisitng aggregate snapshot failed: {}", e),
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Display, Eq, PartialEq)]
 pub enum PersistError<EvSnkErr, SsSnkErr> {
-    #[display(fmt = "Persisitng events failed: {}", _0)]
+    #[display(fmt = "Persisting events failed: {}", _0)]
     Events(EvSnkErr),
-    #[display(fmt = "Persisitng aggregate snapshot failed: {}", _0)]
+    #[display(fmt = "Persisting aggregate snapshot failed: {}", _0)]
     Snapshot(SsSnkErr),
 }
 
-#[derive(Clone, Copy, Debug, Eq, From, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, Eq, From, PartialEq)]
 pub enum ExecAndPersistError<Agg, CmdErr, EvSnkErr, SsSnkErr> {
+    #[display(fmt = "Executing command failed: {}", _1)]
     #[from(ignore)]
     Exec(HydratedAggregate<Agg>, CmdErr),
     Persist(PersistError<EvSnkErr, SsSnkErr>),
 }
 
-impl<Agg, CmdErr, EvSnkErr, SsSnkErr> fmt::Display
-    for ExecAndPersistError<Agg, CmdErr, EvSnkErr, SsSnkErr>
-where
-    CmdErr: fmt::Display,
-    EvSnkErr: fmt::Display,
-    SsSnkErr: fmt::Display,
-{
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Exec(_, e) => write!(f, "Executing command failed: {}", e),
-            Self::Persist(e) => fmt::Display::fmt(e, f),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, From, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, Eq, From, PartialEq)]
 pub enum LoadExecAndPersistError<Agg, CmdErr, SsSrcErr, EvSrcErr, EvSnkErr, SsSnkErr> {
     Load(LoadError<SsSrcErr, EvSrcErr>),
+    #[display(fmt = "Executing command failed: {}", _1)]
     #[from(ignore)]
     Exec(HydratedAggregate<Agg>, CmdErr),
     Persist(PersistError<EvSnkErr, SsSnkErr>),
-}
-
-impl<Agg, CmdErr, SsSrcErr, EvSrcErr, EvSnkErr, SsSnkErr> fmt::Display
-    for LoadExecAndPersistError<Agg, CmdErr, SsSrcErr, EvSrcErr, EvSnkErr, SsSnkErr>
-where
-    CmdErr: fmt::Display,
-    SsSrcErr: fmt::Display,
-    EvSrcErr: fmt::Display,
-    EvSnkErr: fmt::Display,
-    SsSnkErr: fmt::Display,
-{
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Load(e) => fmt::Display::fmt(e, f),
-            Self::Exec(_, e) => write!(f, "Executing command failed: {}", e),
-            Self::Persist(e) => fmt::Display::fmt(e, f),
-        }
-    }
 }
 
 impl<Agg, CmdErr, SsSrcErr, EvSrcErr, EvSnkErr, SsSnkErr>
