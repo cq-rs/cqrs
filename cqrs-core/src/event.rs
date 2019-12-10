@@ -540,3 +540,49 @@ impl<T> From<T> for AsEventsRef<T> {
         Self(v)
     }
 }
+
+impl<Ev, T> IntoEvents<Ev> for Option<T>
+where
+    T: IntoEvents<Ev>,
+{
+    type Iter = IntoEventsOption<T::Iter>;
+
+    #[inline]
+    fn into_events(self) -> Self::Iter {
+        self.map(IntoEvents::into_events).into()
+    }
+}
+
+/// Specialized [`Option`] type for [`IntoEvents`] implementations,
+/// which is capable of [`AsRef`]ing slices.
+#[derive(Debug)]
+pub enum IntoEventsOption<T> {
+    /// Some value `T`.
+    Some(T),
+    /// No value.
+    None,
+}
+
+impl<T> From<Option<T>> for IntoEventsOption<T> {
+    #[inline]
+    fn from(op: Option<T>) -> Self {
+        if let Some(v) = op {
+            Self::Some(v)
+        } else {
+            Self::None
+        }
+    }
+}
+
+impl<Ev, T> AsRef<[Ev]> for IntoEventsOption<T>
+where
+    T: AsRef<[Ev]>,
+{
+    #[inline]
+    fn as_ref(&self) -> &[Ev] {
+        match self {
+            Self::Some(t) => t.as_ref(),
+            Self::None => &[],
+        }
+    }
+}
