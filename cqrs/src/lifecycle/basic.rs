@@ -23,6 +23,13 @@ impl<Snp> Basic<Snp> {
     }
 }
 
+impl<Snp> AsRef<Basic<Snp>> for Basic<Snp> {
+    #[inline(always)]
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+
 impl<Snp> Basic<Snp> {
     pub async fn load_aggregate_from_snapshot<SsSrc, Agg>(
         &self,

@@ -31,6 +31,13 @@ impl<Snp, Ctx> Static<Snp, Ctx> {
     }
 }
 
+impl<Snp, Ctx> AsRef<Static<Snp, Ctx>> for Static<Snp, Ctx> {
+    #[inline(always)]
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+
 impl<T, Snp, Ctx> AsRef<T> for Static<Snp, Ctx>
 where
     T: BorrowableAsContext + ?Sized,
