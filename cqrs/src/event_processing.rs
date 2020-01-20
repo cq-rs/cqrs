@@ -131,12 +131,14 @@ impl EventProcessingConfiguration {
     }
 }
 
+/// Builder for [`EventProcessingConfiguration`]
 #[derive(Debug)]
 pub struct EventProcessingConfigurationBuilder {
     handlers: EventHandlersRegistry,
 }
 
 impl EventProcessingConfigurationBuilder {
+    /// Build [`EventProcessingConfiguration`] with specified [`EventHandler`]s
     #[inline]
     pub fn build(self) -> EventProcessingConfiguration {
         EventProcessingConfiguration {
@@ -144,6 +146,7 @@ impl EventProcessingConfigurationBuilder {
         }
     }
 
+    /// Add another [`EventHandler`] to current configuration
     #[inline]
     pub fn register_event_handler<Ev, AsEv, Ctx, Err, H>(&mut self, handler: H)
     where

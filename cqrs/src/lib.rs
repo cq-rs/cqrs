@@ -56,9 +56,18 @@ pub use cqrs_codegen::*;
 #[doc(inline)]
 pub use cqrs_core::*;
 
+//#[doc(inline)]
+//pub use self::{
+//    event_processing::{EventHandler, EventProcessingConfiguration, RegisteredEvent},
+//    lifecycle::BorrowableAsContext,
+//};
+
 #[doc(inline)]
 pub use self::{
-    event_processing::{EventHandler, EventProcessingConfiguration, RegisteredEvent},
+    event_processing::{
+        EventHandler, EventProcessingConfiguration,
+        EventProcessingConfigurationBuilder, RegisteredEvent,
+    },
     lifecycle::BorrowableAsContext,
 };
 
