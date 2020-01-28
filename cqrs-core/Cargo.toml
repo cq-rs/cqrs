@@ -14,5 +14,5 @@ travis-ci = { repository = "cq-rs/cqrs", branch = "master" }
 
 [dependencies]
 arrayvec = { version = "0.4", optional = true }
-async-trait = "0.1.8"
-futures-preview = "=0.3.0-alpha.19"
+async-trait = "0.1.22"
+futures = "0.3.1"
