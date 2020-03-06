@@ -14,7 +14,7 @@ impl error::Error for InvalidReminderTime {
 
 impl fmt::Display for InvalidReminderTime {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let err: &error::Error = self;
+        let err: &dyn error::Error = self;
         f.write_str(err.description())
     }
 }
@@ -31,7 +31,7 @@ impl error::Error for InvalidDescription {
 
 impl fmt::Display for InvalidDescription {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let err: &error::Error = self;
+        let err: &dyn error::Error = self;
         f.write_str(err.description())
     }
 }
@@ -57,7 +57,7 @@ impl error::Error for CommandError {
 
 impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let err: &error::Error = self;
+        let err: &dyn error::Error = self;
         f.write_str(err.description())
     }
 }

@@ -20,6 +20,7 @@ mod aggregate;
 pub mod reactor;
 mod store;
 mod types;
+mod view;
 
 #[doc(inline)]
 pub use crate::aggregate::{
@@ -36,4 +37,8 @@ pub use crate::types::{
     Before, BorrowedRawEvent, CqrsError, EventNumber, Precondition, RawEvent, Since,
     SnapshotRecommendation, Version, VersionedAggregate, VersionedEvent,
     VersionedEventWithMetadata,
+};
+#[doc(inline)]
+pub use crate::view::{
+    View,
 };

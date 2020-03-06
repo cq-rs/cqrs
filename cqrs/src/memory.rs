@@ -1,9 +1,6 @@
 //! A basic, in-memory event stream.
 
-use cqrs_core::{
-    Aggregate, AggregateEvent, AggregateId, EventNumber, EventSink, EventSource, Precondition,
-    Since, SnapshotSink, SnapshotSource, Version, VersionedAggregate, VersionedEvent,
-};
+use cqrs_core::{Aggregate, AggregateEvent, AggregateId, EventNumber, EventSink, EventSource, Precondition, Since, SnapshotSink, SnapshotSource, Version, VersionedAggregate, VersionedEvent, View};
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use std::{
     collections::{hash_map::RandomState, HashMap},
@@ -26,20 +23,22 @@ type LockedEventStream<E, M> = RwLock<EventStream<VersionedEvent<E>, M>>;
 
 /// An in-memory event store
 #[derive(Debug)]
-pub struct EventStore<A, E, M, Hasher = RandomState>
+pub struct EventStore<A, E, M, V, Hasher = RandomState>
 where
     A: Aggregate,
     E: AggregateEvent<A> + Clone,
+    V: View<E>,
     Hasher: BuildHasher,
 {
     inner: LockedHashMap<String, LockedEventStream<E, M>, Hasher>,
-    _phantom: PhantomData<*const A>,
+    _phantom: PhantomData<*const (A, V)>,
 }
 
-impl<A, E, M, Hasher> Default for EventStore<A, E, M, Hasher>
+impl<A, E, M, V, Hasher> Default for EventStore<A, E, M, V, Hasher>
 where
     A: Aggregate,
     E: AggregateEvent<A> + Clone,
+    V: View<E>,
     Hasher: BuildHasher + Default,
 {
     fn default() -> Self {
@@ -50,10 +49,11 @@ where
     }
 }
 
-impl<A, E, M, Hasher> EventStore<A, E, M, Hasher>
+impl<A, E, M, V, Hasher> EventStore<A, E, M, V, Hasher>
 where
     A: Aggregate,
     E: AggregateEvent<A> + Clone,
+    V: View<E>,
     Hasher: BuildHasher,
 {
     /// Constructs a new event store with the specified hasher.
@@ -65,10 +65,11 @@ where
     }
 }
 
-impl<A, E, M, Hasher> EventSource<A, E> for EventStore<A, E, M, Hasher>
+impl<A, E, M, V, Hasher> EventSource<A, E> for EventStore<A, E, M, V, Hasher>
 where
     A: Aggregate,
     E: AggregateEvent<A> + Clone,
+    V: View<E>,
     Hasher: BuildHasher,
 {
     type Error = Void;
@@ -135,10 +136,11 @@ impl fmt::Display for PreconditionFailed {
     }
 }
 
-impl<A, E, M, Hasher> EventSink<A, E, M> for EventStore<A, E, M, Hasher>
+impl<A, E, M, V, Hasher> EventSink<A, E, M, V> for EventStore<A, E, M, V, Hasher>
 where
     A: Aggregate,
     E: AggregateEvent<A> + Clone,
+    V: View<E>,
     Hasher: BuildHasher,
 {
     type Error = PreconditionFailed;

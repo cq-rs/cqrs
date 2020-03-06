@@ -357,6 +357,7 @@ graphql_object!(Mutations: Context |&self| {
             command,
             Some(Precondition::New),
             metadata,
+            None,
         )?;
 
         Ok(TodoQL(Entity::new(new_id, aggregate)))
@@ -397,6 +398,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             metadata,
+            None,
         )?.map(move |agg| Entity::new(id, agg));
 
         Ok(entity.map(TodoQL))
@@ -425,6 +427,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             metadata,
+            None,
         )?.map(move |agg| Entity::new(id, agg));
 
         Ok(entity.map(TodoQL))
@@ -451,6 +454,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             metadata,
+            None,
         )?.map(move |agg| Entity::new(id, agg));
 
         Ok(entity.map(TodoQL))
@@ -477,6 +481,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             metadata,
+            None,
         )?.map(move |agg| Entity::new(id, agg));
 
         Ok(entity.map(TodoQL))
@@ -503,6 +508,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             metadata,
+            None,
         )?.map(move |agg| Entity::new(id, agg));
 
         Ok(entity.map(TodoQL))
@@ -529,6 +535,7 @@ graphql_object!(TodoMutQL: Context |&self| {
             command,
             Some(precondition),
             metadata,
+            None,
         )?.map(move |agg| Entity::new(id, agg));
 
         Ok(entity.map(TodoQL))

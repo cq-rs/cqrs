@@ -31,7 +31,7 @@
 //! }
 //!
 //! impl AggregateEvent<MyAggregate> for CreatedEvent {
-//!     fn apply_to(self, aggregate: &mut MyAggregate) {
+//!     fn apply_to(&self, aggregate: &mut MyAggregate) {
 //!         aggregate.active = true;
 //!     }
 //! }
@@ -46,7 +46,7 @@
 //! }
 //!
 //! impl AggregateEvent<MyAggregate> for DeletedEvent {
-//!     fn apply_to(self, aggregate: &mut MyAggregate) {
+//!     fn apply_to(&self, aggregate: &mut MyAggregate) {
 //!         aggregate.active = false;
 //!     }
 //! }
@@ -67,7 +67,7 @@
 //! }
 //!
 //! impl AggregateEvent<MyAggregate> for MyEvents {
-//!     fn apply_to(self, aggregate: &mut MyAggregate) {
+//!     fn apply_to(&self, aggregate: &mut MyAggregate) {
 //!         match self {
 //!             MyEvents::Created(e) => e.apply_to(aggregate),
 //!             MyEvents::Deleted(e) => e.apply_to(aggregate),
@@ -209,7 +209,7 @@ pub fn arb_events<E: Event + fmt::Debug>(
 /// }
 ///
 /// impl AggregateEvent<MyAggregate> for CreatedEvent {
-///     fn apply_to(self, aggregate: &mut MyAggregate) {
+///     fn apply_to(&self, aggregate: &mut MyAggregate) {
 ///         aggregate.active = true;
 ///     }
 /// }
@@ -224,7 +224,7 @@ pub fn arb_events<E: Event + fmt::Debug>(
 /// }
 ///
 /// impl AggregateEvent<MyAggregate> for DeletedEvent {
-///     fn apply_to(self, aggregate: &mut MyAggregate) {
+///     fn apply_to(&self, aggregate: &mut MyAggregate) {
 ///         aggregate.active = false;
 ///     }
 /// }
@@ -245,7 +245,7 @@ pub fn arb_events<E: Event + fmt::Debug>(
 /// }
 ///
 /// impl AggregateEvent<MyAggregate> for MyEvents {
-///     fn apply_to(self, aggregate: &mut MyAggregate) {
+///     fn apply_to(&self, aggregate: &mut MyAggregate) {
 ///         match self {
 ///             MyEvents::Created(e) => e.apply_to(aggregate),
 ///             MyEvents::Deleted(e) => e.apply_to(aggregate),
@@ -280,7 +280,7 @@ where
     events_strategy.prop_map(|e| {
         let mut aggregate = A::default();
         for event in e {
-            aggregate.apply(event);
+            aggregate.apply(&event);
         }
         aggregate
     })
@@ -399,7 +399,7 @@ pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEven
 /// }
 ///
 /// impl AggregateEvent<MyAggregate> for CreatedEvent {
-///     fn apply_to(self, aggregate: &mut MyAggregate) {
+///     fn apply_to(&self, aggregate: &mut MyAggregate) {
 ///         aggregate.active = true;
 ///     }
 /// }
@@ -414,7 +414,7 @@ pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEven
 /// }
 ///
 /// impl AggregateEvent<MyAggregate> for DeletedEvent {
-///     fn apply_to(self, aggregate: &mut MyAggregate) {
+///     fn apply_to(&self, aggregate: &mut MyAggregate) {
 ///         aggregate.active = false;
 ///     }
 /// }
@@ -435,7 +435,7 @@ pub fn roundtrip_through_serialization<E: SerializableEvent + DeserializableEven
 /// }
 ///
 /// impl AggregateEvent<MyAggregate> for MyEvents {
-///     fn apply_to(self, aggregate: &mut MyAggregate) {
+///     fn apply_to(&self, aggregate: &mut MyAggregate) {
 ///         match self {
 ///             MyEvents::Created(e) => e.apply_to(aggregate),
 ///             MyEvents::Deleted(e) => e.apply_to(aggregate),
@@ -529,7 +529,7 @@ where
             .prop_map(|events| {
                 let mut aggregate = A::default();
                 for event in events {
-                    aggregate.apply(event);
+                    aggregate.apply(&event);
                 }
                 AggregateFromEventSequence {
                     aggregate,

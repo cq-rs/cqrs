@@ -1,7 +1,7 @@
 use super::*;
 use crate::testing::*;
 
-type TestMemoryEventStore = EventStore<TestAggregate, TestEvent, TestMetadata>;
+type TestMemoryEventStore = EventStore<TestAggregate, TestEvent, TestMetadata, TestView>;
 
 #[test]
 fn can_get_an_event_stream_with_expected_count_of_events() {

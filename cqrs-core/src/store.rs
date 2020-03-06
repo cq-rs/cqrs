@@ -1,10 +1,7 @@
-use crate::{
-    aggregate::{Aggregate, AggregateEvent, AggregateId},
-    types::{
-        CqrsError, EventNumber, Precondition, Since, SnapshotRecommendation, Version,
-        VersionedAggregate, VersionedEvent,
-    },
-};
+use crate::{aggregate::{Aggregate, AggregateEvent, AggregateId}, types::{
+    CqrsError, EventNumber, Precondition, Since, SnapshotRecommendation, Version,
+    VersionedAggregate, VersionedEvent,
+}, View};
 
 /// A source for reading/loading events.
 pub trait EventSource<A, E>
@@ -33,10 +30,11 @@ where
 }
 
 /// A sink for writing/persisting events with associated metadata.
-pub trait EventSink<A, E, M>
+pub trait EventSink<A, E, M, V>
 where
     A: Aggregate,
     E: AggregateEvent<A>,
+    V: View<E>,
 {
     /// The error type.
     type Error: CqrsError;
@@ -148,7 +146,7 @@ mod tests {
     }
 
     impl AggregateEvent<TestAggregate> for TestEvent {
-        fn apply_to(self, _aggregate: &mut TestAggregate) {}
+        fn apply_to(&self, _aggregate: &mut TestAggregate) {}
     }
 
     impl AggregateCommand<TestAggregate> for TestCommand {

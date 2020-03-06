@@ -2,12 +2,7 @@ use crate::{
     error::{LoadError, PersistError},
     util::{BorrowedJson, Json, RawJsonPersist, RawJsonRead, Sequence},
 };
-use cqrs_core::{
-    Aggregate, AggregateEvent, AggregateId, Before, DeserializableEvent, EventNumber, EventSink,
-    EventSource, NeverSnapshot, Precondition, SerializableEvent, Since, SnapshotRecommendation,
-    SnapshotSink, SnapshotSource, SnapshotStrategy, Version, VersionedAggregate, VersionedEvent,
-    VersionedEventWithMetadata,
-};
+use cqrs_core::{Aggregate, AggregateEvent, AggregateId, Before, DeserializableEvent, EventNumber, EventSink, EventSource, NeverSnapshot, Precondition, SerializableEvent, Since, SnapshotRecommendation, SnapshotSink, SnapshotSource, SnapshotStrategy, Version, VersionedAggregate, VersionedEvent, VersionedEventWithMetadata, View};
 use fallible_iterator::{FallibleIterator, IntoFallibleIterator};
 use num_traits::FromPrimitive;
 use postgres::Connection;
@@ -16,21 +11,23 @@ use std::{fmt, marker::PhantomData};
 
 /// A PostgreSQL storage backend.
 #[derive(Clone)]
-pub struct PostgresStore<'conn, A, E, M, S = NeverSnapshot>
+pub struct PostgresStore<'conn, A, E, M, V, S = NeverSnapshot>
 where
     A: Aggregate,
     E: AggregateEvent<A>,
+    V: View<E>,
     S: SnapshotStrategy,
 {
     conn: &'conn Connection,
     snapshot_strategy: S,
-    _phantom: PhantomData<&'conn (A, E, M)>,
+    _phantom: PhantomData<&'conn (A, E, M, V)>,
 }
 
-impl<'conn, A, E, M, S> fmt::Debug for PostgresStore<'conn, A, E, M, S>
+impl<'conn, A, E, M, V, S> fmt::Debug for PostgresStore<'conn, A, E, M, V, S>
 where
     A: Aggregate,
     E: AggregateEvent<A>,
+    V: View<E>,
     S: SnapshotStrategy + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -42,10 +39,11 @@ where
     }
 }
 
-impl<'conn, A, E, M, S> PostgresStore<'conn, A, E, M, S>
+impl<'conn, A, E, M, V, S> PostgresStore<'conn, A, E, M, V, S>
 where
     A: Aggregate,
     E: AggregateEvent<A>,
+    V: View<E>,
     S: SnapshotStrategy + Default,
 {
     const DB_VERSION: u32 = 1;
@@ -486,11 +484,12 @@ where
     }
 }
 
-impl<'conn, A, E, M, S> EventSink<A, E, M> for PostgresStore<'conn, A, E, M, S>
+impl<'conn, A, E, M, V, S> EventSink<A, E, M, V> for PostgresStore<'conn, A, E, M, V, S>
 where
     A: Aggregate,
     E: AggregateEvent<A> + SerializableEvent + fmt::Debug,
     M: Serialize + fmt::Debug,
+    V: View<E>,
     S: SnapshotStrategy,
 {
     type Error = PersistError<<E as SerializableEvent>::Error>;
@@ -569,10 +568,11 @@ where
     }
 }
 
-impl<'conn, A, E, M, S> EventSource<A, E> for PostgresStore<'conn, A, E, M, S>
+impl<'conn, A, E, M, V, S> EventSource<A, E> for PostgresStore<'conn, A, E, M, V, S>
 where
     A: Aggregate,
     E: AggregateEvent<A> + DeserializableEvent,
+    V: View<E>,
     S: SnapshotStrategy,
 {
     type Error = LoadError<<E as DeserializableEvent>::Error>;
@@ -664,10 +664,11 @@ where
     }
 }
 
-impl<'conn, A, E, M, S> SnapshotSink<A> for PostgresStore<'conn, A, E, M, S>
+impl<'conn, A, E, M, V, S> SnapshotSink<A> for PostgresStore<'conn, A, E, M, V, S>
 where
     A: Aggregate + Serialize + fmt::Debug,
     E: AggregateEvent<A>,
+    V: View<E>,
     S: SnapshotStrategy,
 {
     type Error = PersistError<serde_json::Error>;
@@ -711,10 +712,11 @@ where
     }
 }
 
-impl<'conn, A, E, M, S> SnapshotSource<A> for PostgresStore<'conn, A, E, M, S>
+impl<'conn, A, E, M, V, S> SnapshotSource<A> for PostgresStore<'conn, A, E, M, V, S>
 where
     A: Aggregate + DeserializeOwned,
     E: AggregateEvent<A>,
+    V: View<E>,
     S: SnapshotStrategy,
 {
     type Error = postgres::Error;
