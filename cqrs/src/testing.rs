@@ -1,4 +1,4 @@
-use cqrs_core::{Aggregate, AggregateCommand, AggregateEvent, AggregateId, Event};
+use cqrs_core::{Aggregate, AggregateCommand, AggregateEvent, AggregateId, Event, View};
 use void::Void;
 
 /// A test aggregate with no state
@@ -16,6 +16,10 @@ pub struct TestMetadata;
 /// A test command with no data
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TestCommand;
+
+/// A test view with no data
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TestView;
 
 /// A test identifier
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -52,5 +56,9 @@ impl Event for TestEvent {
 }
 
 impl AggregateEvent<TestAggregate> for TestEvent {
-    fn apply_to(self, _aggregate: &mut TestAggregate) {}
+    fn apply_to(&self, _aggregate: &mut TestAggregate) {}
+}
+
+impl View<TestEvent> for TestView {
+    fn apply_events(&mut self, events: &Vec<TestEvent>) {}
 }

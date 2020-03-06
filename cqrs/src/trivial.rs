@@ -1,9 +1,6 @@
 //! Provides a trivial implementation of event/snapshot/entity source/sink/store constructs.
 
-use cqrs_core::{
-    Aggregate, AggregateEvent, AggregateId, EventNumber, EventSink, EventSource, Precondition,
-    Since, SnapshotSink, SnapshotSource, Version, VersionedAggregate, VersionedEvent,
-};
+use cqrs_core::{Aggregate, AggregateEvent, AggregateId, EventNumber, EventSink, EventSource, Precondition, Since, SnapshotSink, SnapshotSource, Version, VersionedAggregate, VersionedEvent, View};
 use std::{fmt, iter::Empty, marker::PhantomData};
 use void::Void;
 
@@ -67,10 +64,11 @@ where
     }
 }
 
-impl<A, E, M> EventSink<A, E, M> for NullEventStore<A, E>
+impl<A, E, M, V> EventSink<A, E, M, V> for NullEventStore<A, E>
 where
     A: Aggregate,
     E: AggregateEvent<A>,
+    V: View<E>,
 {
     type Error = Void;
 

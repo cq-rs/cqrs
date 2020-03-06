@@ -8,7 +8,7 @@ pub trait Aggregate: Default {
     fn aggregate_type() -> &'static str;
 
     /// Consumes the event, applying its effects to the aggregate.
-    fn apply<E>(&mut self, event: E)
+    fn apply<E>(&mut self, event: &E)
     where
         E: AggregateEvent<Self>,
     {
@@ -68,7 +68,7 @@ pub trait Event {
 /// An event that can be applied to an aggregate.
 pub trait AggregateEvent<A: Aggregate>: Event {
     /// Consumes the event, applying its effects to the aggregate.
-    fn apply_to(self, aggregate: &mut A);
+    fn apply_to(&self, aggregate: &mut A);
 }
 
 /// An iterable and sliceable list of events.

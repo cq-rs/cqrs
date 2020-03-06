@@ -5,18 +5,17 @@
 
 #![warn(unused_import_braces, unused_imports, unused_qualifications)]
 #![deny(
-    missing_debug_implementations,
-    trivial_casts,
-    trivial_numeric_casts,
-    unsafe_code,
-    unused_must_use,
-    missing_docs
+missing_debug_implementations,
+trivial_casts,
+trivial_numeric_casts,
+unsafe_code,
+unused_must_use,
+missing_docs
 )]
 
-use cqrs_core::{
-    Aggregate, AggregateEvent, AggregateId, DeserializableEvent, Event, SerializableEvent,
-};
 use serde::{Deserialize, Serialize};
+
+use cqrs_core::{Aggregate, AggregateEvent, AggregateId, DeserializableEvent, Event, SerializableEvent, View};
 
 pub mod commands;
 pub mod domain;
@@ -52,8 +51,8 @@ impl TodoAggregate {
 impl Aggregate for TodoAggregate {
     #[inline(always)]
     fn aggregate_type() -> &'static str
-    where
-        Self: Sized,
+        where
+            Self: Sized,
     {
         "todo"
     }
@@ -90,6 +89,14 @@ impl<'a> AggregateId<TodoAggregate> for TodoIdRef<'a> {
 pub struct TodoMetadata {
     /// The actor that caused this event to be added to the event stream.
     pub initiated_by: String,
+}
+
+/// View to process downstream events (unused).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TodoView {}
+
+impl View<TodoEvent> for TodoView {
+    fn apply_events(&mut self, events: &Vec<TodoEvent>) {}
 }
 
 /// Data relating to a to-do item.
@@ -157,24 +164,24 @@ impl Event for TodoEvent {
 }
 
 impl AggregateEvent<TodoAggregate> for events::Created {
-    fn apply_to(self, aggregate: &mut TodoAggregate) {
+    fn apply_to(&self, aggregate: &mut TodoAggregate) {
         if TodoAggregate::Uninitialized == *aggregate {
             *aggregate =
-                TodoAggregate::Created(TodoData::with_description(self.initial_description))
+                TodoAggregate::Created(TodoData::with_description(self.initial_description.clone()))
         }
     }
 }
 
 impl AggregateEvent<TodoAggregate> for events::DescriptionUpdated {
-    fn apply_to(self, aggregate: &mut TodoAggregate) {
+    fn apply_to(&self, aggregate: &mut TodoAggregate) {
         if let TodoAggregate::Created(ref mut data) = aggregate {
-            data.description = self.new_description;
+            data.description = self.new_description.clone();
         }
     }
 }
 
 impl AggregateEvent<TodoAggregate> for events::ReminderUpdated {
-    fn apply_to(self, aggregate: &mut TodoAggregate) {
+    fn apply_to(&self, aggregate: &mut TodoAggregate) {
         if let TodoAggregate::Created(ref mut data) = aggregate {
             data.reminder = self.new_reminder;
         }
@@ -182,7 +189,7 @@ impl AggregateEvent<TodoAggregate> for events::ReminderUpdated {
 }
 
 impl AggregateEvent<TodoAggregate> for events::Completed {
-    fn apply_to(self, aggregate: &mut TodoAggregate) {
+    fn apply_to(&self, aggregate: &mut TodoAggregate) {
         if let TodoAggregate::Created(ref mut data) = aggregate {
             data.status = TodoStatus::Completed;
         }
@@ -190,14 +197,15 @@ impl AggregateEvent<TodoAggregate> for events::Completed {
 }
 
 impl AggregateEvent<TodoAggregate> for events::Uncompleted {
-    fn apply_to(self, aggregate: &mut TodoAggregate) {
+    fn apply_to(&self, aggregate: &mut TodoAggregate) {
         if let TodoAggregate::Created(ref mut data) = aggregate {
             data.status = TodoStatus::NotCompleted;
         }
     }
 }
+
 impl AggregateEvent<TodoAggregate> for TodoEvent {
-    fn apply_to(self, aggregate: &mut TodoAggregate) {
+    fn apply_to(&self, aggregate: &mut TodoAggregate) {
         match self {
             TodoEvent::Created(evt) => evt.apply_to(aggregate),
             TodoEvent::DescriptionUpdated(evt) => evt.apply_to(aggregate),
@@ -258,10 +266,11 @@ impl DeserializableEvent for TodoEvent {
 
 #[cfg(test)]
 mod tests {
-    pub use super::*;
     use arrayvec::ArrayVec;
     use chrono::{Duration, TimeZone, Utc};
     use pretty_assertions::assert_eq;
+
+    pub use super::*;
 
     fn create_basic_aggregate() -> TodoAggregate {
         let now = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
@@ -286,7 +295,7 @@ mod tests {
 
         let mut agg = TodoAggregate::default();
         for event in events {
-            agg.apply(event);
+            agg.apply(&event);
         }
         agg
     }
@@ -441,7 +450,7 @@ mod tests {
                     Utc.ymd(2100, 1, 1).and_hms(0, 0, 0),
                     Utc.ymd(2000, 1, 1).and_hms(0, 0, 0),
                 )
-                .unwrap(),
+                    .unwrap(),
             ),
         });
         let roundtrip = cqrs_proptest::roundtrip_through_serialization(&original);
@@ -479,11 +488,14 @@ mod tests {
     }
 
     mod property_tests {
-        use super::*;
-        use cqrs_proptest::AggregateFromEventSequence;
-        use pretty_assertions::assert_eq;
-        use proptest::{prelude::*, prop_oneof, proptest, proptest_helper};
         use std::fmt;
+
+        use pretty_assertions::assert_eq;
+
+        use cqrs_proptest::AggregateFromEventSequence;
+        use proptest::{prelude::*, prop_oneof, proptest, proptest_helper};
+
+        use super::*;
 
         impl Arbitrary for domain::Description {
             type Parameters = proptest::string::StringParam;
@@ -578,7 +590,7 @@ mod tests {
                     any::<events::Completed>().prop_map(TodoEvent::Completed),
                     any::<events::Uncompleted>().prop_map(TodoEvent::Uncompleted),
                 ]
-                .boxed()
+                    .boxed()
             }
         }
 

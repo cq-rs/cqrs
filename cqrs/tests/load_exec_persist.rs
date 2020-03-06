@@ -6,7 +6,7 @@ use std::{
 use cqrs::{
     AggregateId, EventNumber, EventSink, EventSource, Precondition, Since, Version, VersionedEvent,
 };
-use cqrs_todo_core::{TodoAggregate, TodoEvent, TodoIdRef, TodoMetadata};
+use cqrs_todo_core::{TodoAggregate, TodoEvent, TodoIdRef, TodoMetadata, TodoView};
 use void::Void;
 
 #[derive(Debug)]
@@ -54,7 +54,7 @@ impl EventSource<TodoAggregate, TodoEvent> for EventMap {
     }
 }
 
-impl EventSink<TodoAggregate, TodoEvent, TodoMetadata> for EventMap {
+impl EventSink<TodoAggregate, TodoEvent, TodoMetadata, TodoView> for EventMap {
     type Error = Void;
 
     fn append_events<I>(
