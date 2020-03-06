@@ -295,6 +295,17 @@ where
     }
 }
 
+pub trait EventHandlersRegistrar<Ev, AsEv, Ctx, Err>
+where
+    Ev: Event + ?Sized + 'static,
+    for<'e> &'e Ev: TryFrom<&'e AsEv>,
+    AsEv: Event + ?Sized + 'static,
+    Ctx: ?Sized + 'static,
+    Err: 'static,
+{
+    fn register_event_handlers(&self, builder: &mut EventProcessingConfigurationBuilder);
+}
+
 #[cfg(test)]
 mod event_processing_configuration_spec {
     use std::{
