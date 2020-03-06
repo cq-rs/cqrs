@@ -36,6 +36,7 @@ type TodoStore<'conn> = cqrs_postgres::PostgresStore<
     cqrs_todo_core::TodoAggregate,
     cqrs_todo_core::TodoEvent,
     cqrs_todo_core::TodoMetadata,
+    cqrs_todo_core::TodoView,
     SnapshotEvery10,
 >;
 
@@ -86,13 +87,11 @@ impl IdProvider {
 mod helper {
     use chrono::{Duration, TimeZone, Utc};
     use cqrs::{AlwaysSnapshot, EventSink, SnapshotSink, Version};
-    use cqrs_todo_core::{
-        domain, events, TodoAggregate, TodoData, TodoEvent, TodoId, TodoMetadata, TodoStatus,
-    };
+    use cqrs_todo_core::{domain, events, TodoAggregate, TodoData, TodoEvent, TodoId, TodoMetadata, TodoStatus, TodoView};
     use r2d2_postgres::postgres::Connection;
 
     type TodoStore<'conn> =
-        cqrs_postgres::PostgresStore<'conn, TodoAggregate, TodoEvent, TodoMetadata, AlwaysSnapshot>;
+        cqrs_postgres::PostgresStore<'conn, TodoAggregate, TodoEvent, TodoMetadata, TodoView, AlwaysSnapshot>;
 
     pub fn prefill(id: &TodoId, conn: &Connection) {
         let epoch = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);

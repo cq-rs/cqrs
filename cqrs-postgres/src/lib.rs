@@ -40,21 +40,21 @@ pub use crate::store::PostgresStore;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cqrs_todo_core::{TodoAggregate, TodoEvent, TodoMetadata};
+    use cqrs_todo_core::{TodoAggregate, TodoEvent, TodoMetadata, TodoView};
     use static_assertions::assert_impl;
 
     #[test]
     fn postgres_store_is_an_entity_store() {
-        assert_impl!(PostgresStore<TodoAggregate, TodoEvent, TodoMetadata>, cqrs::EntityStore<TodoAggregate, TodoEvent, TodoMetadata>);
+        assert_impl!(PostgresStore<TodoAggregate, TodoEvent, TodoMetadata, TodoView>, cqrs::EntityStore<TodoAggregate, TodoEvent, TodoMetadata, TodoView>);
     }
 
     #[test]
     fn postgres_store_is_an_entity_source() {
-        assert_impl!(PostgresStore<TodoAggregate, TodoEvent, TodoMetadata>, cqrs::EntitySource<TodoAggregate, TodoEvent>);
+        assert_impl!(PostgresStore<TodoAggregate, TodoEvent, TodoMetadata, TodoView>, cqrs::EntitySource<TodoAggregate, TodoEvent>);
     }
 
     #[test]
     fn postgres_store_is_an_entity_sink() {
-        assert_impl!(PostgresStore<TodoAggregate, TodoEvent, TodoMetadata>, cqrs::EntitySink<TodoAggregate, TodoEvent, TodoMetadata>);
+        assert_impl!(PostgresStore<TodoAggregate, TodoEvent, TodoMetadata, TodoView>, cqrs::EntitySink<TodoAggregate, TodoEvent, TodoMetadata, TodoView>);
     }
 }
