@@ -5,7 +5,7 @@ use cqrs_core::{
     HydratedAggregate, IntoEvents as _, NumberedEvent, SnapshotRecommendation, SnapshotSink,
     SnapshotSource, SnapshotStrategy,
 };
-use derive_more::{Display, From};
+use derive_more::{Display, Error, From};
 use futures::{future, TryStreamExt as _};
 use smallvec::SmallVec;
 
@@ -139,7 +139,7 @@ impl<Snp> Basic<Snp> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Display, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, Eq, Error, PartialEq)]
 pub enum LoadError<SsSrcErr, EvSrcErr> {
     #[display(fmt = "Loading aggregate snapshot failed: {}", _0)]
     Snapshot(SsSrcErr),
@@ -431,7 +431,7 @@ where
     }
 }
 
-#[derive(Clone, Copy, Debug, Display, Eq, From, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, Eq, Error, From, PartialEq)]
 pub enum LoadRehydrateAndPersistError<SsSrcErr, EvSrcErr, SsSnkErr> {
     Load(LoadError<SsSrcErr, EvSrcErr>),
     #[display(fmt = "Persisting aggregate snapshot failed: {}", _0)]
@@ -439,7 +439,7 @@ pub enum LoadRehydrateAndPersistError<SsSrcErr, EvSrcErr, SsSnkErr> {
     Persist(SsSnkErr),
 }
 
-#[derive(Clone, Copy, Debug, Display, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, Eq, Error, PartialEq)]
 pub enum PersistError<EvSnkErr, SsSnkErr> {
     #[display(fmt = "Persisting events failed: {}", _0)]
     Events(EvSnkErr),
@@ -447,20 +447,20 @@ pub enum PersistError<EvSnkErr, SsSnkErr> {
     Snapshot(SsSnkErr),
 }
 
-#[derive(Clone, Copy, Debug, Display, Eq, From, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, Eq, Error, From, PartialEq)]
 pub enum ExecAndPersistError<Agg, CmdErr, EvSnkErr, SsSnkErr> {
     #[display(fmt = "Executing command failed: {}", _1)]
     #[from(ignore)]
-    Exec(HydratedAggregate<Agg>, CmdErr),
+    Exec(HydratedAggregate<Agg>, #[error(source)] CmdErr),
     Persist(PersistError<EvSnkErr, SsSnkErr>),
 }
 
-#[derive(Clone, Copy, Debug, Display, Eq, From, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, Eq, Error, From, PartialEq)]
 pub enum LoadExecAndPersistError<Agg, CmdErr, SsSrcErr, EvSrcErr, EvSnkErr, SsSnkErr> {
     Load(LoadError<SsSrcErr, EvSrcErr>),
     #[display(fmt = "Executing command failed: {}", _1)]
     #[from(ignore)]
-    Exec(HydratedAggregate<Agg>, CmdErr),
+    Exec(HydratedAggregate<Agg>, #[error(source)] CmdErr),
     Persist(PersistError<EvSnkErr, SsSnkErr>),
 }
 

@@ -16,7 +16,7 @@ travis-ci = { repository = "cq-rs/cqrs", branch = "master" }
 async-trait = "0.1.22"
 cqrs-codegen = { version = "0.1.0-dev", path = "../cqrs-codegen" }
 cqrs-core = { version = "0.3", path = "../cqrs-core" }
-derive_more = "0.99.2"
+derive_more = "0.99.5"
 futures = "0.3.1"
 smallvec = "1.1"
 sa = { version = "1.0", package = "static_assertions" }
