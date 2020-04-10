@@ -81,12 +81,14 @@ pub trait SnapshotSink<Agg: Aggregate + ?Sized> {
 
 /// [`Aggregate`] that is [`EventSourced`] and keeps track of the version of its
 /// last snapshot and the current version.
-#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct HydratedAggregate<Agg> {
     /// Current [`Version`] of this [`Aggregate`].
     ver: Version,
+
     /// [`Version`] of last snapshot of this [`Aggregate`].
     snapshot_ver: Option<Version>,
+
     /// The [`Aggregate`] itself.
     state: Agg,
 }
@@ -174,6 +176,30 @@ impl<Agg> HydratedAggregate<Agg> {
         for event in events {
             self.apply(event);
         }
+    }
+
+    /// Substitutes the state of this [`HydratedAggregate`] with the provided
+    /// closure, preserving the current and snapshot [`Version`]s.
+    ///
+    /// This is commonly used to transform the [`Aggregate`] into its
+    /// `Proj`ection without losing the [`Version`] information.
+    #[inline]
+    pub fn map<Proj, F>(self, f: F) -> HydratedAggregate<Proj>
+    where
+        F: FnOnce(Agg) -> Proj,
+    {
+        HydratedAggregate {
+            ver: self.ver,
+            snapshot_ver: self.snapshot_ver,
+            state: f(self.state),
+        }
+    }
+
+    /// Converts the state of this [`HydratedAggregate`] into the expected
+    /// `Proj`ection, preserving the current and snapshot [`Version`]s.
+    #[inline]
+    pub fn map_into<Proj: From<Agg>>(self) -> HydratedAggregate<Proj> {
+        self.map(Into::into)
     }
 }
 
