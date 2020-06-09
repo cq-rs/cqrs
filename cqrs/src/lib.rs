@@ -98,7 +98,9 @@ pub trait QueryGateway<Qr: Query> {
     type Err;
     type Ok;
 
-    async fn query(&self, query: Qr) -> Result<Self::Ok, Self::Err>;
+    async fn query(&self, query: Qr) -> Result<Self::Ok, Self::Err>
+    where
+        Qr: 'async_trait;
 }
 
 #[async_trait(?Send)]
@@ -107,5 +109,7 @@ pub trait QueryHandler<Qr: Query> {
     type Err;
     type Ok;
 
-    async fn handle(&self, query: Qr, ctx: &Self::Context) -> Result<Self::Ok, Self::Err>;
+    async fn handle(&self, query: Qr, ctx: &Self::Context) -> Result<Self::Ok, Self::Err>
+    where
+        Qr: 'async_trait;
 }
