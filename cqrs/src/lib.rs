@@ -85,10 +85,8 @@ pub trait CommandBus<Cmd: Command> {
 
 pub trait DomainEvent: Event {}
 
-pub trait AggregateEvent: Event {
+pub trait AggregateEvent: TypedEvent {
     type Aggregate: Aggregate;
-
-    fn event_types() -> &'static [EventType];
 }
 
 pub trait Query {}

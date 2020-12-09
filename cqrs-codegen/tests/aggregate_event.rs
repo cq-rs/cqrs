@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use cqrs::AggregateEvent as _;
+use cqrs::TypedEvent as _;
 use cqrs_codegen::{Aggregate, AggregateEvent, Event};
 
 #[derive(Aggregate, Default)]
@@ -27,12 +27,8 @@ fn derives_for_enum() {
     }
 
     assert_eq!(
-        TestEvent::EVENT_TYPES,
-        [TestEvent1::EVENT_TYPE, TestEvent2::EVENT_TYPE],
-    );
-    assert_eq!(
-        TestEvent::event_types(),
-        [TestEvent1::EVENT_TYPE, TestEvent2::EVENT_TYPE],
+        TestEvent::event_types().collect::<Vec<_>>(),
+        vec![TestEvent1::EVENT_TYPE, TestEvent2::EVENT_TYPE],
     );
 }
 
@@ -72,17 +68,8 @@ fn derives_for_generic_enum() {
     type TestEvent = TestEventGeneric<i32, String>;
 
     assert_eq!(
-        TestEvent::EVENT_TYPES,
-        [
-            TestEvent1::EVENT_TYPE,
-            TestEvent2::EVENT_TYPE,
-            TestEventGeneric1::<i32, String>::EVENT_TYPE,
-            TestEventGeneric2::<i32, String>::EVENT_TYPE,
-        ],
-    );
-    assert_eq!(
-        TestEvent::event_types(),
-        [
+        TestEvent::event_types().collect::<Vec<_>>(),
+        vec![
             TestEvent1::EVENT_TYPE,
             TestEvent2::EVENT_TYPE,
             TestEventGeneric1::<i32, String>::EVENT_TYPE,

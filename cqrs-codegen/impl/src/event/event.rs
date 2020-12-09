@@ -5,14 +5,16 @@ use quote::quote;
 use syn::Result;
 use synstructure::Structure;
 
-use crate::util;
+use crate::{event::typed_event, util};
 
 /// Name of the derived trait.
 const TRAIT_NAME: &str = "Event";
 
 /// Implements [`crate::event_derive`] macro expansion.
 pub fn derive(input: syn::DeriveInput) -> Result<TokenStream> {
-    util::derive(input, TRAIT_NAME, derive_struct, derive_enum)
+    let mut s = util::derive(input.clone(), TRAIT_NAME, derive_struct, derive_enum)?;
+    s.extend(typed_event::derive(input)?);
+    Ok(s)
 }
 
 /// Implements [`crate::event_derive`] macro expansion for structs.
@@ -89,6 +91,15 @@ mod spec {
                     Self::EVENT_TYPE
                 }
             }
+            #[automatically_derived]
+            impl ::cqrs::TypedEvent for Event {
+                type EventTypes = std::iter::Once<::cqrs::EventType>;
+
+                #[inline(always)]
+                fn event_types() -> Self::EventTypes {
+                    std::iter::once(Self::EVENT_TYPE)
+                }
+            }
         };
 
         assert_eq!(derive(input).unwrap().to_string(), output.to_string())
@@ -118,6 +129,19 @@ mod spec {
                     }
                 }
             };
+            #[automatically_derived]
+            impl ::cqrs::TypedEvent for Event {
+                type EventTypes = std::iter::Chain<
+                    <Event1 as ::cqrs::TypedEvent>::EventTypes,
+                    <Event2 as ::cqrs::TypedEvent>::EventTypes
+                >;
+
+                #[inline(always)]
+                fn event_types() -> Self::EventTypes {
+                    Event1::event_types()
+                        .chain(Event2::event_types())
+                }
+            }
         };
 
         assert_eq!(derive(input).unwrap().to_string(), output.to_string())

@@ -76,18 +76,18 @@ fn derives_for_enum() {
 fn derives_for_generic_enum() {
     #[derive(Event, EventSourced)]
     #[event_sourced(aggregate = "Aggregate")]
-    enum Event<E1, E2, T> {
-        Event1(E1),
-        Event2 { event: E2 },
-        Event3(Event3<T>),
-        Event4 { event: Event4<T> },
+    enum Event<E3, E4> {
+        Event1(Event1),
+        Event2 { event: Event2 },
+        Event3(Event3<E3>),
+        Event4 { event: Event4<E4> },
     }
 
     let mut aggregate = Aggregate::default();
-    aggregate.apply(&Event::<Event1, Event2, i32>::Event1(Event1));
-    aggregate.apply(&Event::<Event1, Event2, i32>::Event2 { event: Event2 });
-    aggregate.apply(&Event::<Event1, Event2, i32>::Event3(Event3::default()));
-    aggregate.apply(&Event::<Event1, Event2, i32>::Event4 {
+    aggregate.apply(&Event::<u32, i32>::Event1(Event1));
+    aggregate.apply(&Event::<u32, i32>::Event2 { event: Event2 });
+    aggregate.apply(&Event::<u32, i32>::Event3(Event3::default()));
+    aggregate.apply(&Event::<u32, i32>::Event4 {
         event: Event4::default(),
     });
 

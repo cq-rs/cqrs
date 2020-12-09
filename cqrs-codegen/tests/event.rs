@@ -63,14 +63,6 @@ fn derives_for_enum() {
 #[test]
 fn derives_for_generic_enum() {
     #[derive(Default, Event)]
-    #[event(type = "test.event.1")]
-    struct TestEvent1;
-
-    #[derive(Default, Event)]
-    #[event(type = "test.event.2")]
-    struct TestEvent2;
-
-    #[derive(Default, Event)]
     #[event(type = "test.event.generic.1")]
     struct TestEventGeneric1<ID, Data> {
         id: ID,
@@ -85,26 +77,13 @@ fn derives_for_generic_enum() {
     }
 
     #[derive(Event)]
-    enum TestEventGeneric<TE1, TE2, ID, Data> {
-        TestEventTuple(TE1),
-        TestEventStruct { event: TE2 },
+    enum TestEventGeneric<ID, Data> {
         TestEventTupleGeneric(TestEventGeneric1<ID, Data>),
         TestEventStructGeneric { event: TestEventGeneric2<ID, Data> },
     }
 
-    type TestEvent = TestEventGeneric<TestEvent1, TestEvent2, i32, String>;
+    type TestEvent = TestEventGeneric<i32, String>;
 
-    assert_eq!(
-        TestEvent::TestEventTuple(Default::default()).event_type(),
-        "test.event.1",
-    );
-    assert_eq!(
-        TestEvent::TestEventStruct {
-            event: Default::default()
-        }
-        .event_type(),
-        "test.event.2",
-    );
     assert_eq!(
         TestEvent::TestEventTupleGeneric(Default::default()).event_type(),
         "test.event.generic.1",

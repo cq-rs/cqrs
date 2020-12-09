@@ -4,6 +4,7 @@
 mod aggregate_event;
 mod event;
 mod registered_event;
+mod typed_event;
 mod versioned_event;
 
 use proc_macro2::TokenStream;
