@@ -149,6 +149,26 @@ impl<Agg> HydratedAggregate<Agg> {
         &self.state
     }
 
+    /// Returns a mutable reference to the inner [`Aggregate`] itself.
+    #[inline(always)]
+    pub fn state_mut(&mut self) -> &mut Agg {
+        &mut self.state
+    }
+
+    /// Destructs this [`HydratedAggregate`] into the inner [`Aggregate`], its current
+    /// [`Version`], and its latest snapshot [`Version`] (if any).
+    #[inline(always)]
+    pub fn into_parts(self) -> (Agg, Version, Option<Version>) {
+        (self.state, self.ver, self.snapshot_ver)
+    }
+
+    /// Unwraps this [`HydratedAggregate`] into the inner [`Aggregate`] loosing any information
+    /// about its [`Version`]s.
+    #[inline(always)]
+    pub fn unwrap(self) -> Agg {
+        self.state
+    }
+
     /// Applies given [`NumberedEvent`] to this [`Aggregate`] renewing its
     /// [`Version`] with [`EventNumber`] of the [`NumberedEvent`].
     #[inline]
@@ -207,6 +227,13 @@ impl<Agg> AsRef<Agg> for HydratedAggregate<Agg> {
     #[inline]
     fn as_ref(&self) -> &Agg {
         &self.state
+    }
+}
+
+impl<Agg> AsMut<Agg> for HydratedAggregate<Agg> {
+    #[inline]
+    fn as_mut(&mut self) -> &mut Agg {
+        &mut self.state
     }
 }
 
