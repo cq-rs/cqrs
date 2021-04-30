@@ -3,13 +3,13 @@ use std::{convert, fmt};
 use cqrs_core::{
     Aggregate, Command, CommandHandler, Event, EventNumber, EventSink, EventSource, EventSourced,
     HydratedAggregate, IntoEvents as _, NumberedEvent, SnapshotRecommendation, SnapshotSink,
-    SnapshotSource, SnapshotStrategy,
+    SnapshotSource, SnapshotStrategy, IntoEvents,
 };
 use derive_more::{Display, Error, From};
 use futures::{future, TryStreamExt as _};
 use smallvec::SmallVec;
 
-use super::{BufferedContext, CommandHandlerContext, CommandHandlerErr, CommandHandlerEvent};
+use super::{BufferedContext, CommandHandlerContext,  CommandHandlerOk,CommandHandlerErr, CommandHandlerEvent};
 
 #[derive(Debug)]
 pub struct Basic<Snp> {
@@ -329,7 +329,8 @@ where
     where
         Cmd: Command,
         Cmd::Aggregate: CommandHandler<Cmd> + EventSourced<CommandHandlerEvent<Cmd>>,
-        CommandHandlerEvent<Cmd>: 'static,
+        CommandHandlerEvent<Cmd>: Event + 'static,
+        CommandHandlerOk<Cmd>: IntoEvents<CommandHandlerEvent<Cmd>> + 'static,
         Mt: ?Sized,
         EvSnk: EventSink<Cmd::Aggregate, CommandHandlerEvent<Cmd>, Mt> + ?Sized,
         SsSnk: SnapshotSink<Cmd::Aggregate> + ?Sized,
@@ -396,7 +397,8 @@ where
     where
         Cmd: Command,
         Cmd::Aggregate: CommandHandler<Cmd> + EventSourced<CommandHandlerEvent<Cmd>>,
-        CommandHandlerEvent<Cmd>: 'static,
+        CommandHandlerEvent<Cmd>: Event + 'static,
+        CommandHandlerOk<Cmd>: IntoEvents<CommandHandlerEvent<Cmd>> + 'static,
         Mt: ?Sized,
         SsSrc: SnapshotSource<Cmd::Aggregate> + ?Sized,
         EvSrc: EventSource<Cmd::Aggregate, CommandHandlerEvent<Cmd>> + ?Sized,

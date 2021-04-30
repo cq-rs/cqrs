@@ -51,17 +51,16 @@ pub trait CommandHandler<Cmd: Command> {
     /// This should be used to provide any additional services/resources
     /// required to handle the [`Command`].
     type Context: ?Sized;
-    /// Type of [`Event`] produced as a result of the [`Command`] handling.
-    type Event: Event;
+    /// Type of event produced as a result of the [`Command`] handling.
+    /// If it doesn't produce any events, consider to specify `()`.
+    type Event;
     /// Type of the error if [`Command`] handling fails. If it never fails,
     /// consider to specify [`Infallible`].
     ///
     /// [`Infallible`]: std::convert::Infallible.
     type Err;
-    /// Type of the result of successful [`Command`] handling. It should be
-    /// convertible into [`Event`]s collection (see [`IntoEvents`] trait for
-    /// details).
-    type Ok: IntoEvents<Self::Event>;
+    /// Type of the result of successful [`Command`] handling.
+    type Ok;
 
     /// Handles and processes given [`Command`] for its [`Aggregate`].
     async fn handle(&self, cmd: Cmd, ctx: &Self::Context) -> Result<Self::Ok, Self::Err>;

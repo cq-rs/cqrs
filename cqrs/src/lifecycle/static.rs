@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use async_trait::async_trait;
 use cqrs_core::{
     Aggregate, Command, CommandHandler, Event, EventSink, EventSource, EventSourced,
-    HydratedAggregate, SnapshotSink, SnapshotSource, SnapshotStrategy,
+    HydratedAggregate, SnapshotSink, SnapshotSource, SnapshotStrategy, IntoEvents,
 };
 
 use crate::{CommandBus, EventHandler, EventProcessingConfiguration, RegisteredEvent};
@@ -12,7 +12,7 @@ use super::{
     Basic, BorrowableAsContext, BufferedContext, CommandHandlerContext, CommandHandlerErr,
     CommandHandlerEvent, Context, ContextWithMeta, EventSinkErr, EventSourceErr,
     ExecAndPersistError, LoadError, LoadExecAndPersistError, LoadRehydrateAndPersistError,
-    PersistError, SnapshotSinkErr, SnapshotSourceErr,
+    PersistError, SnapshotSinkErr, SnapshotSourceErr, CommandHandlerOk,
 };
 
 #[derive(Debug)]
@@ -246,7 +246,8 @@ where
     where
         Cmd: Command,
         Cmd::Aggregate: CommandHandler<Cmd> + EventSourced<CommandHandlerEvent<Cmd>>,
-        CommandHandlerEvent<Cmd>: 'static,
+        CommandHandlerEvent<Cmd>: Event + 'static,
+        CommandHandlerOk<Cmd>: IntoEvents<CommandHandlerEvent<Cmd>> + 'static,
         Mt: ?Sized,
         EvSnk: EventSink<Cmd::Aggregate, CommandHandlerEvent<Cmd>, Mt> + ?Sized,
         SsSnk: SnapshotSink<Cmd::Aggregate> + ?Sized,
@@ -284,7 +285,8 @@ where
     where
         Cmd: Command,
         Cmd::Aggregate: CommandHandler<Cmd> + EventSourced<CommandHandlerEvent<Cmd>>,
-        CommandHandlerEvent<Cmd>: 'static,
+        CommandHandlerEvent<Cmd>: Event + 'static,
+        CommandHandlerOk<Cmd>: IntoEvents<CommandHandlerEvent<Cmd>> + 'static,
         Mt: ?Sized,
         SsSrc: SnapshotSource<Cmd::Aggregate> + ?Sized,
         EvSrc: EventSource<Cmd::Aggregate, CommandHandlerEvent<Cmd>> + ?Sized,
@@ -346,7 +348,8 @@ where
     where
         Cmd: Command,
         Cmd::Aggregate: CommandHandler<Cmd> + EventSourced<CommandHandlerEvent<Cmd>>,
-        CommandHandlerEvent<Cmd>: 'static,
+        CommandHandlerEvent<Cmd>: Event + 'static,
+        CommandHandlerOk<Cmd>: IntoEvents<CommandHandlerEvent<Cmd>> + 'static,
         EvSnk: EventSink<Cmd::Aggregate, CommandHandlerEvent<Cmd>, Mt> + ?Sized,
         SsSnk: SnapshotSink<Cmd::Aggregate> + ?Sized,
         Impl: Borrow<EvSnk> + Borrow<SsSnk>,
@@ -382,7 +385,8 @@ where
     where
         Cmd: Command,
         Cmd::Aggregate: CommandHandler<Cmd> + EventSourced<CommandHandlerEvent<Cmd>>,
-        CommandHandlerEvent<Cmd>: 'static,
+        CommandHandlerEvent<Cmd>: Event + 'static,
+        CommandHandlerOk<Cmd>: IntoEvents<CommandHandlerEvent<Cmd>> + 'static,
         SsSrc: SnapshotSource<Cmd::Aggregate> + ?Sized,
         EvSrc: EventSource<Cmd::Aggregate, CommandHandlerEvent<Cmd>> + ?Sized,
         EvSnk: EventSink<Cmd::Aggregate, CommandHandlerEvent<Cmd>, Mt> + ?Sized,
@@ -428,7 +432,8 @@ where
     Snp: SnapshotStrategy,
     Cmd: Command,
     Cmd::Aggregate: CommandHandler<Cmd> + EventSourced<CommandHandlerEvent<Cmd>>,
-    CommandHandlerEvent<Cmd>: 'static,
+    CommandHandlerEvent<Cmd>: Event + 'static,
+    CommandHandlerOk<Cmd>: IntoEvents<CommandHandlerEvent<Cmd>> + 'static,
     Impl: SnapshotSource<Cmd::Aggregate>
         + EventSource<Cmd::Aggregate, CommandHandlerEvent<Cmd>>
         + EventSink<Cmd::Aggregate, CommandHandlerEvent<Cmd>, Mt>
@@ -475,7 +480,8 @@ where
     Mt: 'a,
     Cmd: Command,
     Cmd::Aggregate: CommandHandler<Cmd> + EventSourced<CommandHandlerEvent<Cmd>>,
-    CommandHandlerEvent<Cmd>: 'static,
+    CommandHandlerEvent<Cmd>: Event + 'static,
+    CommandHandlerOk<Cmd>: IntoEvents<CommandHandlerEvent<Cmd>> + 'static,
     Impl: SnapshotSource<Cmd::Aggregate>
         + EventSource<Cmd::Aggregate, CommandHandlerEvent<Cmd>>
         + EventSink<Cmd::Aggregate, CommandHandlerEvent<Cmd>, Mt>

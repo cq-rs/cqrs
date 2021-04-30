@@ -14,6 +14,7 @@ pub use self::{
     r#static::Static,
 };
 
+type CommandHandlerOk<Cmd> = <<Cmd as Command>::Aggregate as CommandHandler<Cmd>>::Ok;
 type CommandHandlerErr<Cmd> = <<Cmd as Command>::Aggregate as CommandHandler<Cmd>>::Err;
 type CommandHandlerEvent<Cmd> = <<Cmd as Command>::Aggregate as CommandHandler<Cmd>>::Event;
 type CommandHandlerContext<Cmd> = <<Cmd as Command>::Aggregate as CommandHandler<Cmd>>::Context;
