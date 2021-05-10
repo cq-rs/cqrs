@@ -9,7 +9,7 @@ use std::{
 };
 
 #[cfg(feature = "arrayvec")]
-use arrayvec::{Array, ArrayVec};
+use arrayvec::ArrayVec;
 use async_trait::async_trait;
 
 use super::{Aggregate, LocalBoxTryStream, Version};
@@ -247,7 +247,7 @@ impl EventNumber {
     pub const MIN_VALUE: Self =
         // One is absolutely non-zero, and this is required for this to be
         // usable in a `const` context.
-        Self(unsafe {NonZeroU128::new_unchecked(1)});
+        Self(unsafe { NonZeroU128::new_unchecked(1) });
 
     /// Attempts to create a new [`EventNumber`] from a given [`u128`] number.
     /// Returns [`None`] if the given number is `0`.
@@ -516,7 +516,7 @@ impl<Ev> IntoEvents<Ev> for [Ev; 4] {
 }
 
 #[cfg(feature = "arrayvec")]
-impl<Ev, A: Array<Item = Ev>> IntoEvents<Ev> for ArrayVec<A> {
+impl<Ev, const CAP: usize> IntoEvents<Ev> for ArrayVec<Ev, CAP> {
     type Iter = Self;
 
     #[inline]
