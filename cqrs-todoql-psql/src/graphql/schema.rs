@@ -24,7 +24,7 @@ graphql_object!(Query: Context |&self| {
         let context = executor.context();
 
         let conn = context.backend.get()?;
-        let store = TodoStore::new(&*conn);
+        let store = TodoStore::new(conn);
 
         let total_count = store.get_entity_count()?;
 
@@ -70,7 +70,7 @@ graphql_object!(Query: Context |&self| {
         let context = executor.context();
 
         let conn = context.backend.get()?;
-        let store = TodoStore::new(&*conn);
+        let store = TodoStore::new(conn);
 
         let id = TodoId(id.to_string());
 
@@ -113,7 +113,7 @@ graphql_object!(TodoQL: Context |&self| {
     {
         const MAX_PAGE_SIZE: u64 = 1_000;
         let conn = executor.context().backend.get()?;
-        let store = TodoStore::new(&*conn);
+        let store = TodoStore::new(conn);
 
         let before = if let Some(b) = before {
             let event_number = EventNumber::new(b.to_u64().ok_or("Invalid before version; must be a positive number")?).unwrap_or(EventNumber::MIN_VALUE);
@@ -148,8 +148,8 @@ graphql_object!(TodoPage: Context |&self| {
         Ok(self.total_count as i32)
     }
 
-    field edges() -> FieldResult<&[TodoEdge]> {
-        Ok(&*self.edges)
+    field edges() -> FieldResult<&Vec<TodoEdge>> {
+        Ok(&self.edges)
     }
 
     field page_info() -> FieldResult<PageInfo> {
@@ -170,7 +170,7 @@ graphql_object!(TodoEdge: Context |&self| {
         let id = TodoId(self.agg_id.to_string());
 
         let conn = context.backend.get()?;
-        let store = TodoStore::new(&*conn);
+        let store = TodoStore::new(conn);
 
         let entity = store.rehydrate(&id)?
             .map(|agg| TodoQL(Entity::new(id, agg)));
@@ -345,7 +345,7 @@ graphql_object!(Mutations: Context |&self| {
         let new_id = context.id_provider.new_id();
 
         let conn = context.backend.get()?;
-        let store = TodoStore::new(&*conn);
+        let store = TodoStore::new(conn);
 
         let metadata = TodoMetadata {
             initiated_by: String::from("graphql"),
@@ -386,7 +386,7 @@ graphql_object!(TodoMutQL: Context |&self| {
         let id = TodoId(self.0.to_string());
 
         let conn = context.backend.get()?;
-        let store = TodoStore::new(&*conn);
+        let store = TodoStore::new(conn);
 
         let metadata = TodoMetadata {
             initiated_by: String::from("graphql"),
@@ -414,7 +414,7 @@ graphql_object!(TodoMutQL: Context |&self| {
         let id = TodoId(self.0.to_string());
 
         let conn = context.backend.get()?;
-        let store = TodoStore::new(&*conn);
+        let store = TodoStore::new(conn);
 
         let metadata = TodoMetadata {
             initiated_by: String::from("graphql"),
@@ -440,7 +440,7 @@ graphql_object!(TodoMutQL: Context |&self| {
         let id = TodoId(self.0.to_string());
 
         let conn = context.backend.get()?;
-        let store = TodoStore::new(&*conn);
+        let store = TodoStore::new(conn);
 
         let metadata = TodoMetadata {
             initiated_by: String::from("graphql"),
@@ -466,7 +466,7 @@ graphql_object!(TodoMutQL: Context |&self| {
         let id = TodoId(self.0.to_string());
 
         let conn = context.backend.get()?;
-        let store = TodoStore::new(&*conn);
+        let store = TodoStore::new(conn);
 
         let metadata = TodoMetadata {
             initiated_by: String::from("graphql"),
@@ -492,7 +492,7 @@ graphql_object!(TodoMutQL: Context |&self| {
         let id = TodoId(self.0.to_string());
 
         let conn = context.backend.get()?;
-        let store = TodoStore::new(&*conn);
+        let store = TodoStore::new(conn);
 
         let metadata = TodoMetadata {
             initiated_by: String::from("graphql"),
@@ -518,7 +518,7 @@ graphql_object!(TodoMutQL: Context |&self| {
         let id = TodoId(self.0.to_string());
 
         let conn = context.backend.get()?;
-        let store = TodoStore::new(&*conn);
+        let store = TodoStore::new(conn);
 
         let metadata = TodoMetadata {
             initiated_by: String::from("graphql"),

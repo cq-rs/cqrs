@@ -1,20 +1,23 @@
 //! Types for interacting with raw event data in PostgreSQL event store.
 
+use std::sync::Arc;
+use std::sync::Mutex;
+
 use crate::{error::LoadError, util::Sequence};
 use cqrs_core::{BorrowedRawEvent, RawEvent, Since};
-use fallible_iterator::FallibleIterator;
-use postgres::Connection;
+use postgres::Client;
+use postgres::fallible_iterator::FallibleIterator;
 
 /// A connection to a PostgreSQL storage backend that is not specific to any aggregate.
-#[derive(Clone, Copy, Debug)]
-pub struct RawPostgresStore<'conn> {
-    conn: &'conn Connection,
+#[derive(Clone)]
+pub struct RawPostgresStore {
+    conn: Arc<Mutex<Client>>,
 }
 
-impl<'conn> RawPostgresStore<'conn> {
+impl RawPostgresStore {
     /// Reads all events from the event stream, starting with events after `since`,
     pub fn read_all_events(
-        self,
+        &self,
         since: Since,
         max_count: u64,
     ) -> Result<Vec<RawEvent>, postgres::Error> {
@@ -23,17 +26,16 @@ impl<'conn> RawPostgresStore<'conn> {
             Since::Event(x) => x.get(),
         } as i64;
 
-        let trans = self
-            .conn
-            .transaction_with(postgres::transaction::Config::default().read_only(true))?;
+        let mut conn = self.conn.lock().unwrap();
+        let mut trans = conn.build_transaction().read_only(true).start()?;
 
-        let handle_row = |row: postgres::rows::Row| {
+        let handle_row = |row: postgres::Row| {
             let event_id: Sequence = row.get(0);
             let aggregate_type = row.get(1);
             let entity_id = row.get(2);
             let sequence: Sequence = row.get(3);
             let event_type = row.get(4);
-            let payload = row.get_bytes(5).unwrap();
+            let payload = row.get(5);
             log::trace!(
                 "entity {}/{}: loaded event; sequence: {}, type: {}",
                 aggregate_type,
@@ -47,28 +49,27 @@ impl<'conn> RawPostgresStore<'conn> {
                 entity_id,
                 sequence: sequence.0,
                 event_type,
-                payload: payload.to_owned(),
+                payload: payload,
             }
         };
 
         let events: Vec<RawEvent>;
         {
-            let stmt = trans.prepare_cached(
+            let stmt = trans.prepare(
                 "SELECT event_id, aggregate_type, entity_id, sequence, event_type, payload \
                  FROM events \
                  WHERE event_id > $1 \
                  ORDER BY event_id ASC \
                  LIMIT $2",
             )?;
-            let rows = stmt.lazy_query(
-                &trans,
-                &[
-                    &last_sequence,
-                    &(max_count.min(i64::max_value() as u64) as i64),
-                ],
-                100,
-            )?;
 
+            let portal = trans.bind(&stmt, &[
+                &last_sequence,
+                &(max_count.min(i64::max_value() as u64) as i64),
+            ])?;
+
+            let rows = trans.query_portal_raw(&portal, 0)?;
+            
             events = rows
                 .iterator()
                 .map(|row_result| row_result.map(handle_row))
@@ -84,7 +85,7 @@ impl<'conn> RawPostgresStore<'conn> {
 
     /// Reads all events from the event stream, starting with events after `since`,
     pub fn read_all_events_with<E: cqrs_core::CqrsError>(
-        self,
+        &self,
         since: Since,
         max_count: u64,
         mut f: impl for<'row> FnMut(BorrowedRawEvent<'row>) -> Result<(), E>,
@@ -94,17 +95,16 @@ impl<'conn> RawPostgresStore<'conn> {
             Since::Event(x) => x.get(),
         } as i64;
 
-        let trans = self
-            .conn
-            .transaction_with(postgres::transaction::Config::default().read_only(true))?;
+        let mut conn = self.conn.lock().unwrap();
+        let mut trans = conn.build_transaction().read_only(true).start()?;
 
-        let mut handle_row = |row: postgres::rows::Row| -> Result<(), LoadError<E>> {
+        let mut handle_row = |row: postgres::Row| -> Result<(), LoadError<E>> {
             let event_id: Sequence = row.get(0);
-            let aggregate_type = std::str::from_utf8(row.get_bytes(1).unwrap()).unwrap();
-            let entity_id = std::str::from_utf8(row.get_bytes(2).unwrap()).unwrap();
+            let aggregate_type = std::str::from_utf8(row.get(1)).unwrap();
+            let entity_id = std::str::from_utf8(row.get(2)).unwrap();
             let sequence: Sequence = row.get(3);
-            let event_type = std::str::from_utf8(row.get_bytes(4).unwrap()).unwrap();
-            let payload = row.get_bytes(5).unwrap();
+            let event_type = std::str::from_utf8(row.get(4)).unwrap();
+            let payload = row.get(5);
             log::trace!(
                 "entity {}/{}: loaded event; sequence: {}, type: {}",
                 aggregate_type,
@@ -125,21 +125,20 @@ impl<'conn> RawPostgresStore<'conn> {
 
         let events: Vec<()>;
         {
-            let stmt = trans.prepare_cached(
+            let stmt = trans.prepare(
                 "SELECT event_id, aggregate_type, entity_id, sequence, event_type, payload \
                  FROM events \
                  WHERE event_id > $1 \
                  ORDER BY event_id ASC \
                  LIMIT $2",
             )?;
-            let rows = stmt.lazy_query(
-                &trans,
-                &[
-                    &last_sequence,
-                    &(max_count.min(i64::max_value() as u64) as i64),
-                ],
-                100,
-            )?;
+
+            let portal = trans.bind(&stmt, &[
+                &last_sequence,
+                &(max_count.min(i64::max_value() as u64) as i64),
+            ])?;
+
+            let rows = trans.query_portal_raw(&portal, 0)?;
 
             events = rows
                 .iterator()

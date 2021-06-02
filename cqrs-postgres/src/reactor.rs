@@ -2,14 +2,13 @@
 //!
 //! Types for reacting to raw event data in PostgreSQL event store.
 
-use crate::db_wrapper::{DbConnection, DbPool, ReactorError};
+use crate::db_wrapper::{DbConnection, DbPool, NewConn, ReactorError};
 use cqrs_core::{
     reactor::{AggregatePredicate, EventTypesPredicate, Reaction, ReactionPredicate},
     CqrsError, RawEvent,
 };
-use postgres::{rows::Rows, types::ToSql, Connection};
+use postgres::types::ToSql;
 use r2d2::Pool;
-use r2d2_postgres::PostgresConnectionManager;
 use std::{
     fmt::Write,
     sync::atomic::{AtomicBool, Ordering},
@@ -40,7 +39,7 @@ impl Reaction for NullReaction {
 }
 
 #[derive(Debug)]
-pub struct PostgresReactor<P = Pool<PostgresConnectionManager>> {
+pub struct PostgresReactor<P = Pool<NewConn>> {
     pool: P,
     run: AtomicBool,
 }
@@ -67,11 +66,11 @@ where
         let mut event_count = usize::default();
 
         while self.run.load(Ordering::Relaxed) {
-            let conn = self.pool.get().map_err(ReactorError::pool)?;
+            let mut conn = self.pool.get().map_err(ReactorError::pool)?;
             let since = conn
                 .load_since(R::reaction_name())
                 .map_err(ReactorError::postgres)?;
-            let mut params: Vec<Box<dyn ToSql>> = Vec::default();
+            let mut params: Vec<Box<dyn ToSql + Sync>> = Vec::default();
             let query_with_args =
                 self.generate_query_with_args::<R>(reaction.predicate(), &mut params, 100);
 
@@ -100,7 +99,7 @@ where
     fn generate_query_with_args<R: Reaction>(
         &self,
         predicate: ReactionPredicate,
-        params: &mut Vec<Box<dyn ToSql>>,
+        params: &mut Vec<Box<dyn ToSql + Sync>>,
         max_count: u64,
     ) -> String {
         let max_count = Box::new(max_count.min(i64::max_value() as u64) as i64);
@@ -191,8 +190,8 @@ mod tests {
     };
     use lazy_static::lazy_static;
     use parking_lot::Mutex;
-    use postgres::{error, types::ToSql, Connection};
-    use r2d2_postgres::{r2d2::Pool, PostgresConnectionManager, TlsMode};
+    use postgres::{error, types::ToSql};
+    use r2d2_postgres::{r2d2::Pool, PostgresConnectionManager};
     use std::{
         io::{self, Error},
         sync::Arc,
@@ -298,13 +297,13 @@ mod tests {
     impl<'conn> DbConnection<'conn> for MockConnection {
         type Error = String;
 
-        fn load_since(&self, reaction_name: &str) -> Result<Since, Self::Error> {
+        fn load_since(&mut self, reaction_name: &str) -> Result<Since, Self::Error> {
             assert_eq!(reaction_name, self.load_since_data.expected_reaction_name);
             self.load_since_data.result.clone()
         }
 
         fn save_since(
-            &self,
+            &mut self,
             reaction_name: &str,
             event_id: EventNumber,
         ) -> Result<(), Self::Error> {
@@ -314,10 +313,10 @@ mod tests {
         }
 
         fn read_all_events(
-            &self,
+            &mut self,
             query: &str,
             since: Since,
-            params: &[Box<dyn ToSql>],
+            params: &[Box<dyn ToSql + Sync>],
         ) -> Result<Vec<RawEvent>, Self::Error> {
             assert_eq!(since, self.read_all_events_data.expected_since);
 

@@ -1,19 +1,19 @@
 use std::{ops, sync::Arc};
 
+use cqrs_postgres::NewConn;
 use juniper;
 use r2d2::Pool;
-use r2d2_postgres::PostgresConnectionManager;
 
 pub mod endpoint;
 mod schema;
 
 pub struct InnerContext {
-    pub backend: Pool<PostgresConnectionManager>,
+    pub backend: Pool<NewConn>,
     pub id_provider: super::IdProvider,
 }
 
 impl InnerContext {
-    pub fn new(backend: Pool<PostgresConnectionManager>, id_provider: super::IdProvider) -> Self {
+    pub fn new(backend: Pool<NewConn>, id_provider: super::IdProvider) -> Self {
         InnerContext {
             backend,
             id_provider,

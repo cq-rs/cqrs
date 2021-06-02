@@ -9,7 +9,7 @@
     missing_docs
 )]
 #![deny(
-    missing_debug_implementations,
+    // missing_debug_implementations,
     missing_copy_implementations,
     trivial_casts,
     trivial_numeric_casts,
@@ -32,6 +32,8 @@ mod util;
 
 pub mod raw;
 
+pub use db_wrapper::NewConn;
+
 #[doc(inline)]
 pub use crate::error::{LoadError, PersistError};
 #[doc(inline)]
@@ -41,20 +43,20 @@ pub use crate::store::PostgresStore;
 mod tests {
     use super::*;
     use cqrs_todo_core::{TodoAggregate, TodoEvent, TodoMetadata};
-    use static_assertions::assert_impl;
+    use static_assertions::assert_impl_all;
 
     #[test]
     fn postgres_store_is_an_entity_store() {
-        assert_impl!(PostgresStore<TodoAggregate, TodoEvent, TodoMetadata>, cqrs::EntityStore<TodoAggregate, TodoEvent, TodoMetadata>);
+        assert_impl_all!(PostgresStore<TodoAggregate, TodoEvent, TodoMetadata>, cqrs::EntityStore<TodoAggregate, TodoEvent, TodoMetadata>);
     }
 
     #[test]
     fn postgres_store_is_an_entity_source() {
-        assert_impl!(PostgresStore<TodoAggregate, TodoEvent, TodoMetadata>, cqrs::EntitySource<TodoAggregate, TodoEvent>);
+        assert_impl_all!(PostgresStore<TodoAggregate, TodoEvent, TodoMetadata>, cqrs::EntitySource<TodoAggregate, TodoEvent>);
     }
 
     #[test]
     fn postgres_store_is_an_entity_sink() {
-        assert_impl!(PostgresStore<TodoAggregate, TodoEvent, TodoMetadata>, cqrs::EntitySink<TodoAggregate, TodoEvent, TodoMetadata>);
+        assert_impl_all!(PostgresStore<TodoAggregate, TodoEvent, TodoMetadata>, cqrs::EntitySink<TodoAggregate, TodoEvent, TodoMetadata>);
     }
 }

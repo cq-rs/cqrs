@@ -1,33 +1,31 @@
-use crate::{
-    error::{LoadError, PersistError},
-    util::{BorrowedJson, Json, RawJsonPersist, RawJsonRead, Sequence},
-};
+use crate::{NewConn, error::{LoadError, PersistError}, util::Sequence};
 use cqrs_core::{
     Aggregate, AggregateEvent, AggregateId, Before, DeserializableEvent, EventNumber, EventSink,
     EventSource, NeverSnapshot, Precondition, SerializableEvent, Since, SnapshotRecommendation,
     SnapshotSink, SnapshotSource, SnapshotStrategy, Version, VersionedAggregate, VersionedEvent,
     VersionedEventWithMetadata,
 };
-use fallible_iterator::{FallibleIterator, IntoFallibleIterator};
 use num_traits::FromPrimitive;
-use postgres::Connection;
+use postgres::{Client, fallible_iterator::FallibleIterator};
+use r2d2::PooledConnection;
 use serde::{de::DeserializeOwned, Serialize};
-use std::{fmt, marker::PhantomData};
+use serde_json::Value;
+use std::{fmt, marker::PhantomData, sync::{Arc, Mutex}};
 
 /// A PostgreSQL storage backend.
 #[derive(Clone)]
-pub struct PostgresStore<'conn, A, E, M, S = NeverSnapshot>
+pub struct PostgresStore<A, E, M, S = NeverSnapshot>
 where
     A: Aggregate,
     E: AggregateEvent<A>,
     S: SnapshotStrategy,
 {
-    conn: &'conn Connection,
+    conn: Arc<Mutex<PooledConnection<NewConn>>>,
     snapshot_strategy: S,
-    _phantom: PhantomData<&'conn (A, E, M)>,
+    _phantom: PhantomData<(A, E, M)>,
 }
 
-impl<'conn, A, E, M, S> fmt::Debug for PostgresStore<'conn, A, E, M, S>
+impl<A, E, M, S> fmt::Debug for PostgresStore<A, E, M, S>
 where
     A: Aggregate,
     E: AggregateEvent<A>,
@@ -35,14 +33,13 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("PostgresStore")
-            .field("conn", &*self.conn)
             .field("strategy", &self.snapshot_strategy)
             .field("phantom", &self._phantom)
             .finish()
     }
 }
 
-impl<'conn, A, E, M, S> PostgresStore<'conn, A, E, M, S>
+impl<A, E, M, S> PostgresStore<A, E, M, S>
 where
     A: Aggregate,
     E: AggregateEvent<A>,
@@ -51,18 +48,18 @@ where
     const DB_VERSION: u32 = 1;
 
     /// Constructs a transient store based on a provided PostgreSQL connection using the default snapshot strategy.
-    pub fn new(conn: &'conn Connection) -> Self {
+    pub fn new(conn: PooledConnection<NewConn>) -> Self {
         PostgresStore {
-            conn,
+            conn: Arc::new(Mutex::new(conn)),
             snapshot_strategy: S::default(),
             _phantom: PhantomData,
         }
     }
 
     /// Constructs a transient store based on a provided PostgreSQL connection and snapshot strategy.
-    pub fn with_snapshot_strategy(conn: &'conn Connection, snapshot_strategy: S) -> Self {
+    pub fn with_snapshot_strategy(conn: PooledConnection<NewConn>, snapshot_strategy: S) -> Self {
         PostgresStore {
-            conn,
+            conn: Arc::new(Mutex::new(conn)),
             snapshot_strategy,
             _phantom: PhantomData,
         }
@@ -70,11 +67,11 @@ where
 
     /// Creates the base set of tables required to support the CQRS system.
     pub fn create_tables(&self) -> Result<(), postgres::Error> {
-        self.conn
-            .batch_execute(include_str!("migrations/00_create_migrations.sql"))?;
+        let mut conn = self.conn.lock().unwrap();
+        
+        conn.batch_execute(include_str!("migrations/00_create_migrations.sql"))?;
 
-        let current_version: i32 = self
-            .conn
+        let current_version: i32 = conn
             .query("SELECT MAX(version) from migrations", &[])?
             .iter()
             .next()
@@ -82,8 +79,7 @@ where
             .unwrap_or_default();
 
         if current_version < 1 {
-            self.conn
-                .batch_execute(include_str!("migrations/01_create_tables.sql"))?;
+            conn.batch_execute(include_str!("migrations/01_create_tables.sql"))?;
         }
 
         Ok(())
@@ -93,6 +89,8 @@ where
     pub fn is_latest(&self) -> Result<bool, postgres::Error> {
         let current_version: i32 = self
             .conn
+            .lock()
+            .unwrap()
             .query("SELECT MAX(version) from migrations", &[])?
             .iter()
             .next()
@@ -106,6 +104,8 @@ where
     pub fn is_compatible(&self) -> Result<bool, postgres::Error> {
         let current_version: i32 = self
             .conn
+            .lock()
+            .unwrap()
             .query("SELECT MAX(version) from migrations", &[])?
             .iter()
             .next()
@@ -117,12 +117,14 @@ where
 
     /// Gets the total number of entities of this type in the store.
     pub fn get_entity_count(&self) -> Result<u64, postgres::Error> {
-        let stmt = self.conn.prepare_cached(
+        let mut conn = self.conn.lock().unwrap();
+
+        let stmt = conn.prepare(
             "SELECT COUNT(DISTINCT entity_id) \
              FROM events \
              WHERE aggregate_type = $1",
         )?;
-        let rows = stmt.query(&[&A::aggregate_type()])?;
+        let rows = conn.query(&stmt, &[&A::aggregate_type()])?;
         Ok(rows
             .iter()
             .next()
@@ -132,13 +134,14 @@ where
 
     /// Loads a page of entity IDs.
     pub fn get_entity_ids(&self, offset: u32, limit: u32) -> Result<Vec<String>, postgres::Error> {
-        let stmt = self.conn.prepare_cached(
+        let mut conn = self.conn.lock().unwrap();
+        let stmt = conn.prepare(
             "SELECT DISTINCT entity_id \
              FROM events \
              WHERE aggregate_type = $1 \
              OFFSET $2 LIMIT $3",
         )?;
-        let rows = stmt.query(&[
+        let rows = conn.query(&stmt, &[
             &A::aggregate_type(),
             &(i64::from(offset)),
             &(i64::from(limit)),
@@ -155,12 +158,14 @@ where
     ///
     /// See the [PostgreSQL documentation on pattern matching](https://www.postgresql.org/docs/current/functions-matching.html#FUNCTIONS-LIKE)
     pub fn get_entity_count_matching_pattern(&self, pattern: &str) -> Result<u64, postgres::Error> {
-        let stmt = self.conn.prepare_cached(
+        let mut conn = self.conn.lock().unwrap();
+
+        let stmt = conn.prepare(
             "SELECT COUNT(DISTINCT entity_id) \
              FROM events \
              WHERE aggregate_type = $1 AND entity_id LIKE $2",
         )?;
-        let rows = stmt.query(&[&A::aggregate_type(), &pattern])?;
+        let rows = conn.query(&stmt, &[&A::aggregate_type(), &pattern])?;
         Ok(rows
             .iter()
             .next()
@@ -182,13 +187,15 @@ where
         offset: u32,
         limit: u32,
     ) -> Result<Vec<String>, postgres::Error> {
-        let stmt = self.conn.prepare_cached(
+        let mut conn = self.conn.lock().unwrap();
+
+        let stmt = conn.prepare(
             "SELECT DISTINCT entity_id \
              FROM events \
              WHERE aggregate_type = $1 AND entity_id LIKE $2 \
              OFFSET $3 LIMIT $4",
         )?;
-        let rows = stmt.query(&[
+        let rows = conn.query(&stmt, &[
             &A::aggregate_type(),
             &pattern,
             &(i64::from(offset)),
@@ -201,12 +208,14 @@ where
     ///
     /// See the [PostgreSQL documentation on pattern matching](https://www.postgresql.org/docs/current/functions-matching.html#FUNCTIONS-SIMILARTO-REGEXP)
     pub fn get_entity_count_matching_sql_regex(&self, regex: &str) -> Result<u64, postgres::Error> {
-        let stmt = self.conn.prepare_cached(
+        let mut conn = self.conn.lock().unwrap();
+
+        let stmt = conn.prepare(
             "SELECT COUNT(DISTINCT entity_id) \
              FROM events \
              WHERE aggregate_type = $1 AND entity_id SIMILAR TO $2",
         )?;
-        let rows = stmt.query(&[&A::aggregate_type(), &regex])?;
+        let rows = conn.query(&stmt, &[&A::aggregate_type(), &regex])?;
         Ok(rows
             .iter()
             .next()
@@ -223,13 +232,15 @@ where
         offset: u32,
         limit: u32,
     ) -> Result<Vec<String>, postgres::Error> {
-        let stmt = self.conn.prepare_cached(
+        let mut conn = self.conn.lock().unwrap();
+
+        let stmt = conn.prepare(
             "SELECT DISTINCT entity_id \
              FROM events \
              WHERE aggregate_type = $1 AND entity_id SIMILAR TO $2 \
              OFFSET $3 LIMIT $4",
         )?;
-        let rows = stmt.query(&[
+        let rows = conn.query(&stmt, &[
             &A::aggregate_type(),
             &regex,
             &(i64::from(offset)),
@@ -245,12 +256,14 @@ where
         &self,
         regex: &str,
     ) -> Result<u64, postgres::Error> {
-        let stmt = self.conn.prepare_cached(
+        let mut conn = self.conn.lock().unwrap();
+
+        let stmt = conn.prepare(
             "SELECT COUNT(DISTINCT entity_id) \
              FROM events \
              WHERE aggregate_type = $1 AND entity_id ~ $2",
         )?;
-        let rows = stmt.query(&[&A::aggregate_type(), &regex])?;
+        let rows = conn.query(&stmt, &[&A::aggregate_type(), &regex])?;
         Ok(rows
             .iter()
             .next()
@@ -267,13 +280,15 @@ where
         offset: u32,
         limit: u32,
     ) -> Result<Vec<String>, postgres::Error> {
-        let stmt = self.conn.prepare_cached(
+        let mut conn = self.conn.lock().unwrap();
+
+        let stmt = conn.prepare(
             "SELECT DISTINCT entity_id \
              FROM events \
              WHERE aggregate_type = $1 AND entity_id ~ $2 \
              OFFSET $3 LIMIT $4",
         )?;
-        let rows = stmt.query(&[
+        let rows = conn.query(&stmt, &[
             &A::aggregate_type(),
             &regex,
             &(i64::from(offset)),
@@ -306,16 +321,15 @@ where
         } as i64;
 
         let events;
-        let trans = self
-            .conn
-            .transaction_with(postgres::transaction::Config::default().read_only(true))?;
+        let mut conn = self.conn.lock().unwrap();
+        let mut trans = conn.build_transaction().read_only(true).start()?;
 
-        let handle_row = |row: postgres::rows::Row| {
+        let handle_row = |row: postgres::Row| {
             let sequence: Sequence = row.get(0);
             let event_type: String = row.get(1);
-            let raw: RawJsonRead = row.get(2);
-            let metadata: Json<M> = row.get(3);
-            let event = E::deserialize_event_from_buffer(&raw.0, &event_type)
+            let raw: Vec<u8> = row.get(2);
+            let metadata: Value = row.get(3);
+            let event = E::deserialize_event_from_buffer(&raw, &event_type)
                 .map_err(LoadError::DeserializationError)?
                 .ok_or_else(|| LoadError::UnknownEventType(event_type.clone()))?;
             log::trace!(
@@ -327,7 +341,7 @@ where
             Ok(VersionedEventWithMetadata {
                 sequence: sequence.0,
                 event,
-                metadata: metadata.0,
+                metadata: serde_json::from_value(metadata).unwrap(),
             })
         };
 
@@ -335,35 +349,33 @@ where
         {
             let mut rows;
             if let Some(max_count) = max_count {
-                stmt = trans.prepare_cached(
+                stmt = trans.prepare(
                     "SELECT sequence, event_type, payload, metadata \
                      FROM events \
                      WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
                      ORDER BY sequence ASC \
                      LIMIT $4",
                 )?;
-                rows = stmt.lazy_query(
-                    &trans,
-                    &[
-                        &A::aggregate_type(),
-                        &id.as_str(),
-                        &last_sequence,
-                        &(max_count.min(i64::max_value() as u64) as i64),
-                    ],
-                    100,
-                )?;
+
+                let portal = trans.bind(&stmt, &[
+                    &A::aggregate_type(),
+                    &id.as_str(),
+                    &last_sequence,
+                    &(max_count.min(i64::max_value() as u64) as i64),
+                ])?;
+    
+                rows = trans.query_portal_raw(&portal, 0)?;
             } else {
-                stmt = trans.prepare_cached(
+                stmt = trans.prepare(
                     "SELECT sequence, event_type, payload, metadata \
                      FROM events \
                      WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
                      ORDER BY sequence ASC",
                 )?;
-                rows = stmt.lazy_query(
-                    &trans,
-                    &[&A::aggregate_type(), &id.as_str(), &last_sequence],
-                    100,
-                )?;
+
+                let portal = trans.bind(&stmt,  &[&A::aggregate_type(), &id.as_str(), &last_sequence])?;
+    
+                rows = trans.query_portal_raw(&portal, 0)?;
             }
 
             let (lower, upper) = rows.size_hint();
@@ -408,16 +420,15 @@ where
         };
 
         let events;
-        let trans = self
-            .conn
-            .transaction_with(postgres::transaction::Config::default().read_only(true))?;
+        let mut conn = self.conn.lock().unwrap();
+        let mut trans = conn.build_transaction().read_only(true).start()?;
 
-        let handle_row = |row: postgres::rows::Row| {
+        let handle_row = |row: postgres::Row| {
             let sequence: Sequence = row.get(0);
             let event_type: String = row.get(1);
-            let raw: RawJsonRead = row.get(2);
-            let metadata: Json<M> = row.get(3);
-            let event = E::deserialize_event_from_buffer(&raw.0, &event_type)
+            let raw: Vec<u8> = row.get(2);
+            let metadata: Value = row.get(3);
+            let event = E::deserialize_event_from_buffer(&raw, &event_type)
                 .map_err(LoadError::DeserializationError)?
                 .ok_or_else(|| LoadError::UnknownEventType(event_type.clone()))?;
             log::trace!(
@@ -429,7 +440,7 @@ where
             Ok(VersionedEventWithMetadata {
                 sequence: sequence.0,
                 event,
-                metadata: metadata.0,
+                metadata: serde_json::from_value(metadata).unwrap(),
             })
         };
 
@@ -437,35 +448,33 @@ where
         {
             let mut rows;
             if let Some(max_count) = max_count {
-                stmt = trans.prepare_cached(
+                stmt = trans.prepare(
                     "SELECT sequence, event_type, payload, metadata \
                      FROM events \
                      WHERE aggregate_type = $1 AND entity_id = $2 AND sequence < $3 \
                      ORDER BY sequence DESC \
                      LIMIT $4",
                 )?;
-                rows = stmt.lazy_query(
-                    &trans,
-                    &[
-                        &A::aggregate_type(),
-                        &id.as_str(),
-                        &last_sequence,
-                        &(max_count.min(i64::max_value() as u64) as i64),
-                    ],
-                    100,
-                )?;
+
+                let portal = trans.bind(&stmt, &[
+                    &A::aggregate_type(),
+                    &id.as_str(),
+                    &last_sequence,
+                    &(max_count.min(i64::max_value() as u64) as i64),
+                ])?;
+    
+                rows = trans.query_portal_raw(&portal, 0)?;
             } else {
-                stmt = trans.prepare_cached(
+                stmt = trans.prepare(
                     "SELECT sequence, event_type, payload, metadata \
                      FROM events \
                      WHERE aggregate_type = $1 AND entity_id = $2 AND sequence < $3 \
                      ORDER BY sequence DESC",
                 )?;
-                rows = stmt.lazy_query(
-                    &trans,
-                    &[&A::aggregate_type(), &id.as_str(), &last_sequence],
-                    100,
-                )?;
+
+                let portal = trans.bind(&stmt, &[&A::aggregate_type(), &id.as_str(), &last_sequence])?;
+    
+                rows = trans.query_portal_raw(&portal, 0)?;
             }
 
             let (lower, upper) = rows.size_hint();
@@ -486,11 +495,11 @@ where
     }
 }
 
-impl<'conn, A, E, M, S> EventSink<A, E, M> for PostgresStore<'conn, A, E, M, S>
+impl<A, E, M, S> EventSink<A, E, M> for PostgresStore<A, E, M, S>
 where
     A: Aggregate,
     E: AggregateEvent<A> + SerializableEvent + fmt::Debug,
-    M: Serialize + fmt::Debug,
+    M: Serialize + fmt::Debug + Sync,
     S: SnapshotStrategy,
 {
     type Error = PersistError<<E as SerializableEvent>::Error>;
@@ -505,13 +514,15 @@ where
     where
         I: AggregateId<A>,
     {
-        let trans = self.conn.transaction()?;
+        let mut conn = self.conn.lock().unwrap();
+        let mut trans = conn.transaction()?;
 
-        let check_stmt = trans.prepare_cached(
+        let check_stmt = trans.prepare(
             "SELECT MAX(sequence) FROM events WHERE aggregate_type = $1 AND entity_id = $2",
         )?;
 
-        let result = check_stmt.query(&[&A::aggregate_type(), &id.as_str()])?;
+        let result = trans.query(&check_stmt, &[&A::aggregate_type(), &id.as_str()])?;
+
         let current_version = result.iter().next().and_then(|r| {
             let max_sequence: Option<Sequence> = r.get(0);
             max_sequence.map(|x| Version::from(x.0))
@@ -537,22 +548,23 @@ where
         let mut next_sequence = Version::Number(first_sequence);
         let mut buffer = Vec::with_capacity(128);
 
-        let stmt = trans.prepare_cached(
+        let stmt = trans.prepare(
             "INSERT INTO events (aggregate_type, entity_id, sequence, event_type, payload, metadata, timestamp) \
             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)",
         )?;
+        let metadata_val = serde_json::to_value(metadata).unwrap();
         for event in events {
             buffer.clear();
             event
                 .serialize_event_to_buffer(&mut buffer)
                 .map_err(PersistError::SerializationError)?;
-            let modified_count = stmt.execute(&[
+            let modified_count = trans.execute(&stmt, &[
                 &A::aggregate_type(),
                 &id.as_str(),
                 &(next_sequence.get() as i64),
                 &event.event_type(),
-                &RawJsonPersist(&buffer),
-                &BorrowedJson(&metadata),
+                &buffer,
+                &metadata_val,
             ])?;
             debug_assert!(modified_count > 0);
             log::trace!(
@@ -569,7 +581,7 @@ where
     }
 }
 
-impl<'conn, A, E, M, S> EventSource<A, E> for PostgresStore<'conn, A, E, M, S>
+impl<A, E, M, S> EventSource<A, E> for PostgresStore<A, E, M, S>
 where
     A: Aggregate,
     E: AggregateEvent<A> + DeserializableEvent,
@@ -592,15 +604,14 @@ where
             cqrs_core::Since::Event(x) => x.get(),
         } as i64;
 
-        let trans = self
-            .conn
-            .transaction_with(postgres::transaction::Config::default().read_only(true))?;
+        let mut conn = self.conn.lock().unwrap();
+        let mut trans = conn.build_transaction().read_only(true).start()?;
 
-        let handle_row = |row: postgres::rows::Row| {
+        let handle_row = |row: postgres::Row| {
             let sequence: Sequence = row.get(0);
             let event_type: String = row.get(1);
-            let raw: RawJsonRead = row.get(2);
-            let event = E::deserialize_event_from_buffer(&raw.0, &event_type)
+            let raw: Vec<u8> = row.get(2);
+            let event = E::deserialize_event_from_buffer(&raw, &event_type)
                 .map_err(LoadError::DeserializationError)?
                 .ok_or_else(|| LoadError::UnknownEventType(event_type.clone()))?;
             log::trace!(
@@ -617,42 +628,42 @@ where
 
         let events: Vec<VersionedEvent<E>> =
             if let Some(max_count) = max_count.and_then(i64::from_u64) {
-                let stmt = trans.prepare_cached(
+                let stmt = trans.prepare(
                     "SELECT sequence, event_type, payload \
                      FROM events \
                      WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
                      ORDER BY sequence ASC \
                      LIMIT $4",
                 )?;
-                let rows = stmt.lazy_query(
-                    &trans,
-                    &[
-                        &A::aggregate_type(),
-                        &id.as_str(),
-                        &last_sequence,
-                        &max_count,
-                    ],
-                    100,
-                )?;
-                rows.into_fallible_iterator()
+
+                let portal = trans.bind(&stmt, &[
+                    &A::aggregate_type(),
+                    &id.as_str(),
+                    &last_sequence,
+                    &max_count,
+                ])?;
+    
+                let rows = trans.query_portal_raw(&portal, 0)?;
+
+                rows
                     .map_err(LoadError::Postgres)
-                    .and_then(handle_row)
+                    .map(handle_row)
                     .collect()?
             } else {
-                let stmt = trans.prepare_cached(
+                let stmt = trans.prepare(
                     "SELECT sequence, event_type, payload \
                      FROM events \
                      WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
                      ORDER BY sequence ASC",
                 )?;
-                let rows = stmt.lazy_query(
-                    &trans,
-                    &[&A::aggregate_type(), &id.as_str(), &last_sequence],
-                    100,
-                )?;
-                rows.into_fallible_iterator()
+
+                let portal = trans.bind(&stmt, &[&A::aggregate_type(), &id.as_str(), &last_sequence])?;
+    
+                let rows = trans.query_portal_raw(&portal, 0)?;
+
+                rows
                     .map_err(LoadError::Postgres)
-                    .and_then(handle_row)
+                    .map(handle_row)
                     .collect()?
             };
 
@@ -664,9 +675,9 @@ where
     }
 }
 
-impl<'conn, A, E, M, S> SnapshotSink<A> for PostgresStore<'conn, A, E, M, S>
+impl<A, E, M, S> SnapshotSink<A> for PostgresStore<A, E, M, S>
 where
-    A: Aggregate + Serialize + fmt::Debug,
+    A: Aggregate + Serialize + fmt::Debug + Sync,
     E: AggregateEvent<A>,
     S: SnapshotStrategy,
 {
@@ -691,19 +702,20 @@ where
             return Ok(last_snapshot_version.unwrap_or_default());
         }
 
-        let stmt = self.conn.prepare_cached(
+        let mut conn = self.conn.lock().unwrap();
+        let stmt = conn.prepare(
             "INSERT INTO snapshots (aggregate_type, entity_id, sequence, payload) \
              VALUES ($1, $2, $3, $4)",
         )?;
-        let _modified_count = stmt.execute(&[
+        let _modified_count = conn.execute(&stmt, &[
             &A::aggregate_type(),
             &id.as_str(),
             &(version.get() as i64),
-            &Json(aggregate),
+            &serde_json::to_value(aggregate).unwrap(),
         ])?;
 
         // Clean up strategy for snapshots?
-        //        let stmt = self.conn.prepare_cached("DELETE FROM snapshots WHERE aggregate_type = $1 AND entity_id = $2 AND sequence < $3")?;
+        //        let stmt = conn.prepare("DELETE FROM snapshots WHERE aggregate_type = $1 AND entity_id = $2 AND sequence < $3")?;
         //        let _modified_count = stmt.execute(&[&A::aggregate_type(), &id.as_str(), &(version.get() as i64)])?;
 
         log::trace!("entity {}: persisted snapshot", id.as_str());
@@ -711,7 +723,7 @@ where
     }
 }
 
-impl<'conn, A, E, M, S> SnapshotSource<A> for PostgresStore<'conn, A, E, M, S>
+impl<A, E, M, S> SnapshotSource<A> for PostgresStore<A, E, M, S>
 where
     A: Aggregate + DeserializeOwned,
     E: AggregateEvent<A>,
@@ -723,21 +735,22 @@ where
     where
         I: AggregateId<A>,
     {
-        let stmt = self.conn.prepare_cached(
+        let mut conn = self.conn.lock().unwrap();
+        let stmt = conn.prepare(
             "SELECT sequence, payload \
              FROM snapshots \
              WHERE aggregate_type = $1 AND entity_id = $2 \
              ORDER BY sequence DESC \
              LIMIT 1",
         )?;
-        let rows = stmt.query(&[&A::aggregate_type(), &id.as_str()])?;
+        let rows = conn.query(&stmt, &[&A::aggregate_type(), &id.as_str()])?;
         if let Some(row) = rows.iter().next() {
             let sequence: Sequence = row.get(0);
-            let raw: Json<A> = row.get(1);
+            let raw: Value = row.get(1);
             log::trace!("entity {}: loaded snapshot", id.as_str());
             Ok(Some(VersionedAggregate {
                 version: Version::from(sequence.0),
-                payload: raw.0,
+                payload: serde_json::from_value(raw).unwrap(),
             }))
         } else {
             log::trace!("entity {}: no snapshot found", id.as_str());

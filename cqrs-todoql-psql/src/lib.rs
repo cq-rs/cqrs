@@ -12,7 +12,8 @@ extern crate juniper;
 
 mod graphql;
 
-use r2d2_postgres::PostgresConnectionManager;
+use cqrs_postgres::NewConn;
+use r2d2_postgres::{PostgresConnectionManager, postgres::NoTls};
 
 #[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
 struct SnapshotEvery10;
@@ -31,8 +32,7 @@ impl cqrs::SnapshotStrategy for SnapshotEvery10 {
     }
 }
 
-type TodoStore<'conn> = cqrs_postgres::PostgresStore<
-    'conn,
+type TodoStore = cqrs_postgres::PostgresStore<
     cqrs_todo_core::TodoAggregate,
     cqrs_todo_core::TodoEvent,
     cqrs_todo_core::TodoMetadata,
@@ -41,7 +41,7 @@ type TodoStore<'conn> = cqrs_postgres::PostgresStore<
 
 pub fn start_todo_server(conn_str: &str, prefill_qty: usize) -> iron::Listening {
     let pool = r2d2::Pool::new(
-        PostgresConnectionManager::new(conn_str, r2d2_postgres::TlsMode::None).unwrap(),
+        NewConn::new(PostgresConnectionManager::new(conn_str.parse().unwrap(), NoTls)),
     )
     .unwrap();
 
@@ -56,11 +56,11 @@ pub fn start_todo_server(conn_str: &str, prefill_qty: usize) -> iron::Listening 
     let id_provider = IdProvider(hashid, Default::default());
 
     {
-        let conn = pool.get().unwrap();
+
         for _ in 0..prefill_qty {
             let id = id_provider.new_id();
 
-            helper::prefill(&id, &conn);
+            helper::prefill(&id, pool.get().unwrap());
         }
     }
 
@@ -86,15 +86,15 @@ impl IdProvider {
 mod helper {
     use chrono::{Duration, TimeZone, Utc};
     use cqrs::{AlwaysSnapshot, EventSink, SnapshotSink, Version};
+    use cqrs_postgres::NewConn;
     use cqrs_todo_core::{
         domain, events, TodoAggregate, TodoData, TodoEvent, TodoId, TodoMetadata, TodoStatus,
     };
-    use r2d2_postgres::postgres::Connection;
+    use r2d2::PooledConnection;
+    type TodoStore =
+        cqrs_postgres::PostgresStore<TodoAggregate, TodoEvent, TodoMetadata, AlwaysSnapshot>;
 
-    type TodoStore<'conn> =
-        cqrs_postgres::PostgresStore<'conn, TodoAggregate, TodoEvent, TodoMetadata, AlwaysSnapshot>;
-
-    pub fn prefill(id: &TodoId, conn: &Connection) {
+    pub fn prefill(id: &TodoId, conn: PooledConnection<NewConn>) {
         let epoch = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
         let reminder_time = epoch + Duration::seconds(10000);
         let mut events = Vec::new();
@@ -115,7 +115,7 @@ mod helper {
             new_reminder: None,
         }));
 
-        let store = TodoStore::new(&*conn);
+        let store = TodoStore::new(conn);
 
         if let Err(err) = store.create_tables() {
             eprintln!("Error preparing tables: {:?}", err);

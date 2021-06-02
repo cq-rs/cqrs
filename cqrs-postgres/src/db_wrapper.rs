@@ -1,8 +1,8 @@
 use crate::util::Sequence;
 use cqrs_core::{reactor::Reaction, CqrsError, EventNumber, RawEvent, Since};
 use num_traits::ToPrimitive;
-use postgres::{rows::Row, types::ToSql};
-use r2d2::{Pool, PooledConnection};
+use postgres::{Row, Socket, tls::{MakeTlsConnect, TlsConnect}, types::ToSql};
+use r2d2::{ManageConnection, Pool, PooledConnection};
 use r2d2_postgres::PostgresConnectionManager;
 use std::{error, fmt, sync::Arc};
 
@@ -71,18 +71,49 @@ pub trait DbPool<'conn> {
 
 pub trait DbConnection<'conn> {
     type Error: CqrsError;
-    fn load_since(&self, reaction_name: &str) -> Result<Since, Self::Error>;
-    fn save_since(&self, reaction_name: &str, event_id: EventNumber) -> Result<(), Self::Error>;
+    fn load_since(&mut self, reaction_name: &str) -> Result<Since, Self::Error>;
+    fn save_since(&mut self, reaction_name: &str, event_id: EventNumber) -> Result<(), Self::Error>;
     fn read_all_events(
-        &self,
+        &mut self,
         query: &str,
         since: Since,
-        params: &[Box<dyn ToSql>],
+        params: &[Box<dyn ToSql + Sync>],
     ) -> Result<Vec<RawEvent>, Self::Error>;
 }
 
-impl<'conn> DbPool<'conn> for Pool<PostgresConnectionManager> {
-    type Connection = PooledConnection<PostgresConnectionManager>;
+pub struct NewConn(Box<dyn ManageConnection<Connection = postgres::Client, Error = postgres::Error>>);
+
+impl NewConn {
+    pub fn new<T>(mgr: PostgresConnectionManager<T>) -> NewConn
+    where
+        T: MakeTlsConnect<Socket> + Clone + 'static + Sync + Send,
+        T::TlsConnect: Send,
+        T::Stream: Send,
+        <T::TlsConnect as TlsConnect<Socket>>::Future: Send {
+        NewConn(Box::new(mgr))
+    }
+}
+
+impl ManageConnection for NewConn {
+    type Connection = postgres::Client;
+
+    type Error = postgres::Error;
+
+    fn connect(&self) -> Result<Self::Connection, Self::Error> {
+        self.0.connect()
+    }
+
+    fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
+        self.0.is_valid(conn)
+    }
+
+    fn has_broken(&self, conn: &mut Self::Connection) -> bool {
+        self.0.has_broken(conn)
+    }
+}
+
+impl<'conn> DbPool<'conn> for Pool<NewConn> {
+    type Connection = PooledConnection<NewConn>;
     type Error = r2d2::Error;
 
     fn get(&self) -> Result<Self::Connection, Self::Error> {
@@ -90,36 +121,42 @@ impl<'conn> DbPool<'conn> for Pool<PostgresConnectionManager> {
     }
 }
 
-impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> {
+impl<'conn> DbConnection<'conn> for PooledConnection<NewConn> {
     type Error = postgres::Error;
 
-    fn load_since(&self, reaction_name: &str) -> Result<Since, Self::Error> {
-        let stmt = self.prepare_cached(
+    fn load_since(&mut self, reaction_name: &str) -> Result<Since, Self::Error> {
+        let stmt = self.prepare(
             "SELECT event_id \
              FROM reactions \
              WHERE reaction_name = $1 \
              LIMIT 1",
         )?;
 
-        let rows = stmt.query(&[&reaction_name])?;
+        let rows = self.query(&stmt,&[&reaction_name])?;
 
-        if rows.len() > 0 {
-            let event_id: Sequence = rows.get(0).get(0);
-            return Ok(Since::Event(event_id.0));
+        match rows.get(0){
+            Some(row) => {
+                let col: i64 = row.get(0);
+                match EventNumber::new(col.unsigned_abs()) {
+                    Some(num) => Ok(Since::Event(num)),
+                    None => Ok(Since::BeginningOfStream),
+                }
+            },
+            None => Ok(Since::BeginningOfStream),
         }
 
-        Ok(Since::BeginningOfStream)
+        
     }
 
-    fn save_since(&self, reaction_name: &str, event_id: EventNumber) -> Result<(), Self::Error> {
-        let stmt = self.prepare_cached(
+    fn save_since(&mut self, reaction_name: &str, event_id: EventNumber) -> Result<(), Self::Error> {
+        let stmt = self.prepare(
             "INSERT INTO reactions (reaction_name, event_id) \
              VALUES ($1, $2) \
              ON CONFLICT (reaction_name) \
              DO UPDATE SET event_id = EXCLUDED.event_id",
         )?;
 
-        stmt.execute(&[
+        self.query(&stmt, &[
             &reaction_name,
             &event_id
                 .get()
@@ -131,23 +168,23 @@ impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> 
     }
 
     fn read_all_events(
-        &self,
+        &mut self,
         query: &str,
         since: Since,
-        params: &[Box<ToSql>],
+        params: &[Box<dyn ToSql + Sync>],
     ) -> Result<Vec<RawEvent>, Self::Error> {
         let last_sequence = match since {
             Since::BeginningOfStream => 0,
             Since::Event(x) => x.get(),
         } as i64;
 
-        fn handle_row(row: Row) -> RawEvent {
+        fn handle_row(row: &mut Row) -> RawEvent {
             let event_id: Sequence = row.get(0);
             let aggregate_type = row.get(1);
             let entity_id = row.get(2);
             let sequence: Sequence = row.get(3);
             let event_type = row.get(4);
-            let payload = row.get_bytes(5).unwrap();
+            let payload: Vec<u8> = row.get(5);
             RawEvent {
                 event_id: event_id.0,
                 aggregate_type,
@@ -156,20 +193,20 @@ impl<'conn> DbConnection<'conn> for PooledConnection<PostgresConnectionManager> 
                 event_type,
                 payload: payload.to_owned(),
             }
-        };
+        }
 
         let events: Vec<RawEvent>;
-        {
-            let rows = {
-                let local_params: Vec<_> = ::std::iter::once::<&dyn ToSql>(&last_sequence)
+        // {
+            let mut rows = {
+                let local_params: Vec<_> = ::std::iter::once::<&(dyn ToSql + Sync)>(&last_sequence)
                     .chain(params.iter().map(|p| &**p))
                     .collect();
-                let stmt = self.prepare_cached(query)?;
-                stmt.query(&local_params)?
+                let stmt = self.prepare(query)?;
+                self.query(&stmt, &local_params[..])?
             };
 
-            events = (&rows).into_iter().map(handle_row).collect();
-        }
+            events = rows.iter_mut().map(handle_row).collect();
+        // }
 
         Ok(events)
     }
