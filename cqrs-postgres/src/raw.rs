@@ -13,7 +13,7 @@ use r2d2::PooledConnection;
 /// A connection to a PostgreSQL storage backend that is not specific to any aggregate.
 #[derive(Clone)]
 pub struct RawPostgresStore {
-    conn: Arc<Mutex<PooledConnection<NewConn>>>
+    pub conn: Arc<Mutex<PooledConnection<NewConn>>>
 }
 
 impl RawPostgresStore {
