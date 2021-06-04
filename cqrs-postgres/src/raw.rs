@@ -3,15 +3,17 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use crate::NewConn;
 use crate::{error::LoadError, util::Sequence};
 use cqrs_core::{BorrowedRawEvent, RawEvent, Since};
 use postgres::Client;
 use postgres::fallible_iterator::FallibleIterator;
+use r2d2::PooledConnection;
 
 /// A connection to a PostgreSQL storage backend that is not specific to any aggregate.
 #[derive(Clone)]
 pub struct RawPostgresStore {
-    conn: Arc<Mutex<Client>>,
+    conn: Arc<Mutex<PooledConnection<NewConn>>>
 }
 
 impl RawPostgresStore {
