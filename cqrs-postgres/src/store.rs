@@ -1,4 +1,4 @@
-use crate::{NewConn, error::{LoadError, PersistError}, util::Sequence};
+use crate::{NewConn, error::{LoadError, PersistError}, util::{BorrowedJson, RawJsonPersist, Sequence}};
 use cqrs_core::{
     Aggregate, AggregateEvent, AggregateId, Before, DeserializableEvent, EventNumber, EventSink,
     EventSource, NeverSnapshot, Precondition, SerializableEvent, Since, SnapshotRecommendation,
@@ -552,7 +552,6 @@ where
             "INSERT INTO events (aggregate_type, entity_id, sequence, event_type, payload, metadata, timestamp) \
             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)",
         )?;
-        let metadata_val = serde_json::to_value(metadata).unwrap();
         for event in events {
             buffer.clear();
             event
@@ -563,8 +562,8 @@ where
                 &id.as_str(),
                 &(next_sequence.get() as i64),
                 &event.event_type(),
-                &buffer,
-                &metadata_val,
+                &RawJsonPersist(&buffer),
+                &BorrowedJson(&metadata),
             ])?;
             debug_assert!(modified_count > 0);
             log::trace!(
