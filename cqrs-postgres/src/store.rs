@@ -1,4 +1,4 @@
-use crate::{NewConn, error::{LoadError, PersistError}, util::{BorrowedJson, RawJsonPersist, Sequence}};
+use crate::{NewConn, error::{LoadError, PersistError}, util::{BorrowedJson, RawJsonPersist, RawJsonRead, Sequence}};
 use cqrs_core::{
     Aggregate, AggregateEvent, AggregateId, Before, DeserializableEvent, EventNumber, EventSink,
     EventSource, NeverSnapshot, Precondition, SerializableEvent, Since, SnapshotRecommendation,
@@ -327,9 +327,9 @@ where
         let handle_row = |row: postgres::Row| {
             let sequence: Sequence = row.get(0);
             let event_type: String = row.get(1);
-            let raw: Vec<u8> = row.get(2);
+            let raw: RawJsonRead = row.get(2);
             let metadata: Value = row.get(3);
-            let event = E::deserialize_event_from_buffer(&raw, &event_type)
+            let event = E::deserialize_event_from_buffer(&raw.0, &event_type)
                 .map_err(LoadError::DeserializationError)?
                 .ok_or_else(|| LoadError::UnknownEventType(event_type.clone()))?;
             log::trace!(
@@ -426,9 +426,9 @@ where
         let handle_row = |row: postgres::Row| {
             let sequence: Sequence = row.get(0);
             let event_type: String = row.get(1);
-            let raw: Vec<u8> = row.get(2);
+            let raw: RawJsonRead = row.get(2);
             let metadata: Value = row.get(3);
-            let event = E::deserialize_event_from_buffer(&raw, &event_type)
+            let event = E::deserialize_event_from_buffer(&raw.0, &event_type)
                 .map_err(LoadError::DeserializationError)?
                 .ok_or_else(|| LoadError::UnknownEventType(event_type.clone()))?;
             log::trace!(
@@ -609,8 +609,8 @@ where
         let handle_row = |row: postgres::Row| {
             let sequence: Sequence = row.get(0);
             let event_type: String = row.get(1);
-            let raw: Vec<u8> = row.get(2);
-            let event = E::deserialize_event_from_buffer(&raw, &event_type)
+            let raw: RawJsonRead = row.get(2);
+            let event = E::deserialize_event_from_buffer(&raw.0, &event_type)
                 .map_err(LoadError::DeserializationError)?
                 .ok_or_else(|| LoadError::UnknownEventType(event_type.clone()))?;
             log::trace!(
