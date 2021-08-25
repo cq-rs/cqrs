@@ -54,9 +54,9 @@ where
     type Events = Empty<VersionedEvent<E>>;
 
     #[inline]
-    fn read_events<I>(
+    fn _read_events<I>(
         &self,
-        _id: &I,
+        _id: Option<&I>,
         _version: Since,
         _max_count: Option<u64>,
     ) -> Result<Option<Self::Events>, Self::Error>

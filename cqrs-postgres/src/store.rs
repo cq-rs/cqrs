@@ -3,7 +3,7 @@ use cqrs_core::{
     Aggregate, AggregateEvent, AggregateId, Before, DeserializableEvent, EventNumber, EventSink,
     EventSource, NeverSnapshot, Precondition, SerializableEvent, Since, SnapshotRecommendation,
     SnapshotSink, SnapshotSource, SnapshotStrategy, Version, VersionedAggregate, VersionedEvent,
-    VersionedEventWithMetadata,
+    VersionedEventWithMetadata, CqrsError
 };
 use num_traits::FromPrimitive;
 use postgres::{Client, fallible_iterator::FallibleIterator};
@@ -584,19 +584,20 @@ impl<A, E, M, S> EventSource<A, E> for PostgresStore<A, E, M, S>
 where
     A: Aggregate,
     E: AggregateEvent<A> + DeserializableEvent,
-    S: SnapshotStrategy,
+    S: SnapshotStrategy + Default,
 {
     type Error = LoadError<<E as DeserializableEvent>::Error>;
     type Events = Vec<VersionedEvent<E>>;
 
-    fn read_events<I>(
+    fn _read_events<I>(
         &self,
-        id: &I,
+        id: Option<&I>,
         since: Since,
         max_count: Option<u64>,
     ) -> Result<Option<Self::Events>, Self::Error>
     where
         I: AggregateId<A>,
+        E: DeserializableEvent
     {
         let last_sequence = match since {
             cqrs_core::Since::BeginningOfStream => 0,
@@ -614,8 +615,8 @@ where
                 .map_err(LoadError::DeserializationError)?
                 .ok_or_else(|| LoadError::UnknownEventType(event_type.clone()))?;
             log::trace!(
-                "entity {}: loaded event; sequence: {}, type: {}",
-                id.as_str(),
+                "entity {:?}: loaded event; sequence: {}, type: {}",
+                id.map(|i| i.as_str()),
                 sequence.0,
                 event_type
             );
@@ -627,20 +628,38 @@ where
 
         let events: Vec<VersionedEvent<E>> =
             if let Some(max_count) = max_count.and_then(i64::from_u64) {
-                let stmt = trans.prepare(
-                    "SELECT sequence, event_type, payload \
-                     FROM events \
-                     WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
-                     ORDER BY sequence ASC \
-                     LIMIT $4",
-                )?;
 
-                let portal = trans.bind(&stmt, &[
-                    &A::aggregate_type(),
-                    &id.as_str(),
-                    &last_sequence,
-                    &max_count,
-                ])?;
+                let portal = match id {
+                    Some(id) => {
+                        let stmt = trans.prepare(
+                            "SELECT sequence, event_type, payload \
+                             FROM events \
+                             WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
+                             ORDER BY sequence ASC \
+                             LIMIT $4",
+                        )?;
+                        trans.bind(&stmt, &[
+                            &A::aggregate_type(),
+                            &id.as_str(),
+                            &last_sequence,
+                            &max_count,
+                        ])?
+                    },
+                    None => {
+                        let stmt = trans.prepare(
+                            "SELECT sequence, event_type, payload \
+                             FROM events \
+                             WHERE aggregate_type = $1 AND sequence > $2 \
+                             ORDER BY sequence ASC \
+                             LIMIT $3",
+                        )?;
+                        trans.bind(&stmt, &[
+                            &A::aggregate_type(),
+                            &last_sequence,
+                            &max_count,
+                        ])?
+                    },
+                };
     
                 let rows = trans.query_portal_raw(&portal, 0)?;
 
@@ -649,15 +668,35 @@ where
                     .map(handle_row)
                     .collect()?
             } else {
-                let stmt = trans.prepare(
-                    "SELECT sequence, event_type, payload \
-                     FROM events \
-                     WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
-                     ORDER BY sequence ASC",
-                )?;
 
-                let portal = trans.bind(&stmt, &[&A::aggregate_type(), &id.as_str(), &last_sequence])?;
-    
+                let portal = match id {
+                    Some(id) => {
+                        let stmt = trans.prepare(
+                            "SELECT sequence, event_type, payload \
+                             FROM events \
+                             WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
+                             ORDER BY sequence ASC",
+                        )?;
+                        trans.bind(&stmt, &[
+                            &A::aggregate_type(),
+                            &id.as_str(),
+                            &last_sequence,
+                        ])?
+                    },
+                    None => {
+                        let stmt = trans.prepare(
+                            "SELECT sequence, event_type, payload \
+                             FROM events \
+                             WHERE aggregate_type = $1 AND sequence > $2 \
+                             ORDER BY sequence ASC",
+                        )?;
+                        trans.bind(&stmt, &[
+                            &A::aggregate_type(),
+                            &last_sequence,
+                        ])?
+                    },
+                };
+
                 let rows = trans.query_portal_raw(&portal, 0)?;
 
                 rows
@@ -668,7 +707,7 @@ where
 
         trans.commit()?;
 
-        log::trace!("entity {}: read {} events", id.as_str(), events.len());
+        log::trace!("entity {:?}: read {} events", id.map(|i| i.as_str()), events.len());
 
         Ok(Some(events))
     }

@@ -557,16 +557,16 @@ where
     type Error = ES::Error;
     type Events = ES::Events;
 
-    fn read_events<I>(
+    fn _read_events<I>(
         &self,
-        id: &I,
+        id: Option<&I>,
         since: Since,
         max_count: Option<u64>,
     ) -> Result<Option<Self::Events>, Self::Error>
     where
         I: AggregateId<A>,
     {
-        self.event_source.read_events(id, since, max_count)
+        self.event_source._read_events(id, since, max_count)
     }
 }
 
@@ -790,16 +790,16 @@ where
     type Error = <ES as EventSource<A, E>>::Error;
     type Events = <ES as EventSource<A, E>>::Events;
 
-    fn read_events<I>(
+    fn _read_events<I>(
         &self,
-        id: &I,
+        id: Option<&I>,
         since: Since,
         max_count: Option<u64>,
     ) -> Result<Option<Self::Events>, Self::Error>
     where
         I: AggregateId<A>,
     {
-        self.entity_source.read_events(id, since, max_count)
+        self.entity_source._read_events(id, since, max_count)
     }
 }
 

@@ -16,40 +16,57 @@ impl EventSource<TodoAggregate, TodoEvent> for EventMap {
     type Error = Void;
     type Events = Vec<VersionedEvent<TodoEvent>>;
 
-    fn read_events<I>(
+    fn _read_events<I>(
         &self,
-        id: &I,
+        id: Option<&I>,
         since: Since,
         max_count: Option<u64>,
     ) -> Result<Option<Self::Events>, Self::Error>
     where
         I: AggregateId<TodoAggregate>,
     {
-        let borrow = self.0.borrow();
-        let stream = borrow.get(id.as_str());
-        match (since, max_count) {
-            (Since::BeginningOfStream, Some(max_count)) => Ok(stream.map(|e| {
-                e.into_iter()
-                    .take(max_count.min(usize::max_value() as u64) as usize)
-                    .map(ToOwned::to_owned)
-                    .collect()
-            })),
-            (Since::Event(event_number), Some(max_count)) => Ok(stream.map(|e| {
-                e.into_iter()
-                    .skip(event_number.get() as usize)
-                    .take(max_count.min(usize::max_value() as u64) as usize)
-                    .map(ToOwned::to_owned)
-                    .collect()
-            })),
-            (Since::BeginningOfStream, None) => {
-                Ok(stream.map(|e| e.into_iter().map(ToOwned::to_owned).collect()))
-            }
-            (Since::Event(event_number), None) => Ok(stream.map(|e| {
-                e.into_iter()
-                    .skip(event_number.get() as usize)
-                    .map(ToOwned::to_owned)
-                    .collect()
-            })),
+        let table = self.0.borrow();
+
+        let stream = match id {
+            Some(id) => {
+                let r = vec![table.get(id.as_str())];
+                r
+            },
+            None => {
+                let r = table.values().map(|v| Some(v)).collect();
+                r
+            },
+        }.into_iter().collect::<Option<Vec<_>>>();
+
+        match stream.map(|s|s.into_iter().flatten()) {
+            Some(stream) => match (since, max_count) {
+                (Since::BeginningOfStream, Some(max_count)) => Ok(Some(
+                    stream
+                        .into_iter()
+                        .take(max_count.min(usize::max_value() as u64) as usize)
+                        .map(ToOwned::to_owned)
+                        .collect()
+                )),
+                (Since::Event(event_number), Some(max_count)) => Ok(Some(
+                    stream
+                        .into_iter()
+                        .skip(event_number.get() as usize)
+                        .take(max_count.min(usize::max_value() as u64) as usize)
+                        .map(ToOwned::to_owned)
+                        .collect()
+                )),
+                (Since::BeginningOfStream, None) => {
+                    Ok(Some(stream.into_iter().map(ToOwned::to_owned).collect()))
+                }
+                (Since::Event(event_number), None) => Ok(Some(
+                    stream
+                        .into_iter()
+                        .skip(event_number.get() as usize)
+                        .map(ToOwned::to_owned)
+                        .collect()
+                )),
+            },
+            None => Ok(None),
         }
     }
 }

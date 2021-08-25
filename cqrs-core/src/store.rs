@@ -18,6 +18,19 @@ where
     /// The error type.
     type Error: CqrsError;
 
+    /// Helper function for reading events from the source
+    ///
+    /// Only loads events after the event number provided in `since` (See [Since]), and will only load a maximum of
+    /// `max_count` events, if given. If not given, will read all remaining events.
+    fn _read_events<I>(
+        &self,
+        id: Option<&I>,
+        since: Since,
+        max_count: Option<u64>,
+    ) -> Result<Option<Self::Events>, Self::Error>
+    where
+        I: AggregateId<A>;
+
     /// Reads events from the event source for a given identifier.
     ///
     /// Only loads events after the event number provided in `since` (See [Since]), and will only load a maximum of
@@ -29,7 +42,25 @@ where
         max_count: Option<u64>,
     ) -> Result<Option<Self::Events>, Self::Error>
     where
-        I: AggregateId<A>;
+        I: AggregateId<A>,
+    {
+        self._read_events(Some(id), since, max_count)
+    }
+
+    /// Reads _all_ events from the event source
+    ///
+    /// Only loads events after the event number provided in `since` (See [Since]), and will only load a maximum of
+    /// `max_count` events, if given. If not given, will read all remaining events.
+    fn read_all_events<I>(
+        &self,
+        since: Since,
+        max_count: Option<u64>,
+    ) -> Result<Option<Self::Events>, Self::Error> 
+    where
+        I: AggregateId<A>,
+    {
+        self._read_events(None::<&I>, since, max_count)
+    }
 }
 
 /// A sink for writing/persisting events with associated metadata.
