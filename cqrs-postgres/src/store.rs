@@ -3,10 +3,10 @@ use cqrs_core::{
     Aggregate, AggregateEvent, AggregateId, Before, DeserializableEvent, EventNumber, EventSink,
     EventSource, NeverSnapshot, Precondition, SerializableEvent, Since, SnapshotRecommendation,
     SnapshotSink, SnapshotSource, SnapshotStrategy, Version, VersionedAggregate, VersionedEvent,
-    VersionedEventWithMetadata, CqrsError
+    VersionedEventWithMetadata
 };
 use num_traits::FromPrimitive;
-use postgres::{Client, fallible_iterator::FallibleIterator};
+use postgres::fallible_iterator::FallibleIterator;
 use r2d2::PooledConnection;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
@@ -611,6 +611,7 @@ where
             let sequence: Sequence = row.get(0);
             let event_type: String = row.get(1);
             let raw: RawJsonRead = row.get(2);
+            let row_id: String = row.get(3);
             let event = E::deserialize_event_from_buffer(&raw.0, &event_type)
                 .map_err(LoadError::DeserializationError)?
                 .ok_or_else(|| LoadError::UnknownEventType(event_type.clone()))?;
@@ -623,6 +624,8 @@ where
             Ok(VersionedEvent {
                 sequence: sequence.0,
                 event,
+                aggregate_id: row_id,
+                aggregate_type: A::aggregate_type().to_owned()
             })
         };
 
@@ -632,7 +635,7 @@ where
                 let portal = match id {
                     Some(id) => {
                         let stmt = trans.prepare(
-                            "SELECT sequence, event_type, payload \
+                            "SELECT sequence, event_type, payload, entity_id \
                              FROM events \
                              WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
                              ORDER BY sequence ASC \
@@ -647,7 +650,7 @@ where
                     },
                     None => {
                         let stmt = trans.prepare(
-                            "SELECT sequence, event_type, payload \
+                            "SELECT sequence, event_type, payload, entity_id \
                              FROM events \
                              WHERE aggregate_type = $1 AND sequence > $2 \
                              ORDER BY sequence ASC \
@@ -672,7 +675,7 @@ where
                 let portal = match id {
                     Some(id) => {
                         let stmt = trans.prepare(
-                            "SELECT sequence, event_type, payload \
+                            "SELECT sequence, event_type, payload, entity_id \
                              FROM events \
                              WHERE aggregate_type = $1 AND entity_id = $2 AND sequence > $3 \
                              ORDER BY sequence ASC",
@@ -685,7 +688,7 @@ where
                     },
                     None => {
                         let stmt = trans.prepare(
-                            "SELECT sequence, event_type, payload \
+                            "SELECT sequence, event_type, payload, entity_id \
                              FROM events \
                              WHERE aggregate_type = $1 AND sequence > $2 \
                              ORDER BY sequence ASC",

@@ -3,9 +3,7 @@ use std::{
     collections::{hash_map::Entry, HashMap},
 };
 
-use cqrs::{
-    AggregateId, EventNumber, EventSink, EventSource, Precondition, Since, Version, VersionedEvent,
-};
+use cqrs::{Aggregate, AggregateId, EventNumber, EventSink, EventSource, Precondition, Since, Version, VersionedEvent};
 use cqrs_todo_core::{TodoAggregate, TodoEvent, TodoIdRef, TodoMetadata};
 use void::Void;
 
@@ -122,6 +120,8 @@ impl EventSink<TodoAggregate, TodoEvent, TodoMetadata> for EventMap {
             stream.push(VersionedEvent {
                 sequence: sequence.event_number().unwrap(),
                 event: event.to_owned(),
+                aggregate_id: id.as_str().to_owned(),
+                aggregate_type: TodoAggregate::aggregate_type().to_owned()
             });
             sequence.incr();
         }
@@ -171,10 +171,14 @@ fn main_test() {
         VersionedEvent {
             sequence: EventNumber::MIN_VALUE,
             event: cqrs_todo_core::TodoEvent::Completed(cqrs_todo_core::events::Completed {}),
+            aggregate_id: id.as_str().to_owned(),
+            aggregate_type: TodoAggregate::aggregate_type().to_owned()
         },
         VersionedEvent {
             sequence: EventNumber::MIN_VALUE.next(),
             event: cqrs_todo_core::TodoEvent::Uncompleted(cqrs_todo_core::events::Uncompleted {}),
+            aggregate_id: id.as_str().to_owned(),
+            aggregate_type: TodoAggregate::aggregate_type().to_owned()
         },
     ];
 

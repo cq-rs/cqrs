@@ -221,13 +221,19 @@ impl fmt::Display for Precondition {
 }
 
 /// A structured tuple combining an event number and an event.
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct VersionedEvent<E> {
     /// The event number.
     pub sequence: EventNumber,
 
     /// The event.
     pub event: E,
+    
+    // The aggregate type for events resulting from queries over multiple aggregate types
+    pub aggregate_type: String,
+    
+    // The aggregate ID for events resulting from queries over multiple aggregates
+    pub aggregate_id: String
 }
 
 /// A structured tuple combining an event number and an event.
