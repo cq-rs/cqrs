@@ -188,6 +188,8 @@ where
                 let versioned_event = VersionedEvent {
                     sequence,
                     event: event.to_owned(),
+                    aggregate_id: id.as_str().to_owned(),
+                    aggregate_type: A::aggregate_type().to_owned(),
                 };
                 sequence.incr();
                 versioned_event
@@ -211,6 +213,8 @@ where
                         let versioned_event = VersionedEvent {
                             sequence,
                             event: event.to_owned(),
+                            aggregate_id: id.as_str().to_owned(),
+                            aggregate_type: A::aggregate_type().to_owned(),
                         };
                         sequence.incr();
                         versioned_event
