@@ -239,6 +239,7 @@ impl TryFrom<EventVersion> for i8 {
 
 /// Representation of [`Event`] sequence number, starting at 1.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct EventNumber(NonZeroU128);
 
 impl EventNumber {

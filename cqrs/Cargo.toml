@@ -9,6 +9,9 @@ readme = "../README.md"
 documentation = "https://docs.rs/cqrs"
 repository = "https://github.com/cq-rs/cqrs"
 
+[features]
+"serde" = ["cqrs-core/serde"]
+
 [badges]
 travis-ci = { repository = "cq-rs/cqrs", branch = "master" }
 
