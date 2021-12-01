@@ -17,6 +17,7 @@
 extern crate void;
 
 mod aggregate;
+
 pub mod reactor;
 mod store;
 mod types;
@@ -24,7 +25,7 @@ mod types;
 #[doc(inline)]
 pub use crate::aggregate::{
     Aggregate, AggregateCommand, AggregateEvent, AggregateId, CommandError, DeserializableEvent,
-    Event, Events, ProducedEvent, ProducedEvents, SerializableEvent,
+    Event, Events, ProducedEvent, ProducedEvents, SerializableEvent, CommandHandlerEnv,
 };
 #[doc(inline)]
 pub use crate::store::{

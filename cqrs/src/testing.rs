@@ -37,8 +37,9 @@ impl AggregateCommand<TestAggregate> for TestCommand {
     type Error = Void;
     type Event = TestEvent;
     type Events = Vec<TestEvent>;
+    type Env = ();
 
-    fn execute_on(self, _aggregate: &TestAggregate) -> Result<Self::Events, Self::Error> {
+    fn execute_on(self, _aggregate: &TestAggregate, env: Option<&mut Self::Env>) -> Result<Self::Events, Self::Error> {
         Ok(Vec::new())
     }
 }

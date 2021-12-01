@@ -390,7 +390,7 @@ where
 
         let expected_version = aggregate.version;
 
-        match aggregate.state.execute(command) {
+        match aggregate.state.execute(command, None) {
             Ok(events) => {
                 self.apply_events_and_persist(
                     id,

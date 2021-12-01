@@ -263,6 +263,7 @@ mod tests {
     use chrono::{Duration, TimeZone, Utc};
     use pretty_assertions::assert_eq;
 
+
     fn create_basic_aggregate() -> TodoAggregate {
         let now = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
         let reminder = now + Duration::seconds(10000);
@@ -311,7 +312,7 @@ mod tests {
 
         let cmd = commands::CancelReminder;
 
-        let result = agg.execute(cmd).unwrap_err();
+        let result = agg.execute::<>(cmd, None).unwrap_err();
 
         assert_eq!(error::CommandError::NotInitialized, result);
     }
@@ -322,7 +323,7 @@ mod tests {
 
         let cmd = commands::CancelReminder;
 
-        let result = agg.execute(cmd).unwrap();
+        let result = agg.execute(cmd, None).unwrap();
 
         assert_eq!(ArrayVec::new(), result);
     }
@@ -336,7 +337,7 @@ mod tests {
         let new_reminder = domain::Reminder::new(reminder_time, now).unwrap();
         let cmd = commands::SetReminder { new_reminder };
 
-        let result = agg.execute(cmd).unwrap();
+        let result = agg.execute::<>(cmd, None).unwrap();
 
         let mut expected = ArrayVec::new();
         expected.push(TodoEvent::ReminderUpdated(events::ReminderUpdated {

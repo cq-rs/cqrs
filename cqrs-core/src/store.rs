@@ -55,7 +55,7 @@ where
         &self,
         since: Since,
         max_count: Option<u64>,
-    ) -> Result<Option<Self::Events>, Self::Error> 
+    ) -> Result<Option<Self::Events>, Self::Error>
     where
         I: AggregateId<A>,
     {
@@ -186,8 +186,9 @@ mod tests {
         type Error = Void;
         type Event = TestEvent;
         type Events = Vec<TestEvent>;
+        type Env = ();
 
-        fn execute_on(self, _aggregate: &TestAggregate) -> Result<Self::Events, Self::Error> {
+        fn execute_on(self, _aggregate: &TestAggregate, env: Option<&mut Self::Env>) -> Result<Self::Events, Self::Error> {
             Ok(Vec::default())
         }
     }

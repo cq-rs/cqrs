@@ -17,11 +17,11 @@ pub trait Aggregate: Default {
 
     /// Consumes a command, attempting to execute it against the aggregate. If the execution is successful, a sequence
     /// of events is generated, which can be applied to the aggregate.
-    fn execute<C>(&self, command: C) -> Result<C::Events, C::Error>
+    fn execute<C>(&self, command: C, env: Option<&mut C::Env>) -> Result<C::Events, C::Error>
     where
         C: AggregateCommand<Self>,
     {
-        command.execute_on(self)
+        command.execute_on(self, env)
     }
 }
 
@@ -33,7 +33,10 @@ where
     /// Gets the stringified aggregate identifier.
     fn as_str(&self) -> &str;
 }
+pub trait CommandHandlerEnv {
 
+}
+impl CommandHandlerEnv for () {}
 /// A command that can be executed against an aggregate.
 pub trait AggregateCommand<A: Aggregate> {
     /// The type of event that is produced by this command.
@@ -45,9 +48,12 @@ pub trait AggregateCommand<A: Aggregate> {
     /// The error type.
     type Error: CqrsError;
 
+    /// The type of the environment available when handling commands. This is used for things like nondeterministic id generators, etc.
+    type Env: CommandHandlerEnv;
+
     /// Consumes a command, attempting to execute it against the aggregate. If the execution is successful, a sequence
     /// of events is generated, which can be applied to the aggregate.
-    fn execute_on(self, aggregate: &A) -> Result<Self::Events, Self::Error>;
+    fn execute_on(self, aggregate: &A, env: Option<&mut Self::Env>) -> Result<Self::Events, Self::Error>;
 }
 
 /// The event type produced by this command.
