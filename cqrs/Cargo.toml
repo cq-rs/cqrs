@@ -13,6 +13,7 @@ edition = "2018"
 cqrs-core = { version = "0.2.2", path = "../cqrs-core" }
 parking_lot = "0.9"
 void = "1.0"
+log = "0.4.14"
 
 [dev-dependencies]
 static_assertions = "0.3"
