@@ -217,8 +217,10 @@ where
         if let Some(seq_events) = seq_events {
             for seq_event in seq_events {
                 aggregate.apply(seq_event.event);
-
-                debug_assert_eq!(Version::Number(seq_event.sequence), aggregate.version);
+                if Version::Number(seq_event.sequence) != aggregate.version {
+                    eprintln!("mismatched event number {}/{} {} {}", seq_event.sequence, aggregate.version, A::aggregate_type().to_string(), id.as_str())
+                }
+                //debug_assert_eq!(Version::Number(seq_event.sequence), aggregate.version);
             }
         }
 
