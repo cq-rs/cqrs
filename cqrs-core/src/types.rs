@@ -1,7 +1,8 @@
 use std::{fmt, num::NonZeroU64};
+use serde::Serialize;
 
 /// Represents an event sequence number, starting at 1
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct EventNumber(NonZeroU64);
 
 impl EventNumber {
@@ -228,10 +229,10 @@ pub struct VersionedEvent<E> {
 
     /// The event.
     pub event: E,
-    
+
     // The aggregate type for events resulting from queries over multiple aggregate types
     pub aggregate_type: String,
-    
+
     // The aggregate ID for events resulting from queries over multiple aggregates
     pub aggregate_id: String
 }
@@ -308,7 +309,7 @@ pub trait CqrsError: fmt::Debug + fmt::Display + Send + Sync + 'static {}
 impl<T> CqrsError for T where T: fmt::Debug + fmt::Display + Send + Sync + 'static {}
 
 /// An owned, raw view of event data.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize)]
 pub struct RawEvent {
     /// The event id.
     pub event_id: EventNumber,
