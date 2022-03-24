@@ -66,7 +66,7 @@ pub use self::{
 };
 
 #[async_trait(?Send)]
-pub trait CommandGateway<Cmd: Command, Mt> {
+pub trait CommandGateway<Cmd, Mt> {
     type Err;
     type Ok;
 
