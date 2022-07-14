@@ -18,7 +18,7 @@ no-watt = ["cqrs-codegen-impl", "syn"]
 
 [dependencies]
 cqrs-codegen-impl = { version = "0.1.0-dev", path = "./impl", optional = true }
-syn = { version = "1.0.7", optional = true }
+syn = { version = "1.0.98", features = ["full"], optional = true }
 watt = { version = "0.4.0", optional = true }
 
 [dev-dependencies]

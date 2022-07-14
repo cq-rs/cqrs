@@ -3,16 +3,16 @@ use std::borrow::Borrow;
 use async_trait::async_trait;
 use cqrs_core::{
     Aggregate, Command, CommandHandler, Event, EventSink, EventSource, EventSourced,
-    HydratedAggregate, SnapshotSink, SnapshotSource, SnapshotStrategy, IntoEvents,
+    HydratedAggregate, IntoEvents, SnapshotSink, SnapshotSource, SnapshotStrategy,
 };
 
 use crate::{CommandBus, EventHandler, EventProcessingConfiguration, RegisteredEvent};
 
 use super::{
     Basic, BorrowableAsContext, BufferedContext, CommandHandlerContext, CommandHandlerErr,
-    CommandHandlerEvent, Context, ContextWithMeta, EventSinkErr, EventSourceErr,
+    CommandHandlerEvent, CommandHandlerOk, Context, ContextWithMeta, EventSinkErr, EventSourceErr,
     ExecAndPersistError, LoadError, LoadExecAndPersistError, LoadRehydrateAndPersistError,
-    PersistError, SnapshotSinkErr, SnapshotSourceErr, CommandHandlerOk,
+    PersistError, SnapshotSinkErr, SnapshotSourceErr,
 };
 
 #[derive(Debug)]

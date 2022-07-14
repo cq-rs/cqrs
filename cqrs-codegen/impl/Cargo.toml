@@ -19,7 +19,7 @@ watt = []
 [dependencies]
 proc-macro2 = "1.0.6"
 quote = "1.0.2"
-syn = "1.0.6"
+syn = { version = "1.0.98", features = ["full"] }
 synstructure = "0.12.3"
 
 [patch.crates-io]

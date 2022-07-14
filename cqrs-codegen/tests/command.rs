@@ -132,3 +132,43 @@ fn derives_for_tuple_struct_with_id_and_version() {
     assert_eq!(command.aggregate_id(), Some(&0));
     assert_eq!(command.expected_version(), Some(Version::Initial));
 }
+
+#[test]
+fn derives_for_struct_with_generic_parameters() {
+    #[derive(Command)]
+    #[command(aggregate = "Aggregate")]
+    struct TestCommand<T: core::fmt::Debug = ()> {
+        id: i32,
+        version: Version,
+        parameter: T,
+    }
+
+    let command = TestCommand {
+        id: 1,
+        version: Version::Initial,
+        parameter: "test",
+    };
+
+    assert_eq!(command.aggregate_id(), None);
+    assert_eq!(command.expected_version(), None);
+}
+
+#[test]
+fn derives_for_struct_with_const_generic_parameters() {
+    #[derive(Command)]
+    #[command(aggregate = "Aggregate")]
+    struct TestCommand<const T: i32 = 0> {
+        id: i32,
+        version: Version,
+        parameter: T,
+    }
+
+    let command = TestCommand {
+        id: 1,
+        version: Version::Initial,
+        parameter: 1,
+    };
+
+    assert_eq!(command.aggregate_id(), None);
+    assert_eq!(command.expected_version(), None);
+}

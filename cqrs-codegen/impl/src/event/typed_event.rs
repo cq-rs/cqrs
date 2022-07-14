@@ -118,7 +118,7 @@ fn generate_assoc_type(types: &[TokenStream]) -> TokenStream {
         [first] => quote!(<#first as ::cqrs::TypedEvent>::EventTypes),
         [prev @ .., last] => {
             let prev = generate_assoc_type(prev);
-            quote!(std::iter::Chain<#prev, #last>)
+            quote!(std::iter::Chain<#prev, <#last as ::cqrs::TypedEvent>::EventTypes>)
         }
     }
 }
@@ -128,7 +128,8 @@ fn generate_fn_body(types: &[TokenStream]) -> TokenStream {
         return TokenStream::new();
     }
 
-    let mut s = types.first().unwrap().clone();
+    let ty = types.first().unwrap().clone();
+    let mut s = quote!(#ty::event_types());
     for ty in types.iter().skip(1) {
         s.extend(quote!(.chain(#ty::event_types())));
     }

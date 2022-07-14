@@ -115,7 +115,7 @@ fn derives_for_generic_struct_with_redundantly_explicit_id_field() {
 fn derives_for_generic_tuple_struct_with_explicit_id_field() {
     #[derive(Default, Aggregate)]
     #[aggregate(type = "test.aggregate")]
-    struct TestAggregate<T: Default>(#[aggregate(id)] T, T);
+    struct TestAggregate<T: Default = ()>(#[aggregate(id)] T, T);
 
     assert_eq!(TestAggregate::<i32>::AGGREGATE_TYPE, "test.aggregate");
     assert_eq!(
@@ -123,4 +123,18 @@ fn derives_for_generic_tuple_struct_with_explicit_id_field() {
         "test.aggregate"
     );
     assert_eq!(*TestAggregate::<i32>::default().id(), 0);
+}
+
+#[test]
+fn derives_for_struct_with_const_generic_parameters() {
+    #[derive(Default, Aggregate)]
+    #[aggregate(type = "test.aggregate")]
+    struct TestAggregate<const T: u8 = 0>(#[aggregate(id)] i32);
+
+    assert_eq!(TestAggregate::<1>::AGGREGATE_TYPE, "test.aggregate");
+    assert_eq!(
+        TestAggregate::<1>::default().aggregate_type(),
+        "test.aggregate"
+    );
+    assert_eq!(*TestAggregate::<1>::default().id(), 0);
 }

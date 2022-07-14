@@ -2,14 +2,17 @@ use std::{convert, fmt};
 
 use cqrs_core::{
     Aggregate, Command, CommandHandler, Event, EventNumber, EventSink, EventSource, EventSourced,
-    HydratedAggregate, IntoEvents as _, NumberedEvent, SnapshotRecommendation, SnapshotSink,
-    SnapshotSource, SnapshotStrategy, IntoEvents,
+    HydratedAggregate, IntoEvents as _, IntoEvents, NumberedEvent, SnapshotRecommendation,
+    SnapshotSink, SnapshotSource, SnapshotStrategy,
 };
 use derive_more::{Display, Error, From};
 use futures::{future, TryStreamExt as _};
 use smallvec::SmallVec;
 
-use super::{BufferedContext, CommandHandlerContext,  CommandHandlerOk,CommandHandlerErr, CommandHandlerEvent};
+use super::{
+    BufferedContext, CommandHandlerContext, CommandHandlerErr, CommandHandlerEvent,
+    CommandHandlerOk,
+};
 
 #[derive(Debug)]
 pub struct Basic<Snp> {
