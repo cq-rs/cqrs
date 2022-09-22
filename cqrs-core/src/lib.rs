@@ -36,5 +36,7 @@ use futures::Stream;
 #[doc(inline)]
 pub use self::{aggregate::*, command::*, event::*};
 
+pub use once_cell::sync::Lazy;
+
 /// Helper alias for pin-boxed `?Send` [`Stream`] which yields [`Result`]s.
 pub type LocalBoxTryStream<'a, I, E> = Pin<Box<dyn Stream<Item = Result<I, E>> + 'a>>;

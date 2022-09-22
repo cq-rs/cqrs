@@ -21,12 +21,18 @@ pub fn derive(input: syn::DeriveInput) -> Result<TokenStream> {
 /// Implements `cqrs::TypedEvent` part of [`crate::event_derive`] macro
 /// expansion for structs.
 fn derive_struct(input: syn::DeriveInput) -> Result<TokenStream> {
+    let ident = &input.ident;
     let body = quote! {
-        type EventTypes = std::iter::Once<::cqrs::EventType>;
-
         #[inline(always)]
-        fn event_types() -> Self::EventTypes {
-            std::iter::once(Self::EVENT_TYPE)
+        fn event_types() -> &'static ::std::vec::Vec<::cqrs::EventType> {
+            static TYPES: ::cqrs::Lazy<::std::vec::Vec<::cqrs::EventType>> =
+                ::cqrs::Lazy::new(|| {
+                    let mut v = ::std::vec::Vec::with_capacity(1);
+                    v.push(#ident::EVENT_TYPE);
+                    v
+                });
+
+            &*TYPES
         }
     };
 
@@ -96,40 +102,32 @@ fn derive_enum(input: syn::DeriveInput) -> Result<TokenStream> {
     let type_name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    let assoc_type = generate_assoc_type(&types);
-    let fn_body = generate_fn_body(&types);
+    let types_iter = generate_types_iter(&types);
 
     Ok(quote! {
         #[automatically_derived]
         impl#impl_generics ::cqrs::TypedEvent for #type_name#ty_generics #where_clause {
-            type EventTypes = #assoc_type;
-
             #[inline(always)]
-            fn event_types() -> Self::EventTypes {
-                #fn_body
+            fn event_types() -> &'static ::std::vec::Vec<::cqrs::EventType> {
+                static TYPES: ::cqrs::Lazy<::std::vec::Vec<cqrs::EventType>> =
+                    ::cqrs::Lazy::new(|| #types_iter
+                    .map(|t| *t)
+                    .collect()
+                );
+
+                &*TYPES
             }
         }
     })
 }
 
-fn generate_assoc_type(types: &[TokenStream]) -> TokenStream {
-    match types {
-        [] => TokenStream::new(),
-        [first] => quote!(<#first as ::cqrs::TypedEvent>::EventTypes),
-        [prev @ .., last] => {
-            let prev = generate_assoc_type(prev);
-            quote!(std::iter::Chain<#prev, <#last as ::cqrs::TypedEvent>::EventTypes>)
-        }
-    }
-}
-
-fn generate_fn_body(types: &[TokenStream]) -> TokenStream {
+fn generate_types_iter(types: &[TokenStream]) -> TokenStream {
     if types.is_empty() {
         return TokenStream::new();
     }
 
     let ty = types.first().unwrap().clone();
-    let mut s = quote!(#ty::event_types());
+    let mut s = quote!(#ty::event_types().into_iter());
     for ty in types.iter().skip(1) {
         s.extend(quote!(.chain(#ty::event_types())));
     }

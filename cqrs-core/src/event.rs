@@ -40,11 +40,8 @@ pub trait EventSourced<Ev: Event + ?Sized> {
 
 /// [`Event`] (or a set of them) providing its [`EventType`].
 pub trait TypedEvent: Event {
-    /// [`EventType`]s provided by this [`TypedEvent`].
-    type EventTypes: Iterator<Item = EventType>;
-
     /// Returns all available types of this [`Event`].
-    fn event_types() -> Self::EventTypes;
+    fn event_types() -> &'static Vec<EventType>;
 }
 
 /// Different version of [`Event`] with the same [`EventType`].
